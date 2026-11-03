@@ -125,6 +125,17 @@ func Build(ctx context.Context, db *gorm.DB, auth authctx.Context, opt Option) (
 	return scope, nil
 }
 
+// RoleScopes 暴露角色数据范围查询，供**自建数据权限条件**的业务模块复用
+// （SQL 与 Build 内部用的完全一致）。
+//
+// ⚠️ 仅当模块的行级语义与 Build 不同时才该用它自己拼条件——例如 dept 模块
+// 按自身 id 列过滤、且「角色集为空时不过滤」（与 Build 的 fail-closed 兜底相反，
+// 是 Python 端 dept service 的既有语义）。拼条件时仍须遵守 fail-closed：
+// 本函数返回的 error 必须向上传递，不得吞掉后放行。
+func RoleScopes(ctx context.Context, db *gorm.DB, userID int64) ([]RoleScope, error) {
+	return fetchRoleScopes(ctx, db, userID)
+}
+
 // fetchRoleScopes 取当前用户所有**未删除**角色的数据范围。
 //
 // 对应 Python 端 join(UserRoleModel) + where(del_flag == NORMAL)。

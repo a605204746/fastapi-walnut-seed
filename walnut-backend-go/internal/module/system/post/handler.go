@@ -1,22 +1,26 @@
 // 本文件实现岗位域的 HTTP 端点，对应 Python 端 module_system/post/controller.py。
 //
-// ⚠️⚠️ 已知缺陷（Python 端既有，本文件**忠实镜像**，未单方面修正）⚠️⚠️
+// # 一处已修复的两端共有缺陷（2026-11-03）
 //
-// 导出的 9 列里有 6 列恒为空。根因在 Python 端：
+// 导出的 9 列里曾有 6 列恒为空。根因在 Python 端：
 //
 //	rows = select_list(...)                       # model_dump(by_alias=True) → **驼峰**键
 //	_EXPORT_HEADERS = {"dept_id": "部门id", ...}   # 却是**下划线**键
 //	build_workbook: item.get("dept_id")           # → None → _fmt_cell → 空串
 //
-// 只有 "id" / "status" / "remark" 三个键在驼峰化后拼写不变，故仅这三列有值。
-// 对照证据：同仓库 config/controller.py 用的是 {"configName": "参数名称", ...}、
-// dict/controller.py 用的是 {"dictName": "字典名称", ...}——**驼峰**，与 model_dump 输出对得上。
-// 即 post 是这套代码里的异类，属实现缺陷而非有意约定。
+// 只有 "id" / "status" / "remark" 三个键驼峰化后拼写不变，故仅这三列有值。
+// 对照证据：config/controller.py 用 {"configName": ...}、dict/controller.py 用
+// {"dictName": ...}——都是驼峰，与 model_dump 输出对得上；post 是异类。
 //
-// 处理方式：按 docs/go/01-续作交接.md「契约一致性优先于代码正确性」的原则镜像，
-// 保证三端导出结果一致。**是否三端同修由维护者决定**；若要修，改 Python 端
-// _EXPORT_HEADERS 的键为驼峰，同时把本文件 exportColumns 的 Key 一起改，
-// 并重跑 diff 脚本。详见 docs/go/00-Go后端实施计划.md §14.9。
+// 迁移时发现该缺陷后曾按「契约一致性优先」原则镜像，经维护者确认改为**两端同修**：
+// Python 端 _EXPORT_HEADERS 与本文件 exportColumns 的键同步改成驼峰。
+//
+// ⚠️ 排查同类问题时注意：user / role 两个模块的导出行是 service 层**手工构造的
+// 下划线键 dict**（role 还做了字典值→标签的翻译），与它们各自的下划线表头本就匹配，
+// **不属于此缺陷，不要一起改**。判据是看 rows 的来源：
+// 经 model_dump(by_alias=True) 的必须配驼峰表头，手工 dict 则看它自己写的键。
+//
+// 验证：test/contract/diff_post.py 第 8 组比对导出响应头与解析后的单元格内容。
 
 package post
 
@@ -377,20 +381,25 @@ func (h *Handler) Export(c *gin.Context) {
 
 // exportColumns 对应 Python 端 _EXPORT_HEADERS（**顺序即列序**）。
 //
-// ⚠️ Key 用的是**下划线**，与 Python 端逐字一致——正因如此才有 6 列恒为空，
-// 详见本文件顶部的缺陷说明。Value 从**驼峰**键的 map 里取下划线键，
-// 故取不到时为 nil（excelx 会写成空串），行为与 Python 端 item.get() 一致。
+// ⚠️ Key 必须是**驼峰**：toCamelMap 产出的是 model_dump(by_alias=True) 的键形态，
+// pick 用它取值，键名对不上就得到 nil → 单元格为空。
+//
+// 这里曾有过一个**两端共有**的缺陷：Python 端 _EXPORT_HEADERS 用的是下划线键，
+// 导致 9 列里 6 列导出恒为空（只有 id/status/remark 三列因驼峰化后拼写不变而有值）。
+// 2026-11-03 已在两端同步修为驼峰（Python 侧见 post/controller.py 的同名注释）。
+// 注意 user/role 两个模块的导出行是 service 手工构造的下划线键 dict，
+// 与它们各自的下划线表头本就匹配，**不受影响、不要一起改**。
 func exportColumns() []excelx.Column {
 	return []excelx.Column{
 		{Header: "岗位序号", Value: pick("id")},
-		{Header: "部门id", Value: pick("dept_id")},
-		{Header: "岗位编码", Value: pick("post_code")},
-		{Header: "岗位名称", Value: pick("post_name")},
-		{Header: "类别编码", Value: pick("post_category")},
-		{Header: "岗位排序", Value: pick("post_sort")},
+		{Header: "部门id", Value: pick("deptId")},
+		{Header: "岗位编码", Value: pick("postCode")},
+		{Header: "岗位名称", Value: pick("postName")},
+		{Header: "类别编码", Value: pick("postCategory")},
+		{Header: "岗位排序", Value: pick("postSort")},
 		{Header: "状态", Value: pick("status")},
 		{Header: "备注", Value: pick("remark")},
-		{Header: "创建时间", Value: pick("create_time")},
+		{Header: "创建时间", Value: pick("createTime")},
 	}
 }
 

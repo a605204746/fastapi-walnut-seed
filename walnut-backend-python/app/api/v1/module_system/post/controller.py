@@ -23,16 +23,26 @@ PostRouter = APIRouter(route_class=OperationLogRoute, prefix="/post", tags=["岗
 DbSession = Annotated[AsyncSession, Depends(db_getter)]
 
 # 导出表头
+# ⚠️ 键必须是**驼峰**：export_post 传入的 rows 来自 select_list()，
+# 即 PostOutSchema.model_dump(by_alias=True) 的输出，键已被 to_camel 转成驼峰。
+# build_workbook 用 item.get(field) 取值，键名对不上就取到 None → 单元格为空。
+# 此前这里写的是下划线键，导致 9 列里有 6 列（部门id/岗位编码/岗位名称/
+# 类别编码/岗位排序/创建时间）导出恒为空，只有 id/status/remark 三列有值
+# （因为这三个词驼峰化后拼写不变）。
+# 同类正确写法见 config/controller.py 的 _CONFIG_EXPORT_HEADERS、
+# dict/controller.py 的 _DICT_TYPE_EXPORT_HEADERS。
+# 注：user/role 两个模块的导出行是 service 层手工构造的**下划线**键 dict，
+# 与它们各自的下划线表头是匹配的，不受影响、不要一起改。
 _EXPORT_HEADERS = {
     "id": "岗位序号",
-    "dept_id": "部门id",
-    "post_code": "岗位编码",
-    "post_name": "岗位名称",
-    "post_category": "类别编码",
-    "post_sort": "岗位排序",
+    "deptId": "部门id",
+    "postCode": "岗位编码",
+    "postName": "岗位名称",
+    "postCategory": "类别编码",
+    "postSort": "岗位排序",
     "status": "状态",
     "remark": "备注",
-    "create_time": "创建时间",
+    "createTime": "创建时间",
 }
 
 
