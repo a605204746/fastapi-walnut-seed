@@ -12,12 +12,14 @@ import (
 
 	"walnut-seed-go/internal/config"
 	"walnut-seed-go/internal/module/common/health"
+	"walnut-seed-go/internal/module/system/client"
 	sysconfig "walnut-seed-go/internal/module/system/config"
 	"walnut-seed-go/internal/module/system/dept"
 	"walnut-seed-go/internal/module/system/dict"
 	"walnut-seed-go/internal/module/system/menu"
 	"walnut-seed-go/internal/module/system/notice"
 	"walnut-seed-go/internal/module/system/post"
+	"walnut-seed-go/internal/module/system/social"
 	"walnut-seed-go/internal/module/system/user"
 	"walnut-seed-go/internal/module/web/auth"
 	"walnut-seed-go/internal/pkg/idempotentx"
@@ -430,6 +432,8 @@ func (a *App) mountSystemRoutes(b *Builder) {
 	dict.NewHandler(a.db, a.errHandler, perm, a.cache).Mount(system.Group("/dict").Binder())
 	sysconfig.NewHandler(a.db, a.errHandler, perm, a.cache).Mount(system.Group("/config").Binder())
 	notice.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/notice").Binder())
+	client.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/client").Binder())
+	social.NewHandler(a.db, a.errHandler).Mount(system.Group("/social").Binder())
 }
 
 func containsStar(list []string) bool {
