@@ -1,0 +1,21 @@
+# 与 Python/Java 端保持一致：镜像不打包本地环境配置，容器内配置全部来自 compose 环境变量
+env/
+.git/
+.gitignore
+*.md
+Makefile
+.golangci.yml
+.gofumpt.toml
+.go-version
+
+# 构建产物与本地缓存
+/bin/
+/dist/
+/vendor/
+data/
+*.log
+
+# 测试与临时产物
+**/testdata/
+coverage.out
+*.test

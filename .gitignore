@@ -34,6 +34,30 @@ replay_pid*
 # Maven wrapper（仓库未内置 .mvn，如启用需一并提交）
 .mvn/wrapper/maven-wrapper.jar
 
+# ---------- Go（walnut-backend-go） ----------
+# 编译产物（make build 输出到 bin/）
+walnut-backend-go/bin/
+walnut-backend-go/dist/
+# 通用的 Go 二进制/测试产物
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+# 覆盖率报告（make cover）
+coverage.out
+coverage.html
+# vendor 目录：本项目走 go.sum 锁版本，不入库 vendor
+walnut-backend-go/vendor/
+# go work 本地工作区（多人协作时各自启用，不入库）
+go.work
+go.work.sum
+# 加解密互通测试的生成物（由 test/cryptointerop/gen_vectors.py 现生成，
+# 内含开发用 RSA 私钥，且完全可复现，无需入库）
+walnut-backend-go/test/cryptointerop/vectors.json
+walnut-backend-go/test/cryptointerop/go_output.json
+
 # ---------- Node / 前端（walnut-frontend） ----------
 node_modules
 .pnpm-store
@@ -96,6 +120,7 @@ docker/.env
 .claude
 .codex
 .atomcode
+.qwen
 skills-lock.json
 
 # ---------- 其他 ----------

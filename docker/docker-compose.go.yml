@@ -1,0 +1,194 @@
+# WalnutSeed 全栈/生产编排（Go 后端）：中间件(include 复用) + 后端 + 前端(nginx)
+# （Python 全栈编排见 docker-compose.yml，Java 见 docker-compose.java.yml；
+#   三份编排的前端完全一致，仅后端实现互换）
+# （三份编排共用中间件容器名/端口，同一时刻只能跑一份：先 down 一份再 up 另一份，互切不丢数据）
+# （只起中间件供本机开发见 docker-compose.middleware.yml）
+#
+# 启动：docker compose -f docker/docker-compose.go.yml up -d --build
+# 访问：http://localhost:8010   账号 admin / admin123
+# 停止：docker compose -f docker/docker-compose.go.yml down
+# （中间件数据在 docker/volumes（MySQL/Redis）与具名卷 seaweedfs-data（SeaweedFS），
+#  后台日志绑定在 docker/volumes/logs；down 不会删除日志，删目录才清空）
+#
+# 说明：
+# - mysql/redis/seaweedfs 三个中间件服务统一定义在 docker-compose.middleware.yml，
+#   本文件经 include 引入，与 Python/Java 编排共用（容器名/volumes 一致，不能同时起）。
+# - 仅前端暴露宿主机端口（8010），MySQL/Redis/后端在内部网络互通；
+#   中间件如需宿主机访问，端口映射见 middleware 编排（3307/6380/8333/8888）。
+# - 密码/密钥/端口等共用值经 docker/.env 变量插值统一注入（模板见 .env.example，
+#   三份编排共用同一份）。JWT_SECRET_KEY 为强制项（${VAR:?...}，缺失或留空
+#   直接启动失败）；其余变量未设置时以 ${VAR:-默认值} 兜底，开箱即用。
+# - Go 配置注入走**扁平环境变量**（与 Python 端同名，如 DATABASE_HOST / SECRET_KEY），
+#   由 internal/config/config.go 的三级优先级装载：环境变量 > env 文件 > 代码默认值。
+#   镜像不打包 env/ 目录（见 .dockerignore），容器内配置全部来自下面的 environment。
+# - 业务库 walnut_seed_go 的创建方式与另两端**不同**：
+#     Python 靠中间件编排的 MYSQL_DATABASE 首次初始化建库
+#     Java   靠 JDBC URL 的 createDatabaseIfNotExist=true
+#     Go     靠应用自身的 databasex.EnsureDatabase（go-sql-driver/mysql 无此能力，
+#            而 MYSQL_DATABASE 只能建一个库），启动时 CREATE DATABASE IF NOT EXISTS
+#   因此本编排**无需**修改中间件定义，也不受 DB_NAME 变量影响（该变量属 Python 端）。
+# - Schema 迁移由 backend 镜像的 docker-entrypoint.sh 在应用启动**之前**执行
+#   （migrate up，失败即 set -e 退出，绝不带着过期 schema 对外服务），
+#   与 Python 端 docker-entrypoint.sh 同一策略。故这里 DATABASE_AUTO_MIGRATE=false：
+#   应用内自动迁移在多副本滚动发布时会相互竞争（MySQL DDL 非事务，
+#   竞争失败的副本可能留下 dirty 状态）。仅本机 make dev 直接跑二进制时才设 true。
+#   种子数据由应用在启动时幂等写入（seedx 有 sys_user 计数守卫）。
+
+# 项目名：与 Python/Java 编排一致（同一套中间件/网络/卷前缀，互切无缝）
+name: walnut-seed
+
+# 中间件服务（mysql/redis/seaweedfs）定义复用，改端口/健康检查只需改中间件编排一份
+include:
+  - docker-compose.middleware.yml
+
+services:
+  backend:
+    build:
+      context: ../walnut-backend-go
+      args:
+        # 国内网络构建时经阿里云镜像拉依赖；海外 CI 可用 --build-arg GOPROXY= 覆盖为默认值
+        # ⚠️ 不要把 GOSUMDB 改成 sum.golang.google.cn（会让 Go 绕过代理直连而失败），
+        #    也不要设 off（工具链模块强制要求校验）。详见 docs/go/00-Go后端实施计划.md §9.4
+        GOPROXY: ${GO_GOPROXY:-https://mirrors.aliyun.com/goproxy/,direct}
+        # 基础镜像可覆盖：国内拉 Docker Hub 受限时换用镜像加速地址
+        BUILD_IMAGE: ${GO_BUILD_IMAGE:-golang:1.26-alpine}
+        RUNTIME_IMAGE: ${GO_RUNTIME_IMAGE:-alpine:3.20}
+    # 显式镜像名：三份编排共用项目名但镜像互不覆盖，切换编排无需重新构建
+    image: walnut-seed-backend-go
+    container_name: walnut-backend-go
+    restart: unless-stopped
+    # 优雅停机：应用侧 shutdownTimeout 为 15s（cmd/run.go），
+    # compose 默认 10s 宽限期会中途 SIGKILL，放宽到 20s 保证宽限期 > 应用收尾时间
+    stop_grace_period: 20s
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+    environment:
+      # 真实环境变量优先于代码默认值；镜像未打包 env/，配置全走这里
+      ENVIRONMENT: prod
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: "${BACKEND_PORT:-8011}"
+      DEBUG: "false"
+      LOGGER_LEVEL: INFO
+      # 日志落盘到挂载卷（与 Python/Java 一致，便于宿主机查看与采集）。
+      # 留空则只写 stdout——prod 下 resolveLogDir 会返回空串
+      LOG_DIR: /walnut-backend/server/logs
+      LOG_FILENAME: walnut-seed-go.log
+
+      # ---- 数据库 ----
+      # ⚠️ 固定 walnut_seed_go，不用 ${DB_NAME}：该变量是 Python 端的库名
+      #    （中间件编排的 MYSQL_DATABASE 用它做首次初始化建库）。
+      #    三端各自独立库，切换后端不会互串数据。
+      DATABASE_TYPE: mysql
+      DATABASE_HOST: mysql
+      DATABASE_PORT: "3306"
+      DATABASE_USER: root
+      DATABASE_PASSWORD: ${DB_PASSWORD:-walnut123}
+      DATABASE_NAME: walnut_seed_go
+      # P0 未接入 golang-migrate，见文件头说明；P1 改为 true
+      DATABASE_AUTO_MIGRATE: "false"
+      DATABASE_ECHO: "false"
+      POOL_SIZE: "10"
+      MAX_OVERFLOW: "20"
+      # 必须小于 MySQL 的 wait_timeout（默认 28800），否则池中会积累失效连接
+      POOL_RECYCLE: "1800"
+
+      # ---- Redis ----
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_DB_NAME: "0"
+      # 中间件编排的 Redis 未设密码，留空即免 AUTH。
+      # ⚠️ 必须是真的空值——go-redis 收到空字符串仍可能发送 AUTH 导致连接失败
+      #    （Java 端 Redisson 有同类问题，见 docker-compose.java.yml 的同款注释）
+      REDIS_PASSWORD: ""
+      # ⚠️ 三端共存的硬约束：必须与 walnut-seed-python / walnut-seed-java 区分，
+      #    否则共用同一 Redis 实例时登录态、验证码、限流计数会互相串键
+      REDIS_KEY_PREFIX: walnut-seed-go
+
+      # ---- 安全 ----
+      # JWT 签名密钥：:? 表示缺失或为空时 compose 直接报错退出，禁止静默兜底。
+      # 请在 docker/.env 中设置（生成命令见 .env.example）；切勿依赖任何默认密钥。
+      # 与 Python 端 SECRET_KEY / Java 端 sa-token.jwt-secret-key 同源同一个变量。
+      SECRET_KEY: ${JWT_SECRET_KEY:?请在 docker/.env 中设置 JWT_SECRET_KEY（生成命令见 .env.example）}
+      ALGORITHM: HS256
+      # 可信代理：留空 = 不解析任何 X-Forwarded-For（见计划 R6）。
+      # ⚠️ 这是**三端共有的已知缺口**：Python/Java 编排同样未设置，后端位于 nginx 之后时
+      #    限流与审计日志记录的是 nginx 容器 IP 而非真实客户端 IP。为保持三端行为一致，
+      #    此处刻意不设值；若要修，三份编排应同时修（填入 frontend 容器所在网段）。
+      TRUSTED_PROXY_IPS: ""
+
+      # ---- 对象存储 ----
+      # 容器网络内走服务名 seaweedfs:8333；url 前缀为中性 /upload，由 nginx 转发到后端
+      OSS_TYPE: s3
+      OSS_S3_ENDPOINT: seaweedfs:8333
+      OSS_S3_ACCESS_KEY: ${OSS_ACCESS_KEY:-walnut}
+      OSS_S3_SECRET_KEY: ${OSS_SECRET_KEY:-walnut123}
+      OSS_S3_BUCKET_NAME: walnut-seed
+      OSS_S3_SECURE: "false"
+      OSS_S3_URL_PREFIX: /upload
+
+      # ---- 时区 ----
+      # 与 Java 端 JDBC 的 serverTimezone=GMT+8 等价，保证三端时间字段一致
+      TZ: Asia/Shanghai
+    healthcheck:
+      # 就绪探针 /common/health/ready：DB + Redis 均就绪才 200，否则 503（存活式探针是
+      # /common/health/check，不依赖 DB/Redis）。编排门禁语义是「可对外服务」，用 ready
+      # 才能避免后端带着未初始化的依赖被标记健康、前端随即放流量。
+      # 运行镜像为 alpine，busybox wget 对 5xx 返回非零即失败，正好区分 200/503
+      # （与 Java 编排同一套写法；Python 编排因用 slim 镜像无 wget，改走 /dev/tcp）
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:${BACKEND_PORT:-8011}/common/health/ready"]
+      interval: 10s
+      # start_period 内用 2s 密集探测：就绪后 ~2s 即翻转 healthy，前端门禁少等一个常规周期
+      start_interval: 2s
+      timeout: 5s
+      retries: 10
+      # Go 静态二进制启动是毫秒级，但首次启动含建库引导 + 连接池预热，留 30s 余量
+      # （Python 60s 含 Alembic 迁移，Java 30s 含 Flyway + Spring 上下文）
+      start_period: 30s
+    # stdout 日志（docker logs）轮转上限：文件日志另有 lumberjack 按大小轮转，两者互不影响
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+    volumes:
+      # Go 日志挂载到 docker/volumes/logs，文件名以 walnut-seed-go- 开头，与另两端并存不冲突。
+      # 容器以 appuser（uid 1000）运行：Linux 部署前请确保该目录对 uid 1000 可写
+      # （mkdir -p docker/volumes/logs && chown -R 1000:1000 docker/volumes/logs）
+      - ./volumes/logs:/walnut-backend/server/logs
+
+  frontend:
+    build:
+      context: ../walnut-frontend
+      dockerfile: scripts/deploy/Dockerfile
+      additional_contexts:
+        deploy: .
+    container_name: walnut-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        # nginx 反代目标就绪后再启动，避免启动窗口内 /prod-api/ 全 502
+        condition: service_healthy
+    healthcheck:
+      # nginx 官方镜像自带 busybox wget，直接探测首页
+      # （用 127.0.0.1 而非 localhost：容器内 localhost 可能解析为 ::1，nginx 仅监听 IPv4 会拒连）
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 10s
+      start_interval: 2s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+    environment:
+      BACKEND_HOST: backend
+      BACKEND_PORT: "${BACKEND_PORT:-8011}"
+    ports:
+      - "8010:80"

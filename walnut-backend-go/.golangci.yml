@@ -1,0 +1,46 @@
+# 与前端 oxlint/stylelint 的严格度对齐。
+# 国内网络下 golangci-lint 需能拉取插件；若失败可临时降级为 go vet。
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  disable-all: true
+  enable:
+    - errcheck      # 未处理的 error（Go 最常见的静默失败源）
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - unconvert
+    - bodyclose     # HTTP 响应体未关闭 → 连接泄漏
+    - rowserrcheck  # database/sql 的 rows.Err() 未检查
+    - sqlclosecheck
+    - noctx         # 未传播 ctx 的网络/DB 调用
+    - errorlint     # errors.Is/As 误用
+    - makezero      # append 到非零长度 slice 的经典 bug
+    - nilnil        # return nil, nil 反模式
+    - prealloc
+
+linters-settings:
+  errcheck:
+    # 显式忽略的写入类调用（日志、http.ResponseWriter 写回）
+    exclude-functions:
+      - (io.Closer).Close
+      - (*os.File).Close
+      - fmt.Fprint
+      - fmt.Fprintf
+      - fmt.Fprintln
+      - (net/http.ResponseWriter).Write
+      - (*log/slog.Logger).Log
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-rules:
+    # 测试里的错误断言由 testify 处理，不强制 errcheck
+    - path: _test\.go
+      linters:
+        - errcheck
