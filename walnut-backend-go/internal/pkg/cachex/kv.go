@@ -145,6 +145,32 @@ func (c *Client) Expire(ctx context.Context, key string, ttl time.Duration) bool
 	return true
 }
 
+// DeleteByPattern 按模式批量删键，对应 Python 端 RedisUtils.delete_by_pattern。
+//
+// 用 SCAN 而非 KEYS：KEYS 会阻塞单线程的 Redis，生产键多时是事故源。
+// 模式会套本端前缀（c.Key），不会误删另两端的键。
+func (c *Client) DeleteByPattern(ctx context.Context, pattern string) bool {
+	full := c.Key(pattern)
+	var cursor uint64
+	for {
+		keys, next, err := c.Client.Scan(ctx, cursor, full, 200).Result()
+		if err != nil {
+			c.log().Error("扫描缓存失败", slog.String("pattern", full), slog.String("err", err.Error()))
+			return false
+		}
+		if len(keys) > 0 {
+			if err := c.Client.Del(ctx, keys...).Err(); err != nil {
+				c.log().Error("批量删除缓存失败", slog.String("pattern", full), slog.String("err", err.Error()))
+				return false
+			}
+		}
+		cursor = next
+		if cursor == 0 {
+			return true
+		}
+	}
+}
+
 // ttlOrNil 把 ttl <= 0 映射为 redis.KeepTTL 之外的「永不过期」语义。
 //
 // go-redis 中 expiration=0 表示不设过期，与 Python 端 `expire=None` 一致。
