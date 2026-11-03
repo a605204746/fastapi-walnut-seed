@@ -13,9 +13,12 @@ import (
 	"walnut-seed-go/internal/config"
 	"walnut-seed-go/internal/module/common/health"
 	"walnut-seed-go/internal/module/system/menu"
+	"walnut-seed-go/internal/module/system/post"
 	"walnut-seed-go/internal/module/system/user"
 	"walnut-seed-go/internal/module/web/auth"
+	"walnut-seed-go/internal/pkg/idempotentx"
 	"walnut-seed-go/internal/pkg/middleware"
+	"walnut-seed-go/internal/pkg/permguard"
 	"walnut-seed-go/internal/pkg/ratelimitx"
 	"walnut-seed-go/internal/pkg/routex"
 )
@@ -402,11 +405,23 @@ func (a *App) mountAuthRoutes(b *Builder) {
 //
 // ⚠️ 必须用 b.Protected：这些路径都不在 WHITE_API_LIST_PATH 内，
 // 用 Public 注册会被启动期路由认证审计直接拒绝启动（fail-fast）。
+//
+// ⚠️ 认证中间件只保证「已登录」，**不保证有权限**。每个业务端点还必须挂
+// permguard 守卫（对应 Python 端 Depends(AuthPermission(...))）。
+// 启动期审计检查不到这一层，只能靠契约 diff 的 403 用例兜底。
 func (a *App) mountSystemRoutes(b *Builder) {
 	system := b.Protected("/system")
 
+	// 权限守卫与防重提交是全部 system 模块共用的两个中间件工厂
+	perm := permguard.New(a.errHandler)
+	var idem *idempotentx.Guard
+	if a.cache != nil {
+		idem = idempotentx.New(a.cache, a.errHandler, middleware.LocaleFrom)
+	}
+
 	user.NewHandler(a.db, a.errHandler).Mount(system.Group("/user").Binder())
 	menu.NewHandler(a.db, a.errHandler).Mount(system.Group("/menu").Binder())
+	post.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/post").Binder())
 }
 
 func containsStar(list []string) bool {
