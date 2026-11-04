@@ -382,14 +382,13 @@ func (a *App) registerRoutes(b *Builder) {
 	// 限流器在 Redis 不可用时为 nil，handler 内部按 fail-closed 处理。
 	a.mountAuthRoutes(b)
 
-	// ---- /system/*：P3 窄切片（getInfo + getRouters）----
-	// 这两条是前端登录后立刻调用的接口：没有它们，登录能拿到 token 却进不了主页。
-	// 其余 111 条 /system 路由按交接文档 §4.2 的顺序逐个补齐。
+	// ---- /system/* ----
+	// 已完成（72 条）：auth(5) health(3) root(1) menu(9) post(8) dept(8) dict(15)
+	//   config(9) notice(5) client(7) social(1) user/getInfo(1) getRouters(in menu)
+	// 剩余（44 条）：role(15) user(20 含 profile 4) monitor(9)
 	a.mountSystemRoutes(b)
 
-	// TODO(P3): /system/*   —— profile role dept post dict config notice client social
-	//                        以及 user/menu 的其余端点
-	// TODO(P3): /monitor/*  —— operlog / logininfor
+	// TODO(P3): /monitor/*  —— operlog(4) / logininfor(5)
 	// TODO(P4): /common/file/*、/upload/{key}、/resource/sse、/resource/websocket
 }
 
@@ -426,7 +425,7 @@ func (a *App) mountSystemRoutes(b *Builder) {
 	}
 
 	user.NewHandler(a.db, a.errHandler).Mount(system.Group("/user").Binder())
-	menu.NewHandler(a.db, a.errHandler).Mount(system.Group("/menu").Binder())
+	menu.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/menu").Binder())
 	post.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/post").Binder())
 	dept.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/dept").Binder())
 	dict.NewHandler(a.db, a.errHandler, perm, a.cache).Mount(system.Group("/dict").Binder())

@@ -10,11 +10,15 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"gorm.io/gorm"
 
 	"walnut-seed-go/internal/pkg/authctx"
+	"walnut-seed-go/internal/pkg/crudx"
+	"walnut-seed-go/internal/pkg/errs"
+	"walnut-seed-go/internal/pkg/idtype"
 )
 
 // 内链地址替换用到的字面量，对应 Python 端 Constants.HTTP / HTTPS / WWW。
@@ -319,4 +323,357 @@ func deref(v *string) string {
 		return ""
 	}
 	return *v
+}
+
+// ==================== 管理端业务（menu 模块 8 端点） ====================
+
+// errDupName / errDupRoute 哨兵：handler 据此拼带菜单名的文案。
+var (
+	errDupName  = errs.New("菜单名称已存在")
+	errDupRoute = errs.New("路由名称或地址已存在")
+)
+
+// nowFunc 提供「当前时间」，便于单测钉住审计字段。
+var nowFunc = time.Now
+
+// ListOut 菜单列表出参，对应 list_menu。
+func (s *Service) ListOut(ctx context.Context, q Query) ([]Out, error) {
+	rows, err := s.repo.SelectMenuList(ctx, s.auth, q)
+	if err != nil {
+		return nil, err
+	}
+	outs := make([]Out, 0, len(rows))
+	for i := range rows {
+		outs = append(outs, NewOut(&rows[i]))
+	}
+	return outs, nil
+}
+
+// GetOut 菜单详情，对应 get_menu（不存在返回 nil）。
+func (s *Service) GetOut(ctx context.Context, id int64) (*Out, error) {
+	row, err := s.repo.SelectMenuByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return nil, nil
+	}
+	out := NewOut(row)
+	return &out, nil
+}
+
+// BuildTreeSelect 构建下拉树，对应 build_menu_tree_select。
+//
+// ⚠️ 根 parent 取 **第一行的 parent_id**（可能是 NULL），不是常量 0；
+// 分组键含 NULL（Python 字典的 None 键），照抄。
+func BuildTreeSelect(rows []SysMenu) []*TreeNode {
+	if len(rows) == 0 {
+		return []*TreeNode{}
+	}
+	type key struct {
+		nilKey bool
+		id     int64
+	}
+	grouped := make(map[key][]*SysMenu, len(rows))
+	for i := range rows {
+		k := key{nilKey: rows[i].ParentID == nil}
+		if rows[i].ParentID != nil {
+			k.id = *rows[i].ParentID
+		}
+		grouped[k] = append(grouped[k], &rows[i])
+	}
+	root := key{nilKey: rows[0].ParentID == nil}
+	if rows[0].ParentID != nil {
+		root.id = *rows[0].ParentID
+	}
+	var build func(parent key) []*TreeNode
+	build = func(parent key) []*TreeNode {
+		list := grouped[parent]
+		nodes := make([]*TreeNode, 0, len(list))
+		for _, m := range list {
+			n := &TreeNode{
+				ID:       jsIntPtr(m.ID),
+				ParentID: jsIntPtrOrNil(m.ParentID),
+				Label:    strPtr(m.MenuName),
+				Weight:   intPtrToJSInt(m.OrderNum),
+				MenuType: m.MenuType,
+				Icon:     m.Icon,
+				Visible:  m.Visible,
+				Status:   m.Status,
+			}
+			if kids := build(key{id: m.ID}); len(kids) > 0 {
+				n.Children = kids
+			}
+			nodes = append(nodes, n)
+		}
+		return nodes
+	}
+	return build(root)
+}
+
+// TreeSelectOut 菜单下拉树，对应 treeselect 端点。
+func (s *Service) TreeSelectOut(ctx context.Context, q Query) ([]*TreeNode, error) {
+	rows, err := s.repo.SelectMenuList(ctx, s.auth, q)
+	if err != nil {
+		return nil, err
+	}
+	return BuildTreeSelect(rows), nil
+}
+
+// RoleMenuTreeSelect 角色菜单树 + 勾选键，对应 roleMenuTreeselect 端点。
+func (s *Service) RoleMenuTreeSelect(ctx context.Context, roleID int64) (*TreeSelectVo, error) {
+	checked, err := s.repo.MenuIDsByRoleID(ctx, roleID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.repo.SelectMenuList(ctx, s.auth, Query{})
+	if err != nil {
+		return nil, err
+	}
+	keys := make([]idtype.JSInt, 0, len(checked))
+	for _, id := range checked {
+		keys = append(keys, idtype.JSInt(id))
+	}
+	return &TreeSelectVo{CheckedKeys: keys, Menus: BuildTreeSelect(rows)}, nil
+}
+
+// CheckNameUnique 同级菜单名唯一性，对应 check_menu_name_unique。
+func (s *Service) CheckNameUnique(ctx context.Context, in CreateIn) error {
+	exists, err := s.repo.ExistsMenuName(ctx, deref(in.MenuName), in.ParentID, in.ID)
+	if err != nil {
+		return errs.Wrap(err, errs.MsgDBFailed)
+	}
+	if exists {
+		return errDupName
+	}
+	return nil
+}
+
+// routeNameOfIn 对应 _route_name_of：get_route_name 为空时回退 path。
+func routeNameOfIn(in CreateIn) string {
+	parentTop := in.ParentID != nil && *in.ParentID == TopParentID
+	menuFrame := parentTop && deref(in.MenuType) == TypeMenu && deref(in.IsFrame) == NoFrame
+	if menuFrame {
+		return deref(in.Path)
+	}
+	name := capitalize(deref(in.Path))
+	if name == "" {
+		return deref(in.Path)
+	}
+	return name
+}
+
+// equalsIgnoreCase 对应 _equals_any_ignore_case 的双值形态。
+func equalsIgnoreCase(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return strings.EqualFold(*a, *b)
+}
+
+// CheckRouteConfigUnique 路由名称/地址组合唯一性，对应 check_route_config_unique。
+//
+// ⚠️ 按钮(F)直接放行；三类冲突判定的顺序与忽略大小写语义照抄。
+func (s *Service) CheckRouteConfigUnique(ctx context.Context, in CreateIn) error {
+	if deref(in.MenuType) == TypeButton {
+		return nil
+	}
+	menuID := int64(-1)
+	if in.ID != nil {
+		menuID = *in.ID
+	}
+	routeName := routeNameOfIn(in)
+	candidates, err := s.repo.RouteConflictCandidates(ctx, deref(in.Path), routeName)
+	if err != nil {
+		return errs.Wrap(err, errs.MsgDBFailed)
+	}
+	for i := range candidates {
+		m := &candidates[i]
+		if m.ID == menuID {
+			continue
+		}
+		dbRouteName := routeNameOfMenu(m)
+		if equalsIgnoreCase(in.Path, m.Path) && ptrEq(in.ParentID, m.ParentID) {
+			return errDupRoute
+		}
+		if equalsIgnoreCase(in.Path, m.Path) &&
+			in.ParentID != nil && *in.ParentID == TopParentID &&
+			m.ParentID != nil && *m.ParentID == TopParentID {
+			return errDupRoute
+		}
+		if equalsIgnoreCase(&routeName, &dbRouteName) && deref(m.MenuType) == deref(in.MenuType) {
+			return errDupRoute
+		}
+	}
+	return nil
+}
+
+// routeNameOfMenu 是 routeNameOfIn 的实体版（候选菜单侧）。
+func routeNameOfMenu(m *SysMenu) string {
+	if isMenuFrame(m) {
+		return deref(m.Path)
+	}
+	name := capitalize(deref(m.Path))
+	if name == "" {
+		return deref(m.Path)
+	}
+	return name
+}
+
+func ptrEq(a, b *int64) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
+}
+
+// Insert 新增菜单，对应 insert_menu。
+//
+// ⚠️ 缺省字段走列默认值：parent_id=0、order_num=0、path=""、is_frame="1"、
+// is_cache="0"、menu_type=""、visible="0"、status="0"、icon="#"、remark=""；
+// component/query_param/perms 缺省为 NULL。
+func (s *Service) Insert(ctx context.Context, in CreateIn) (int64, error) {
+	row := SysMenu{MenuName: deref(in.MenuName)}
+	if in.ParentID != nil {
+		row.ParentID = in.ParentID
+	} else {
+		v := int64(0)
+		row.ParentID = &v
+	}
+	if in.OrderNum != nil {
+		row.OrderNum = in.OrderNum
+	} else {
+		v := 0
+		row.OrderNum = &v
+	}
+	if in.Path != nil {
+		row.Path = in.Path
+	} else {
+		row.Path = strPtr("")
+	}
+	row.Component = in.Component
+	row.QueryParam = in.QueryParam
+	if in.IsFrame != nil {
+		row.IsFrame = in.IsFrame
+	} else {
+		row.IsFrame = strPtr(NoFrame)
+	}
+	if in.IsCache != nil {
+		row.IsCache = in.IsCache
+	} else {
+		row.IsCache = strPtr("0")
+	}
+	if in.MenuType != nil {
+		row.MenuType = in.MenuType
+	} else {
+		row.MenuType = strPtr("")
+	}
+	if in.Visible != nil {
+		row.Visible = in.Visible
+	} else {
+		row.Visible = strPtr("0")
+	}
+	if in.Status != nil {
+		row.Status = in.Status
+	} else {
+		row.Status = strPtr("0")
+	}
+	row.Perms = in.Perms
+	if in.Icon != nil {
+		row.Icon = in.Icon
+	} else {
+		row.Icon = strPtr("#")
+	}
+	if in.Remark != nil {
+		row.Remark = in.Remark
+	} else {
+		row.Remark = strPtr("")
+	}
+
+	crudx.FillCreate(&row.BaseModel, s.auth, nowFunc())
+	if err := s.repo.Create(ctx, &row); err != nil {
+		return 0, errs.Wrap(err, errs.MsgDBFailed)
+	}
+	return 1, nil
+}
+
+// Update 修改菜单（仅更新非空字段），对应 update_menu。
+func (s *Service) Update(ctx context.Context, in UpdateIn) (int64, error) {
+	row, err := s.repo.SelectMenuByID(ctx, *in.ID)
+	if err != nil {
+		return 0, err
+	}
+	if row == nil {
+		return 0, nil
+	}
+	if in.ParentID != nil {
+		row.ParentID = in.ParentID
+	}
+	if in.MenuName != nil {
+		row.MenuName = *in.MenuName
+	}
+	if in.OrderNum != nil {
+		row.OrderNum = in.OrderNum
+	}
+	if in.Path != nil {
+		row.Path = in.Path
+	}
+	if in.Component != nil {
+		row.Component = in.Component
+	}
+	if in.QueryParam != nil {
+		row.QueryParam = in.QueryParam
+	}
+	if in.IsFrame != nil {
+		row.IsFrame = in.IsFrame
+	}
+	if in.IsCache != nil {
+		row.IsCache = in.IsCache
+	}
+	if in.MenuType != nil {
+		row.MenuType = in.MenuType
+	}
+	if in.Visible != nil {
+		row.Visible = in.Visible
+	}
+	if in.Status != nil {
+		row.Status = in.Status
+	}
+	if in.Perms != nil {
+		row.Perms = in.Perms
+	}
+	if in.Icon != nil {
+		row.Icon = in.Icon
+	}
+	if in.Remark != nil {
+		row.Remark = in.Remark
+	}
+	crudx.FillUpdate(&row.BaseModel, s.auth, nowFunc())
+	if err := s.repo.Update(ctx, row); err != nil {
+		return 0, errs.Wrap(err, errs.MsgDBFailed)
+	}
+	return 1, nil
+}
+
+// DeleteByID 物理删除单条，对应 delete_menu_by_id。
+func (s *Service) DeleteByID(ctx context.Context, id int64) (int64, error) {
+	done, err := s.repo.Delete(ctx, id)
+	if err != nil {
+		return 0, errs.Wrap(err, errs.MsgDBFailed)
+	}
+	if done {
+		return 1, nil
+	}
+	return 0, nil
+}
+
+// DeleteCascade 级联删除菜单及角色关联，对应 delete_menu_by_ids。
+func (s *Service) DeleteCascade(ctx context.Context, ids []int64) error {
+	if _, err := s.repo.DeleteBatch(ctx, ids); err != nil {
+		return errs.Wrap(err, errs.MsgDBFailed)
+	}
+	if _, err := s.repo.DeleteRoleMenuByMenuIDs(ctx, ids); err != nil {
+		return errs.Wrap(err, errs.MsgDBFailed)
+	}
+	return nil
 }
