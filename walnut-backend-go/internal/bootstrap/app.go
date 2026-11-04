@@ -29,6 +29,8 @@ import (
 	"walnut-seed-go/internal/pkg/middleware"
 	"walnut-seed-go/internal/pkg/migratex"
 	"walnut-seed-go/internal/pkg/seedx"
+	"walnut-seed-go/internal/pkg/ssex"
+	"walnut-seed-go/internal/pkg/storagex"
 )
 
 // App 持有全部运行时依赖，负责启动与优雅停机。
@@ -38,8 +40,10 @@ type App struct {
 	engine *gin.Engine
 	srv    *http.Server
 
-	db    *gorm.DB
-	cache *cachex.Client
+	db      *gorm.DB
+	cache   *cachex.Client
+	storage storagex.Service
+	sse     *ssex.Manager
 
 	errHandler *errs.Handler
 	health     *health.Service
@@ -120,6 +124,27 @@ func New(cfg *config.Config) (*App, error) {
 
 	// ---- 5. Redis（失败仅告警）----
 	app.connectRedis()
+
+	// ---- 5b. 对象存储（失败仅告警，上传时惰性重试）----
+	if storage, err := storagex.NewService(cfg, logger); err != nil {
+		logger.Warn("⚠️ 对象存储初始化失败（文件上传将不可用）", slog.String("err", err.Error()))
+	} else {
+		// 尝试确保桶存在，失败仅告警
+		if err := storage.EnsureBucket(context.Background()); err != nil {
+			logger.Warn("⚠️ OSS 桶初始化失败（上传时将惰性重试自建）", slog.String("err", err.Error()))
+		}
+		app.storage = storage
+		logger.Info("✅ 对象存储初始化完成", slog.String("type", cfg.OSSType))
+	}
+
+	// ---- 5c. SSE 管理器 ----
+	app.sse = ssex.NewManager(app.cache, logger)
+	if cfg.SSEEnabled && app.cache != nil {
+		go app.sse.Subscribe(context.Background())
+		logger.Info("✅ SSE 管理器初始化完成（Redis pub/sub 已订阅）")
+	} else {
+		logger.Info("✅ SSE 管理器初始化完成（本地模式，无跨实例广播）")
+	}
 
 	// ---- 6. Gin 引擎与路由 ----
 	if err := app.buildEngine(); err != nil {

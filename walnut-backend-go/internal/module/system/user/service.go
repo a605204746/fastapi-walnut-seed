@@ -2,6 +2,9 @@ package user
 
 import (
 	"context"
+	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -11,6 +14,7 @@ import (
 	"walnut-seed-go/internal/pkg/authctx"
 	"walnut-seed-go/internal/pkg/crudx"
 	"walnut-seed-go/internal/pkg/errs"
+	"walnut-seed-go/internal/pkg/excelx"
 	"walnut-seed-go/internal/pkg/idtype"
 	"walnut-seed-go/internal/pkg/modelx"
 	"walnut-seed-go/internal/pkg/permx"
@@ -517,6 +521,158 @@ func (s *Service) InsertAuthRole(ctx context.Context, userID int64, roleIDs []in
 		}
 	}
 	return true, nil
+}
+
+// ImportUsers 从 Excel 批量导入用户，对应 Python 端 UserService.import_users。
+func (s *Service) ImportUsers(ctx context.Context, data []byte, updateSupport bool) (string, error) {
+	rows, headers, err := excelx.ReadRows(data)
+	if err != nil {
+		return "", err
+	}
+	if len(rows) == 0 {
+		return "", errs.New("导入数据不能为空")
+	}
+
+	// 建立表头索引
+	headerIdx := make(map[string]int, len(headers))
+	for i, h := range headers {
+		headerIdx[h] = i
+	}
+
+	// 初始密码
+	initPwd := "Walnut@123" // TODO: 从 sys_config 读取 sys.user.initPassword
+	hashedInitPwd, err := hashPassword(initPwd)
+	if err != nil {
+		return "", err
+	}
+
+	// 性别/状态字典值→标签映射
+	sexMap := map[string]string{"男": "0", "女": "1", "未知": "2"}
+	statusMap := map[string]string{"正常": "0", "停用": "1"}
+
+	var successLog []string
+	var failLog []string
+
+	for i, row := range rows {
+		rowNum := i + 2 // Excel 行号（表头占第 1 行）
+		userName := cellStr(row, headerIdx, "用户账号")
+		nickName := cellStr(row, headerIdx, "用户昵称")
+		email := cellStr(row, headerIdx, "用户邮箱")
+		phone := cellStr(row, headerIdx, "手机号码")
+		deptIDStr := cellStr(row, headerIdx, "部门编号")
+		sexLabel := cellStr(row, headerIdx, "用户性别")
+		statusLabel := cellStr(row, headerIdx, "账号状态")
+
+		if userName == "" {
+			failLog = append(failLog, fmt.Sprintf("第%d行：用户账号不能为空", rowNum))
+			continue
+		}
+
+		// 查找已有用户
+		existing, err := s.repo.FindByUserName(ctx, userName)
+		if err != nil {
+			failLog = append(failLog, fmt.Sprintf("第%d行：查询用户失败: %v", rowNum, err))
+			continue
+		}
+
+		sex := sexMap[sexLabel]
+		status := statusMap[statusLabel]
+		if status == "" {
+			status = "0"
+		}
+
+		var deptID *int64
+		if deptIDStr != "" {
+			d, err := strconv.ParseInt(deptIDStr, 10, 64)
+			if err == nil {
+				deptID = &d
+			}
+		}
+
+		if existing == nil {
+			// 新增
+			in := CreateIn{
+				UserName:    &userName,
+				NickName:    &nickName,
+				Password:    &initPwd,
+				Email:       strPtrOrNil(email),
+				PhoneNumber: strPtrOrNil(phone),
+				Sex:         &sex,
+				Status:      &status,
+				DeptID:      deptID,
+			}
+			// 使用初始密码的哈希
+			hashedPwd := hashedInitPwd
+			row := SysUser{
+				UserType: "sys_user",
+				Status:   status,
+				DelFlag:  modelx.Normal,
+				Password: &hashedPwd,
+			}
+			applyCreateFields(&row, in)
+			crudx.FillCreate(&row.BaseModel, s.auth, nowFunc())
+			if err := s.repo.Create(ctx, &row); err != nil {
+				failLog = append(failLog, fmt.Sprintf("第%d行：新增用户'%s'失败: %v", rowNum, userName, err))
+				continue
+			}
+			successLog = append(successLog, fmt.Sprintf("第%d行：新增用户'%s'成功", rowNum, userName))
+		} else if updateSupport {
+			// 更新
+			if existing.ID == modelx.SuperAdminID {
+				failLog = append(failLog, fmt.Sprintf("第%d行：不允许操作超级管理员用户", rowNum))
+				continue
+			}
+			if nickName != "" {
+				existing.NickName = nickName
+			}
+			if email != "" {
+				existing.Email = &email
+			}
+			if phone != "" {
+				existing.Phonenumber = &phone
+			}
+			existing.Sex = &sex
+			existing.Status = status
+			if deptID != nil {
+				existing.DeptID = deptID
+			}
+			crudx.FillUpdate(&existing.BaseModel, s.auth, nowFunc())
+			if err := s.repo.Update(ctx, existing); err != nil {
+				failLog = append(failLog, fmt.Sprintf("第%d行：更新用户'%s'失败: %v", rowNum, userName, err))
+				continue
+			}
+			successLog = append(successLog, fmt.Sprintf("第%d行：更新用户'%s'成功", rowNum, userName))
+		} else {
+			failLog = append(failLog, fmt.Sprintf("第%d行：用户'%s'已存在", rowNum, userName))
+		}
+	}
+
+	msg := strings.Join(successLog, "<br/>")
+	if len(failLog) > 0 {
+		if msg != "" {
+			msg += "<br/>"
+		}
+		msg += strings.Join(failLog, "<br/>")
+	}
+	if len(successLog) == 0 && len(failLog) > 0 {
+		return "", errs.New(msg)
+	}
+	return msg, nil
+}
+
+func cellStr(row []string, idx map[string]int, header string) string {
+	i, ok := idx[header]
+	if !ok || i >= len(row) {
+		return ""
+	}
+	return strings.TrimSpace(row[i])
+}
+
+func strPtrOrNil(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 // ---- Profile ----

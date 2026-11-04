@@ -2,6 +2,7 @@ package user
 
 import (
 	"io"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -17,17 +18,19 @@ import (
 	"walnut-seed-go/internal/pkg/idtype"
 	"walnut-seed-go/internal/pkg/permguard"
 	"walnut-seed-go/internal/pkg/routex"
+	"walnut-seed-go/internal/pkg/storagex"
 )
 
 type Handler struct {
-	db   *gorm.DB
-	errs *errs.Handler
-	perm *permguard.Guard
-	idem *idempotentx.Guard
+	db      *gorm.DB
+	errs    *errs.Handler
+	perm    *permguard.Guard
+	idem    *idempotentx.Guard
+	storage storagex.Service
 }
 
-func NewHandler(db *gorm.DB, eh *errs.Handler, perm *permguard.Guard, idem *idempotentx.Guard) *Handler {
-	return &Handler{db: db, errs: eh, perm: perm, idem: idem}
+func NewHandler(db *gorm.DB, eh *errs.Handler, perm *permguard.Guard, idem *idempotentx.Guard, storage storagex.Service) *Handler {
+	return &Handler{db: db, errs: eh, perm: perm, idem: idem, storage: storage}
 }
 
 func (h *Handler) Mount(b routex.Binder) {
@@ -41,6 +44,8 @@ func (h *Handler) Mount(b routex.Binder) {
 	b.GET("/list", require("system:user:list"), h.List)
 	b.GET("/list/dept/:dept_id", require("system:user:list"), h.ListByDept)
 	b.POST("/export", require("system:user:export"), h.Export)
+	b.POST("/importData", require("system:user:import"), h.ImportData)
+	b.POST("/importTemplate", h.ImportTemplate)
 	b.GET("/optionselect", require("system:user:query"), h.OptionSelect)
 	b.GET("/deptTree", require("system:user:list"), h.DeptTree)
 	b.GET("/authRole/:user_id", require("system:user:query"), h.GetAuthRole)
@@ -426,6 +431,57 @@ func (h *Handler) Export(c *gin.Context) {
 	}
 }
 
+func (h *Handler) ImportData(c *gin.Context) {
+	file, _, err := c.Request.FormFile("file")
+	if err != nil {
+		h.errs.Abort(c, errs.BadRequest("上传文件不能为空"))
+		return
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		h.errs.Abort(c, errs.Wrap(err, errs.MsgSystemError))
+		return
+	}
+
+	updateSupport := false
+	if raw := c.PostForm("updateSupport"); raw == "true" || raw == "1" {
+		updateSupport = true
+	}
+
+	svc, ok := h.service(c)
+	if !ok {
+		return
+	}
+	msg, err := svc.ImportUsers(c.Request.Context(), data, updateSupport)
+	if err != nil {
+		h.errs.Abort(c, err)
+		return
+	}
+	envelope.OKMsg(c, nil, msg)
+}
+
+func (h *Handler) ImportTemplate(c *gin.Context) {
+	headers := importHeaders()
+	selectorHeaders := []string{"用户性别", "账号状态"}
+	options := [][]string{
+		{"男", "女", "未知"},
+		{"正常", "停用"},
+	}
+	if err := excelx.ExportTemplate(c, headers, selectorHeaders, options, "用户数据"); err != nil {
+		h.errs.Abort(c, errs.Wrap(err, errs.MsgSystemError))
+		return
+	}
+}
+
+func importHeaders() []string {
+	return []string{
+		"用户序号", "部门编号", "用户账号", "用户昵称", "用户邮箱",
+		"手机号码", "用户性别", "账号状态",
+	}
+}
+
 // ---- Profile ----
 
 func (h *Handler) GetProfile(c *gin.Context) {
@@ -490,7 +546,52 @@ func (h *Handler) UpdatePwd(c *gin.Context) {
 }
 
 func (h *Handler) Avatar(c *gin.Context) {
-	h.errs.Abort(c, errs.New("头像上传功能待 P4 storagex 实现"))
+	if h.storage == nil {
+		h.errs.Abort(c, errs.New("对象存储未初始化，头像上传不可用"))
+		return
+	}
+	file, header, err := c.Request.FormFile("avatarfile")
+	if err != nil {
+		h.errs.Abort(c, errs.BadRequest("上传文件不能为空"))
+		return
+	}
+	defer file.Close()
+
+	// 扩展名白名单（仅图片）
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+	ext = strings.TrimPrefix(ext, ".")
+	imageExts := map[string]bool{"bmp": true, "gif": true, "jpg": true, "jpeg": true, "png": true}
+	if !imageExts[ext] {
+		h.errs.Abort(c, errs.New("上传图片异常，请联系管理员"))
+		return
+	}
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		h.errs.Abort(c, errs.Wrap(err, errs.MsgSystemError))
+		return
+	}
+
+	result, err := h.storage.Upload(c.Request.Context(), header.Filename, data)
+	if err != nil {
+		h.errs.Abort(c, err)
+		return
+	}
+
+	svc, ok := h.service(c)
+	if !ok {
+		return
+	}
+	n, err := svc.repo.UpdateAvatar(c.Request.Context(), svc.auth.User.ID, result.URL)
+	if err != nil {
+		h.errs.Abort(c, errs.Wrap(err, errs.MsgDBFailed))
+		return
+	}
+	if n == 0 {
+		h.errs.Abort(c, errs.New("上传图片异常，请联系管理员"))
+		return
+	}
+	envelope.OK(c, map[string]string{"imgUrl": result.URL})
 }
 
 // ---- Helpers ----

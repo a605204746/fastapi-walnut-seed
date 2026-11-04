@@ -11,7 +11,9 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"walnut-seed-go/internal/config"
+	"walnut-seed-go/internal/module/common/file"
 	"walnut-seed-go/internal/module/common/health"
+	"walnut-seed-go/internal/module/resource"
 	"walnut-seed-go/internal/module/system/client"
 	sysconfig "walnut-seed-go/internal/module/system/config"
 	"walnut-seed-go/internal/module/system/dept"
@@ -29,6 +31,7 @@ import (
 	"walnut-seed-go/internal/pkg/permguard"
 	"walnut-seed-go/internal/pkg/ratelimitx"
 	"walnut-seed-go/internal/pkg/routex"
+	"walnut-seed-go/internal/pkg/storagex"
 )
 
 // RecordedRoute 记录一条路由的认证状态，供启动期审计。
@@ -385,15 +388,25 @@ func (a *App) registerRoutes(b *Builder) {
 	a.mountAuthRoutes(b)
 
 	// ---- /system/* ----
-	// 已完成（93 条）：auth(5) health(3) root(1) menu(9) post(8) dept(8) dict(15)
-	//   config(9) notice(5) client(7) social(1) role(15) user(21) getRouters(in menu)
-	// 剩余（20 条）：file(3) sse(2) upload(1) + P4/P5
+	// 全部 122 条功能路由已完成（golden 契约 125 条，豁免 3 条 docs UI）：
+	//   auth(5) health(3) root(1) menu(9) post(8) dept(8) dict(15) config(9)
+	//   notice(5) client(7) social(1) role(15) user(21+profile 4) monitor(9)
+	//   file(3) upload(1) sse(2)
 	a.mountSystemRoutes(b)
 
 	// ---- /monitor/* ----
 	a.mountMonitorRoutes(b)
 
-	// TODO(P4): /common/file/*、/upload/{key}、/resource/sse、/resource/websocket
+	// ---- /common/file/* ----
+	a.mountFileRoutes(b)
+
+	// ---- /upload/{key}（公开白名单，img 标签无法带 token）----
+	a.mountUploadRoutes(b)
+
+	// ---- /resource/sse ----
+	a.mountResourceRoutes(b)
+
+	// TODO(P4): /resource/websocket
 }
 
 // mountAuthRoutes 装配认证模块。
@@ -428,7 +441,7 @@ func (a *App) mountSystemRoutes(b *Builder) {
 		idem = idempotentx.New(a.cache, a.errHandler, middleware.LocaleFrom)
 	}
 
-	user.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/user").Binder())
+	user.NewHandler(a.db, a.errHandler, perm, idem, a.storage).Mount(system.Group("/user").Binder())
 	menu.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/menu").Binder())
 	post.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/post").Binder())
 	dept.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/dept").Binder())
@@ -450,6 +463,53 @@ func (a *App) mountMonitorRoutes(b *Builder) {
 	}
 
 	syslog.NewHandler(a.db, a.errHandler, perm, idem, a.cache).Mount(monitor.Binder())
+}
+
+func (a *App) mountFileRoutes(b *Builder) {
+	if a.storage == nil {
+		a.log.Warn("⚠️ 对象存储未初始化，/common/file/* 路由不挂载")
+		return
+	}
+	common := b.Protected("/common")
+	file.NewHandler(a.storage, a.cfg, a.errHandler).Mount(common.Group("/file").Binder())
+}
+
+func (a *App) mountUploadRoutes(b *Builder) {
+	if a.storage == nil {
+		a.log.Warn("⚠️ 对象存储未初始化，/upload/* 路由不挂载")
+		return
+	}
+	upload := b.Public("/upload")
+	upload.GET("/*file_path", a.handleUploadServe)
+}
+
+// handleUploadServe 处理 /upload/{key} 公开回源请求。
+// 在白名单内（img 标签无法带 token），强制 nosniff + attachment 防存储型 XSS。
+func (a *App) handleUploadServe(c *gin.Context) {
+	filePath := strings.TrimPrefix(c.Param("file_path"), "/")
+	if filePath == "" {
+		c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": "文件不存在"})
+		return
+	}
+
+	obj, err := a.storage.Serve(c.Request.Context(), filePath)
+	if err != nil {
+		a.log.Warn("回源文件失败", slog.String("key", filePath), slog.String("err", err.Error()))
+		c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": "文件不存在"})
+		return
+	}
+
+	headers := storagex.ServeHeaders("", true) // cacheable
+	for k, v := range headers {
+		c.Header(k, v)
+	}
+	c.Data(http.StatusOK, obj.ContentType, obj.Data)
+}
+
+func (a *App) mountResourceRoutes(b *Builder) {
+	resProtected := b.Protected("/resource")
+	resPublic := b.Public("/resource")
+	resource.NewHandler(a.sse, a.cfg, a.errHandler).Mount(resProtected.Binder(), resPublic.Binder())
 }
 
 func containsStar(list []string) bool {
