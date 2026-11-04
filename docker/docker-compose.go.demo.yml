@@ -1,0 +1,186 @@
+# WalnutSeed Go 后端全栈体验（一键启动）
+#
+# 启动：docker compose -f docker/docker-compose.go.demo.yml up -d
+# 访问：http://localhost:8010   账号 admin / admin123
+# 停止：docker compose -f docker/docker-compose.go.demo.yml down
+#
+# 前提：
+#   1. 前端 dist 已预构建：cd walnut-frontend && pnpm install && pnpm run build:antd
+#   2. 已拉取镜像（国内网络用镜像加速）：
+#      docker pull docker.m.daocloud.io/library/golang:1.26-alpine && docker tag docker.m.daocloud.io/library/golang:1.26-alpine golang:1.26-alpine
+#      docker pull docker.m.daocloud.io/library/alpine:3.20 && docker tag docker.m.daocloud.io/library/alpine:3.20 alpine:3.20
+#      docker pull docker.m.daocloud.io/library/nginx:stable-alpine && docker tag docker.m.daocloud.io/library/nginx:stable-alpine nginx:stable-alpine
+#
+# 服务清单：
+#   mysql       3306(容器内) / 3307(宿主机)    root/walnut123
+#   redis       6379(容器内) / 6380(宿主机)
+#   seaweedfs   8333(S3 API) / 8888(filer UI)
+#   backend     8011(容器内) / 8011(宿主机)    Go 后端（~76MB 镜像）
+#   frontend    80(容器内)   / 8010(宿主机)    nginx + 预构建前端 dist
+
+name: walnut-seed-go-demo
+
+services:
+  # ============================================================
+  # 中间件层（MySQL + Redis + SeaweedFS）
+  # ============================================================
+  mysql:
+    image: mysql:8.0
+    container_name: walnut-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: walnut123
+      MYSQL_DATABASE: walnut_seed_python   # Python 端用的库（首次初始化建库）
+      TZ: Asia/Shanghai
+    ports:
+      - "3307:3306"
+    volumes:
+      - ./volumes/mysql:/var/lib/mysql
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=caching_sha2_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-pwalnut123"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    container_name: walnut-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - ./volumes/redis:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.41
+    container_name: walnut-seaweedfs
+    restart: unless-stopped
+    ports:
+      - "8333:8333"
+      - "8888:8888"
+    volumes:
+      - seaweedfs-data:/data
+    command: ["server", "-s3", "-dir=/data", "-ip.bind=0.0.0.0"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8888/"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # ============================================================
+  # Go 后端（Docker 内构建 + 运行）
+  # ============================================================
+  backend:
+    build:
+      context: ../walnut-backend-go
+      args:
+        GOPROXY: ${GO_GOPROXY:-https://mirrors.aliyun.com/goproxy/,direct}
+        BUILD_IMAGE: ${GO_BUILD_IMAGE:-golang:1.26-alpine}
+        RUNTIME_IMAGE: ${GO_RUNTIME_IMAGE:-alpine:3.20}
+    image: walnut-seed-backend-go
+    container_name: walnut-backend-go
+    restart: unless-stopped
+    stop_grace_period: 20s
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      seaweedfs:
+        condition: service_healthy
+    ports:
+      - "8011:8011"
+    environment:
+      ENVIRONMENT: prod
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: "8011"
+      DEBUG: "false"
+      LOGGER_LEVEL: INFO
+      LOG_DIR: /walnut-backend/server/logs
+      LOG_FILENAME: walnut-seed-go.log
+
+      DATABASE_TYPE: mysql
+      DATABASE_HOST: mysql
+      DATABASE_PORT: "3306"
+      DATABASE_USER: root
+      DATABASE_PASSWORD: walnut123
+      DATABASE_NAME: walnut_seed_go
+
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_DB_NAME: "0"
+      REDIS_KEY_PREFIX: walnut-seed-go
+
+      SECRET_KEY: ${JWT_SECRET_KEY:-walnut-seed-change-me-32-bytes-min-jwt-secret-0123456789}
+      CORS_ALLOW_ORIGINS: "*"
+      CORS_ALLOW_CREDENTIALS: "true"
+
+      OSS_TYPE: s3
+      OSS_S3_ENDPOINT: seaweedfs:8333
+      OSS_S3_ACCESS_KEY: ""
+      OSS_S3_SECRET_KEY: ""
+      OSS_S3_BUCKET_NAME: walnut-seed
+      OSS_S3_SECURE: "false"
+      OSS_S3_URL_PREFIX: /upload
+
+      SSE_ENABLED: "true"
+      WEBSOCKET_ENABLED: "false"
+      XSS_ENABLED: "true"
+      XSS_EXCLUDE_URLS: /system/notice
+
+      TRUSTED_PROXY_IPS: ""
+      ALLOWED_HOSTS: "*"
+    volumes:
+      - ./volumes/logs:/walnut-backend/server/logs
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8011/common/health/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+  # ============================================================
+  # 前端（nginx + 预构建 dist，无需 Docker 内构建）
+  # ============================================================
+  frontend:
+    image: nginx:stable-alpine
+    container_name: walnut-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8010:80"
+    environment:
+      BACKEND_HOST: backend
+      BACKEND_PORT: "8011"
+    volumes:
+      # 预构建的前端 dist（pnpm run build:antd 产物）
+      - ../walnut-frontend/apps/web-antd/dist:/usr/share/nginx/html:ro
+      # nginx 配置模板
+      - ./config/nginx.conf:/etc/nginx/nginx.conf.template:ro
+    # 启动时 envsubst 渲染 BACKEND_HOST/PORT，然后启动 nginx
+    command:
+      - /bin/sh
+      - -c
+      - |
+        envsubst '$${BACKEND_HOST} $${BACKEND_PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+        exec nginx -g 'daemon off;'
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:80/"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  seaweedfs-data:
