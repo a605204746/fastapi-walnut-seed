@@ -4,6 +4,8 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.138-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Java](https://img.shields.io/badge/Java-25-ED8B00?logo=openjdk&logoColor=white)](https://openjdk.org/)
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![Gin](https://img.shields.io/badge/Gin-1.12-00ADD8?logo=go&logoColor=white)](https://gin-gonic.com/)
 [![Vue](https://img.shields.io/badge/Vue-3.5-42b883?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-5FA04E?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![uv](https://img.shields.io/badge/uv-managed-DE5FE4?logo=uv&logoColor=white)](https://docs.astral.sh/uv/)
@@ -11,9 +13,9 @@
 
 [English](./README.en.md) | **简体中文**
 
-> **FastAPI / Spring Boot / Python / Java 全栈脚手架** —— 开箱即用的**后台管理系统**模板（admin scaffold / boilerplate），支持 **RBAC 权限管理、JWT 认证、接口加解密、数据库迁移、Docker 一键部署**，前端基于 **Vue3 + Vben + Ant Design Vue Next**。
+> **FastAPI / Spring Boot / Gin 全栈脚手架** —— 开箱即用的**后台管理系统**模板（admin scaffold / boilerplate），支持 **RBAC 权限管理、JWT 认证、接口加解密、数据库迁移、Docker 一键部署**，前端基于 **Vue3 + Vben + Ant Design Vue Next**。
 
-现代化全栈应用**脚手架（scaffold / boilerplate / starter template）**：**双后端**（FastAPI / Python 3.12 与 Spring Boot 3 / Java 25）+ **Vue3**（Vben 5 / antdv-next）前端，开箱即用地构建**中后台管理系统**。两个后端遵循**同一套接口契约**（路由、响应信封、认证流程、接口加密协议完全一致），前端无感互换。
+现代化全栈应用**脚手架（scaffold / boilerplate / starter template）**：**三后端**（FastAPI / Python 3.12、Spring Boot 3 / Java 25、Gin / Go 1.26）+ **Vue3**（Vben 5 / antdv-next）前端，开箱即用地构建**中后台管理系统**。三个后端遵循**同一套接口契约**（路由、响应信封、认证流程、接口加密协议完全一致），前端无感互换。
 
 适合场景：快速搭建**企业级后台管理**、**数据看板**、**运营平台**、**SaaS 多租户系统**；支持 Python 团队与 Java 团队共用同一前端，按技术栈任选后端。
 
@@ -27,7 +29,7 @@ GitHub: https://github.com/a605204746/walnut-seed
 
 内置基础设施，直接支撑真实的管理类业务：
 
-- **双后端同契约** —— Python（FastAPI）与 Java（Spring Boot 3）两份后端实现，同一前端、同一接口契约，按团队技术栈任选，Docker 编排一键切换
+- **三后端同契约** —— Python（FastAPI）、Java（Spring Boot 3）与 Go（Gin）三份后端实现，同一前端、同一接口契约，按团队技术栈任选，Docker 编排一键切换
 - **统一响应信封** —— 全部接口统一返回 `{"code", "msg", "data"}`
 - **认证与授权** —— JWT 登录、RBAC 菜单/按钮权限、行级数据权限（fail-closed）
 - **默认加固** —— 限流、防重提交（幂等）、接口加解密（RSA + AES）、XSS 过滤
@@ -44,6 +46,7 @@ GitHub: https://github.com/a605204746/walnut-seed
 | --- | --- |
 | 后端（Python） | Python 3.12、FastAPI 0.138、SQLAlchemy 2.0（async）、Alembic、Redis（redis.asyncio）、PyJWT、Loguru、Typer/Uvicorn；依赖管理 uv；接口加解密 cryptography（RSA + AES），可选国密 gmssl |
 | 后端（Java） | Java 25、Spring Boot 3.5、MyBatis-Plus、Sa-Token（JWT）、Redisson、Flyway、springdoc；构建 Maven（仓库镜像已内置国内源） |
+| 后端（Go） | Go 1.26、Gin 1.12、GORM v2、golang-migrate、go-redis v9、koanf v2、slog + lumberjack；存储 minio-go v7；Excel excelize |
 | 前端 | Vue 3.5、Vben 5.7.0、antdv-next 1.3.0（替代已停止维护的 ant-design-vue）；pnpm 11.2.2 + turbo monorepo；Node.js `^22.18.0 \|\| ^24.0.0` |
 | 存储 | MySQL 8（数据库仅支持 MySQL）、Redis 7、SeaweedFS（S3 兼容对象存储，可切阿里云 OSS） |
 
@@ -51,7 +54,7 @@ GitHub: https://github.com/a605204746/walnut-seed
 
 详细教程与设计说明位于 [`docs/`](./docs/README.md)：
 
-- **[文档总入口](./docs/README.md)** —— 按公共约定、Python、Java、前端和部署分别阅读
+- **[文档总入口](./docs/README.md)** —— 按公共约定、Python、Java、Go、前端和部署分别阅读
 - **[从零新增一个业务模块](./docs/python/08-新增CRUD模块.md)** —— Python 端端到端开发教程（五件套 → 迁移 → 菜单权限 → 前端页面）
 - 开发指南：菜单与权限、Alembic 迁移、接口加解密、i18n
 - 架构说明与部署运维手册
@@ -64,8 +67,9 @@ GitHub: https://github.com/a605204746/walnut-seed
 walnut-seed/
   walnut-backend-python/    # Python 后端（FastAPI + SQLAlchemy 2.0 异步 + Redis）
   walnut-backend-java/      # Java 后端（Spring Boot 3 + MyBatis-Plus + Sa-Token），与 Python 端同契约
+  walnut-backend-go/        # Go 后端（Gin + GORM + go-redis），与 Python/Java 端同契约，路由覆盖率 122/122
   walnut-frontend/          # Vue3 前端 monorepo（pnpm + turbo），主应用位于 apps/web-antd/
-  docker/                   # compose 编排与容器配置（Python / Java 两套全栈编排 + 中间件编排）
+  docker/                   # compose 编排与容器配置（Python / Java / Go 三套全栈编排 + 中间件编排）
   data/                     # 运行时产物（不入 git，自动创建）：logs/、upload/
 ```
 
@@ -134,6 +138,42 @@ walnut-backend-java/
 
 路由面与 Python 端一致：`/auth/*`、`/system/*`、`/monitor/*`、`/common/health/*`、`/common/file/*`、`/resource/sse`、`/upload/*`（根前缀，前端代理剥离 `/api`）。
 
+### 后端结构（Go）
+
+```
+walnut-backend-go/
+  main.go                    # 单二进制入口 → cobra CLI
+  cmd/                       # 子命令：root / run / migrate / seed
+  internal/
+    bootstrap/               # 组装根：app.go / router.go / audit.go
+    config/                  # 配置唯一事实源（koanf）+ 启动期安全校验
+    pkg/                     # 跨模块共享内核
+      envelope / errs        #   响应信封 / 业务异常
+      idtype / timex         #   JSInt 条件序列化 / JSONTime
+      cryptox                #   AES-ECB / RSA 分段 / bcrypt / JWT（已与 Python 互通验证）
+      idgen                  #   雪花 ID（位布局已跨语言验证）
+      i18nx / validatex      #   go:embed 消息表 / Pydantic 文案映射
+      logx / middleware      #   slog + 轮转 + 脱敏 / CORS·Locale·ApiDecrypt·ReqLog·Correlation
+      databasex / cachex     #   GORM + 建库引导 + golang-migrate / Redis + 键前缀
+      permguard / permx      #   功能权限守卫 / 行级数据权限（fail-closed）
+      storagex / ssex        #   对象存储（S3/OSS） / SSE 连接管理
+      crudx / excelx         #   分页排序 / Excel 导入导出（excelize）
+    module/
+      common/health/         #   check / live / ready
+      web/auth/              #   登录 / 登出 / 注册 / 验证码 / 认证中间件
+      system/                #   user / role / menu / dept / post / dict / config / notice / client / social / log
+      resource/              #   SSE 连接 / 关闭
+  migrations/                # 0001_init_schema.{up,down}.sql（17 张系统表）
+  seed/                      # mysql_data.sql（幂等播种，与 Python 端 SHA256 一致）
+  api/openapi/               # golden 契约（routes.txt 125 条，由 Python 端导出）
+  test/contract/             # 双端契约 diff（11 个 diff_*.py 脚本 + routes_inventory_test.go）
+  test/cryptointerop/        # Python↔Go 加解密互通测试
+  env/                       # .env.dev / .env.example
+  Makefile  Dockerfile  .golangci.yml  .go-version
+```
+
+每个业务模块按**五件套**组织（handler / service / repo / dto / model），依赖方向单向向内。
+
 ## 快速开始
 
 ```bash
@@ -141,19 +181,19 @@ git clone https://github.com/deepin/walnut-seed.git
 cd walnut-seed
 ```
 
-前置：Docker Desktop（含 compose）；本机原生开发另需 `uv`（Python 3.12）、Node.js `^22.18.0 || ^24.0.0` 与 pnpm 11；本机跑 Java 后端还需 JDK 25 + Maven（走 Docker 则无需本机工具链）。
+前置：Docker Desktop（含 compose）；本机原生开发另需 `uv`（Python 3.12）、Node.js `^22.18.0 || ^24.0.0` 与 pnpm 11；本机跑 Java 后端还需 JDK 25 + Maven；本机跑 Go 后端需 Go 1.26+（走 Docker 则无需本机工具链）。
 
 ### 方式一：仅中间件 + 本机应用（日常开发推荐）
 
 中间件（MySQL/Redis/SeaweedFS）跑在 Docker，后端/前端在本机原生运行（热重载最流畅、好调试）。
 
-先启动中间件（MySQL localhost:3307，root/walnut123，Python 库 walnut_seed_python / Java 库 walnut_seed_java 自动创建；Redis localhost:6380；SeaweedFS S3 API localhost:8333，filer UI `http://localhost:8888`）：
+先启动中间件（MySQL localhost:3307，root/walnut123，Python 库 walnut_seed_python / Java 库 walnut_seed_java / Go 库 walnut_seed_go 自动创建；Redis localhost:6380；SeaweedFS S3 API localhost:8333，filer UI `http://localhost:8888`）：
 
 ```bash
 docker compose -f docker/docker-compose.middleware.yml up -d
 ```
 
-然后启动应用（后端二选一，两者监听同一端口 8011，前端无需任何改动）：
+然后启动应用（后端三选一，三者监听同一端口 8011，前端无需任何改动）：
 
 ```bash
 # Python 后端
@@ -165,13 +205,17 @@ uv run main.py run --env dev   # http://localhost:8011
 cd walnut-backend-java
 mvn spring-boot:run            # http://localhost:8011
 
+# 或 Go 后端（需 Go 1.26+）
+cd walnut-backend-go
+go run . run --env dev         # http://localhost:8011
+
 # 前端（新终端）
 cd walnut-frontend
 pnpm install
 pnpm dev:antd                  # http://localhost:8010
 ```
 
-连接信息：Python 在 `walnut-backend-python/env/.env.dev`、Java 在 `walnut-backend-java/src/main/resources/application-dev.yml`，均已指向 Docker 中间件。前端 dev server 默认运行于 `http://localhost:8010`，将 `/api` 代理到 `http://localhost:8011`。
+连接信息：Python 在 `walnut-backend-python/env/.env.dev`、Java 在 `walnut-backend-java/src/main/resources/application-dev.yml`、Go 在 `walnut-backend-go/env/.env.dev`，均已指向 Docker 中间件。前端 dev server 默认运行于 `http://localhost:8010`，将 `/api` 代理到 `http://localhost:8011`。
 
 ### 方式二：生产/全栈
 
@@ -181,15 +225,18 @@ cp docker/.env.example docker/.env    # 然后设置 JWT_SECRET_KEY（必填，�
 # Python 后端全栈
 docker compose -f docker/docker-compose.yml up -d --build
 
-# 或 Java 后端全栈（前端完全相同，仅后端实现互换；两份编排共用中间件，先 down 再切换）
+# 或 Java 后端全栈（前端完全相同，仅后端实现互换）
 docker compose -f docker/docker-compose.java.yml up -d --build
+
+# 或 Go 后端全栈（前端完全相同，仅后端实现互换）
+docker compose -f docker/docker-compose.go.yml up -d --build
 ```
 
 启动后访问 `http://localhost:8010`，初始账号 `admin / admin123`（**生产使用前必须改密**）。
 
-包含 MySQL 8 + Redis 7 + 后端 + 前端(nginx)；启动时后端容器先执行迁移再写入种子数据（Python: Alembic；Java: Flyway）。全部服务带 restart 策略与健康检查；`JWT_SECRET_KEY` 必须在 `docker/.env` 提供（两套编排以 `:?` 强制，缺失或为空直接启动失败）。
+包含 MySQL 8 + Redis 7 + 后端 + 前端(nginx)；启动时后端容器先执行迁移再写入种子数据（Python: Alembic；Java: Flyway；Go: golang-migrate）。全部服务带 restart 策略与健康检查；`JWT_SECRET_KEY` 必须在 `docker/.env` 提供（三套编排以 `:?` 强制，缺失或为空直接启动失败）。
 
-> 两套全栈编排经 `include` 共用中间件定义且端口互斥，**不能同时运行**。停止均为对应的 `docker compose -f <文件> down`；中间件数据保留在 `docker/volumes`（MySQL/Redis 绑定挂载）与具名卷 `seaweedfs-data`（SeaweedFS 的 filer 元数据在 Windows 绑定挂载下会静默丢失，故用具名卷）；后台日志统一绑定到 `docker/volumes/logs`，不会因 `down` 删除。中间件编排使用非默认端口（MySQL 3307 / Redis 6380），一般不与宿主机自装的 MySQL/Redis（3306/6379）冲突。
+> 三套全栈编排经 `include` 共用中间件定义且端口互斥，**不能同时运行**。停止均为对应的 `docker compose -f <文件> down`；中间件数据保留在 `docker/volumes`（MySQL/Redis 绑定挂载）与具名卷 `seaweedfs-data`（SeaweedFS 的 filer 元数据在 Windows 绑定挂载下会静默丢失，故用具名卷）；后台日志统一绑定到 `docker/volumes/logs`，不会因 `down` 删除。中间件编排使用非默认端口（MySQL 3307 / Redis 6380），一般不与宿主机自装的 MySQL/Redis（3306/6379）冲突。
 
 ### 常用开发命令
 
@@ -215,9 +262,9 @@ pnpm build:antd   # 构建生产包
 
 > 启用接口加密时，RSA 公私钥须与后端配置配对，且是**两对**密钥：前端请求加密密钥对应后端解密密钥，后端响应加密密钥对应前端解密密钥。见 `apps/web-antd/.env.development`。
 
-## 双后端（Python ↔ Java）
+## 三后端（Python ↔ Java ↔ Go）
 
-两个后端是**同一接口契约的两份实现**，前端与部署层对其无感：
+三个后端是**同一接口契约的三份实现**，前端与部署层对其无感：
 
 | 契约面 | 一致性 |
 |---|---|
@@ -229,10 +276,10 @@ pnpm build:antd   # 构建生产包
 
 差异与注意事项：
 
-- **数据库相互独立**：Python 用 `walnut_seed_python`（Alembic），Java 用 `walnut_seed_java`（Flyway）。切换后端不会互串数据，各自维护各自的迁移脚本；**新增表结构变更时两端需各自落地迁移**
-- **JWT 密钥独立**：两后端各用各的签名密钥（compose 统一经 `JWT_SECRET_KEY` 注入），切换后端后前端需重新登录（token 不跨后端通用）
+- **数据库相互独立**：Python 用 `walnut_seed_python`（Alembic），Java 用 `walnut_seed_java`（Flyway），Go 用 `walnut_seed_go`（golang-migrate）。切换后端不会互串数据，各自维护各自的迁移脚本；**新增表结构变更时三端需各自落地迁移**
+- **JWT 密钥独立**：三后端各用各的签名密钥（compose 统一经 `JWT_SECRET_KEY` 注入），切换后端后前端需重新登录（token 不跨后端通用）
 - 加密行为均为**透明模式**：请求带 `encrypt-key` 头即自动解密，明文请求直接放行（生产前端默认不加密）
-- 选择建议：团队 Python 技术栈选 `walnut-backend-python`，Java 技术栈选 `walnut-backend-java`；Docker 层切换只需换一份编排文件
+- 选择建议：团队 Python 技术栈选 `walnut-backend-python`，Java 技术栈选 `walnut-backend-java`，Go 技术栈选 `walnut-backend-go`；Docker 层切换只需换一份编排文件
 
 ## 后端接口契约
 
@@ -317,10 +364,13 @@ uv run main.py history --env dev             # 查看版本链
 |---|---|---|
 | 本地开发的 Python 后端行为（连库、密钥等） | `walnut-backend-python/env/.env.dev` | 只放差异项，其余走代码默认值 |
 | 本地开发的 Java 后端行为 | `walnut-backend-java/src/main/resources/application-dev.yml` | dev profile 默认值 |
+| 本地开发的 Go 后端行为 | `walnut-backend-go/env/.env.dev` | koanf 三级优先级 |
 | 任何环境的 Python 配置项默认值 | `walnut-backend-python/app/config/setting.py` | 唯一事实源；改动影响所有环境 |
+| 任何环境的 Go 配置项默认值 | `walnut-backend-go/internal/config/config.go` | 唯一事实源；改动影响所有环境 |
 | Docker 部署的 Python 后端环境变量 | `docker/docker-compose.yml` 的 `backend.environment` | 环境变量优先于 env 文件 |
 | Docker 部署的 Java 后端环境变量 | `docker/docker-compose.java.yml` 的 `backend.environment` | Spring relaxed-binding 环境变量（`SPRING_*`）覆盖 yml |
-| 密码 / JWT 密钥 / 后端端口等共用值 | `docker/.env`（模板 `.env.example`） | compose 变量插值，一处改多处生效（两套编排共用） |
+| Docker 部署的 Go 后端环境变量 | `docker/docker-compose.go.yml` 的 `backend.environment` | 环境变量优先于 env 文件 |
+| 密码 / JWT 密钥 / 后端端口等共用值 | `docker/.env`（模板 `.env.example`） | compose 变量插值，一处改多处生效（三套编排共用） |
 | 中间件端口映射 / 健康检查 / 启动参数 | `docker/docker-compose.middleware.yml` | 全栈与中间件编排共用这份定义 |
 | 前端 nginx 路由 / 代理 / HTTPS | `docker/config/nginx.conf` | 构建期经 `additional_contexts` 注入前端镜像，改后需 `--build frontend` |
 | 前端构建期变量（API 地址、RSA 公钥等）/ dev 代理 | `walnut-frontend/apps/web-antd/.env.*`、`vite.config.ts` | 构建时注入 / vite dev server 代理 |

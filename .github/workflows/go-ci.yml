@@ -1,0 +1,92 @@
+name: Go CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'walnut-backend-go/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'walnut-backend-go/**'
+
+env:
+  GO_VERSION: '1.26'
+  GOPROXY: https://mirrors.aliyun.com/goproxy/,direct
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: walnut-backend-go
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: walnut-backend-go/.go-version
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Verify dependencies
+        run: go mod verify
+
+      - name: Check formatting (gofmt)
+        run: |
+          OUT=$(gofmt -l .)
+          if [ -n "$OUT" ]; then
+            echo "gofmt found unformatted files:"
+            echo "$OUT"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test -count=1 -coverprofile=coverage.out ./...
+
+      - name: Test with race detector
+        run: go test -race -count=1 ./...
+
+      - name: Contract test (static route inventory)
+        run: go test -count=1 -run TestNoInventedRoutes ./test/contract/
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: go-coverage
+          path: walnut-backend-go/coverage.out
+
+  lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: walnut-backend-go
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: walnut-backend-go/.go-version
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: walnut-backend-go
+
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
