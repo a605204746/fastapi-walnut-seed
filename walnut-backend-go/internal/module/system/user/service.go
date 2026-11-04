@@ -539,8 +539,11 @@ func (s *Service) ImportUsers(ctx context.Context, data []byte, updateSupport bo
 		headerIdx[h] = i
 	}
 
-	// 初始密码
-	initPwd := "Walnut@123" // TODO: 从 sys_config 读取 sys.user.initPassword
+	// 初始密码（从 sys_config 读取 sys.user.initPassword，缺省回退 Walnut@123）
+	initPwd, err := s.repo.ConfigValueByKey(ctx, "sys.user.initPassword")
+	if err != nil || initPwd == "" {
+		initPwd = "Walnut@123"
+	}
 	hashedInitPwd, err := hashPassword(initPwd)
 	if err != nil {
 		return "", err

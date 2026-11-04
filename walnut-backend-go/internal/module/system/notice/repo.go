@@ -128,6 +128,31 @@ func (r *Repo) UserNameMap(ctx context.Context, ids []int64) (map[int64]*string,
 	return out, nil
 }
 
+// DictLabelMap 批量取字典标签（dict_type + dict_values → labels），
+// 对应 _dict_label_map。
+func (r *Repo) DictLabelMap(ctx context.Context, dictType string, values []string) (map[string]string, error) {
+	out := make(map[string]string, len(values))
+	if len(values) == 0 {
+		return out, nil
+	}
+	type row struct {
+		DictValue string `gorm:"column:dict_value"`
+		DictLabel string `gorm:"column:dict_label"`
+	}
+	var rows []row
+	err := r.db.WithContext(ctx).Table("sys_dict_data").
+		Select("dict_value, dict_label").
+		Where("dict_type = ? AND status = '0' AND dict_value IN ?", dictType, values).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for i := range rows {
+		out[rows[i].DictValue] = rows[i].DictLabel
+	}
+	return out, nil
+}
+
 // sortedIDs 去重升序（Python 端 sorted({...})），让 SQL 参数顺序稳定。
 func sortedIDs(in []int64) []int64 {
 	seen := make(map[int64]struct{}, len(in))

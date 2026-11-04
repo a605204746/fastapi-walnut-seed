@@ -446,3 +446,18 @@ func (r *Repo) LogininforByUserName(ctx context.Context, userName string) *strin
 	}
 	return &s
 }
+
+// ConfigValueByKey 按键名查 sys_config 的 config_value，对应 Python 端
+// ConfigCrud.select_config_by_key。不存在返回 ("", nil)。
+func (r *Repo) ConfigValueByKey(ctx context.Context, key string) (string, error) {
+	var value string
+	err := r.db.WithContext(ctx).Table("sys_config").
+		Select("config_value").
+		Where("config_key = ?", key).
+		Limit(1).
+		Pluck("config_value", &value).Error
+	if err != nil {
+		return "", err
+	}
+	return value, nil
+}

@@ -293,13 +293,13 @@ func (a *App) buildEngine() error {
 // 目标顺序（从外到内，与 Python 端 MIDDLEWARE_LIST 一致）：
 //
 //	HTTPSRedirect → TrustedHost → CORS → Locale → ApiDecrypt → XSS
-//	  → RequestLog → GZip → CorrelationId → 业务路由
+//	  → OperLog → RequestLog → GZip → CorrelationId → 业务路由
 //
 // ⚠️ Gin 的 Use() 调用顺序**就是**执行顺序，与 FastAPI 的「逆序叠加」相反，
 // 移植时不要照抄 Python 的 [::-1]。
 //
-// 已落地：Recovery、CORS、Locale、ApiDecrypt、RequestLog、CorrelationId。
-// 待补（P2）：HTTPSRedirect、TrustedHost、XSS、GZip。
+// 已落地：Recovery、CORS、Locale、ApiDecrypt、XSS、OperLog、RequestLog、GZip、CorrelationId。
+// 待补（需真实 TLS 环境）：HTTPSRedirect、TrustedHost。
 //
 // 顺序里两处有实质影响，不可调换：
 //   - ApiDecrypt 必须在 RequestLog **之前**：否则请求日志记的是密文，无法排障
@@ -309,8 +309,8 @@ func (a *App) registerMiddleware(engine *gin.Engine) {
 	// 客户端会收到裸 500 空响应而非信封体
 	engine.Use(a.errHandler.Recovery())
 
-	// TODO(P2): HTTPSRedirect（仅 prod 且 HTTPS_REDIRECT=true）
-	// TODO(P2): TrustedHost（仅 prod，校验 ALLOWED_HOSTS）
+	// TODO: HTTPSRedirect（仅 prod 且 HTTPS_REDIRECT=true，需真实 TLS 环境）
+	// TODO: TrustedHost（仅 prod，校验 ALLOWED_HOSTS，需真实 TLS 环境）
 
 	engine.Use(middleware.CORS(middleware.CORSConfig{
 		AllowOrigins:     a.cfg.AllowedHosts,
@@ -340,7 +340,18 @@ func (a *App) registerMiddleware(engine *gin.Engine) {
 			slog.String("reason", a.cfg.APIDecryptDisabledReason))
 	}
 
-	// TODO(P2): XSS —— 注意 XSS_EXCLUDE_URLS（/system/notice 富文本不能被转义）
+	// XSS 过滤：剥离 JSON 请求体里的 HTML 标签，排除 /system/notice（富文本）
+	if a.cfg.XSSEnabled {
+		engine.Use(middleware.XSS(middleware.XSSConfig{
+			Enabled:     true,
+			ExcludeURLs: a.cfg.XSSExcludeURLs,
+		}))
+	}
+
+	// 操作日志异步采集（在 XSS 之后，采集的是清洗后的请求体）
+	if a.operlog != nil {
+		engine.Use(a.operlog.Middleware())
+	}
 
 	engine.Use(middleware.RequestLog(middleware.RequestLogConfig{
 		Logger: a.log,
@@ -348,7 +359,11 @@ func (a *App) registerMiddleware(engine *gin.Engine) {
 		SkipPaths: []string{"/common/health"},
 	}))
 
-	// TODO(P2): GZip —— GZIP_MIN_SIZE / GZIP_COMPRESS_LEVEL
+	// GZip 响应压缩
+	engine.Use(middleware.GZip(middleware.GZipConfig{
+		MinSize:       a.cfg.GzipMinSize,
+		CompressLevel: a.cfg.GzipCompressLevel,
+	}))
 
 	// CorrelationId 在链的**最内层**（紧邻业务路由），与 Python 端一致。
 	// 因此外层中间件记日志时可能还没有关联 ID——这是两端一致的既有行为，
@@ -388,10 +403,10 @@ func (a *App) registerRoutes(b *Builder) {
 	a.mountAuthRoutes(b)
 
 	// ---- /system/* ----
-	// 全部 122 条功能路由已完成（golden 契约 125 条，豁免 3 条 docs UI）：
-	//   auth(5) health(3) root(1) menu(9) post(8) dept(8) dict(15) config(9)
-	//   notice(5) client(7) social(1) role(15) user(21+profile 4) monitor(9)
-	//   file(3) upload(1) sse(2)
+	// 全部 122 条功能路由已完成（golden 契约 125 条，豁免 3 条 docs UI）。
+	// auth(5) health(3) root(1) menu(9) post(8) dept(8) dict(15) config(9)
+	// notice(5) client(7) social(1) role(15) user(21+profile 4) monitor(9)
+	// file(3) upload(1) sse(2) websocket(1, 不在 routes.txt 内)
 	a.mountSystemRoutes(b)
 
 	// ---- /monitor/* ----
@@ -403,10 +418,8 @@ func (a *App) registerRoutes(b *Builder) {
 	// ---- /upload/{key}（公开白名单，img 标签无法带 token）----
 	a.mountUploadRoutes(b)
 
-	// ---- /resource/sse ----
+	// ---- /resource/sse + /resource/websocket ----
 	a.mountResourceRoutes(b)
-
-	// TODO(P4): /resource/websocket
 }
 
 // mountAuthRoutes 装配认证模块。
@@ -447,7 +460,7 @@ func (a *App) mountSystemRoutes(b *Builder) {
 	dept.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/dept").Binder())
 	dict.NewHandler(a.db, a.errHandler, perm, a.cache).Mount(system.Group("/dict").Binder())
 	sysconfig.NewHandler(a.db, a.errHandler, perm, a.cache).Mount(system.Group("/config").Binder())
-	notice.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/notice").Binder())
+	notice.NewHandler(a.db, a.errHandler, perm, idem, a.sse).Mount(system.Group("/notice").Binder())
 	client.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/client").Binder())
 	social.NewHandler(a.db, a.errHandler).Mount(system.Group("/social").Binder())
 	role.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/role").Binder())
@@ -509,7 +522,7 @@ func (a *App) handleUploadServe(c *gin.Context) {
 func (a *App) mountResourceRoutes(b *Builder) {
 	resProtected := b.Protected("/resource")
 	resPublic := b.Public("/resource")
-	resource.NewHandler(a.sse, a.cfg, a.errHandler).Mount(resProtected.Binder(), resPublic.Binder())
+	resource.NewHandler(a.sse, a.ws, a.cache, a.cfg, a.errHandler, a.log).Mount(resProtected.Binder(), resPublic.Binder())
 }
 
 func containsStar(list []string) bool {

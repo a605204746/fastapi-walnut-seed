@@ -2,11 +2,12 @@
 //
 // ⚠️ POST/PUT 挂 RepeatSubmit（防重提交）；DELETE 的 ID 串文案是
 // 「公告ID格式有误 / 公告ID不能为空」（crudx.ParseIDs 同款）。
-// ⚠️ 新增成功后的全站 SSE 广播属 P4（/resource/sse 未迁移），当前无契约影响，留 TODO。
+// 新增公告成功后会向 SSE 全站广播 "[类型标签] 标题"。
 
 package notice
 
 import (
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	"walnut-seed-go/internal/pkg/idempotentx"
 	"walnut-seed-go/internal/pkg/permguard"
 	"walnut-seed-go/internal/pkg/routex"
+	"walnut-seed-go/internal/pkg/ssex"
 )
 
 // Handler 通知公告域端点。
@@ -29,11 +31,12 @@ type Handler struct {
 	errs *errs.Handler
 	perm *permguard.Guard
 	idem *idempotentx.Guard
+	sse  *ssex.Manager
 }
 
-// NewHandler 构造 handler。perm / idem 可为 nil（仅单测）。
-func NewHandler(db *gorm.DB, eh *errs.Handler, perm *permguard.Guard, idem *idempotentx.Guard) *Handler {
-	return &Handler{db: db, errs: eh, perm: perm, idem: idem}
+// NewHandler 构造 handler。perm / idem / sse 可为 nil（仅单测）。
+func NewHandler(db *gorm.DB, eh *errs.Handler, perm *permguard.Guard, idem *idempotentx.Guard, sse *ssex.Manager) *Handler {
+	return &Handler{db: db, errs: eh, perm: perm, idem: idem, sse: sse}
 }
 
 // Mount 注册通知公告路由。挂载点是 /system/notice（由 bootstrap 决定）。
@@ -117,9 +120,6 @@ func (h *Handler) GetByID(c *gin.Context) {
 }
 
 // Add POST /system/notice
-//
-// TODO(P4): 新增成功后 Python 端会 sse_manager.publish_all 广播
-// "[类型标签] 标题"；/resource/sse 迁移时一并补上。
 func (h *Handler) Add(c *gin.Context) {
 	in, err := DecodeCreate(readBody(c))
 	if err != nil {
@@ -138,6 +138,15 @@ func (h *Handler) Add(c *gin.Context) {
 	if !done {
 		envelope.Fail(c, envelope.MsgFail)
 		return
+	}
+	// 新增成功后全站 SSE 广播（对应 Python 端 sse_manager.publish_all）
+	if h.sse != nil && in.NoticeTitle != nil {
+		label := svc.GetNoticeTypeLabel(c.Request.Context(), in.NoticeType)
+		msg := fmt.Sprintf("[%s] %s", label, *in.NoticeTitle)
+		if pubErr := h.sse.Publish(c.Request.Context(), ssex.Message{Message: msg}); pubErr != nil {
+			// 广播失败不影响新增成功响应
+			_ = pubErr
+		}
 	}
 	envelope.OK(c, nil)
 }

@@ -27,7 +27,6 @@ import (
 	"walnut-seed-go/internal/config"
 	"walnut-seed-go/internal/pkg/errs"
 )
-
 // UploadResult 上传结果，对应 Python 端 UploadResult dataclass。
 type UploadResult struct {
 	URL              string `json:"url"`
@@ -61,8 +60,11 @@ type S3Service struct {
 
 // NewS3Service 构造 S3 存储服务。
 func NewS3Service(cfg *config.Config, log *slog.Logger) (*S3Service, error) {
+	// SeaweedFS 当前版本静态 -s3.config 不生效（上游 #4728/#8331），
+	// S3 网关默认放行匿名访问但拒绝签名请求。故先用匿名凭证，
+	// 与 Python 端 minio SDK 的行为对齐（Python SDK 对空 AK 走匿名模式）。
 	client, err := minio.New(cfg.OSSS3Endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(cfg.OSSS3AccessKey, cfg.OSSS3SecretKey, ""),
+		Creds:  credentials.NewStaticV4("", "", ""),
 		Secure: cfg.OSSS3Secure,
 	})
 	if err != nil {

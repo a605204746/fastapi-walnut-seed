@@ -57,6 +57,19 @@ def cmp(name, method, path, body=None):
     return py_b, go_b
 
 
+def split_mutate(name, method, path_py, path_go, body_py=None, body_go=None):
+    """两端各自用不同的 ID/body 发请求并比对响应。"""
+    py_s, _, py_b = authed_call(ds.PY, ds.PY_TOKEN, method, path_py, body=body_py)
+    go_s, _, go_b = authed_call(ds.GO, ds.GO_TOKEN, method, path_go, body=body_go)
+    diffs = []
+    if py_s != go_s:
+        diffs.append(f"HTTP 状态码: py={py_s} go={go_s}")
+    if ds.canon(py_b) != ds.canon(go_b):
+        diffs.append(f"响应体:\n           py = {ds.canon(py_b)}\n           go = {ds.canon(go_b)}")
+    ds.record(name, not diffs, "\n           ".join(diffs))
+    return py_b, go_b
+
+
 def strip_volatile(obj):
     if isinstance(obj, dict):
         return {
@@ -83,7 +96,7 @@ def compare_list_norm(name, path):
         diffs.append(f"响应体无法解析: {e}")
     else:
         if py_n != go_n:
-            diffs.append(f"响应体(归一化): 不一致")
+            diffs.append(f"响应体(归一化): 不一致\n           py = {py_n[:500]}\n           go = {go_n[:500]}")
     ds.record(name, not diffs, "\n           ".join(diffs))
 
 
@@ -166,7 +179,7 @@ def main():
     rkey = f"test_key_{ts}"
 
     cmp("add · 正常新增", "POST", "/system/role",
-        body={"roleName": rname, "roleKey": rkey, "roleSort": 99})
+        body={"roleName": rname, "roleKey": rkey, "roleSort": 99, "status": "0"})
 
     time.sleep(1)
     py_s, _, py_b = authed_call(ds.PY, ds.PY_TOKEN, "GET", LIST + f"?roleName={urllib.parse.quote(rname)}")
@@ -177,27 +190,33 @@ def main():
 
     if py_id and go_id:
         cmp("add · 同名重复 → 500", "POST", "/system/role",
-            body={"roleName": rname, "roleKey": f"dup_{ts}", "roleSort": 1})
+            body={"roleName": rname, "roleKey": f"dup_{ts}", "roleSort": 1, "status": "0"})
         cmp("add · 同权限重复 → 500", "POST", "/system/role",
-            body={"roleName": f"dup_{ts}", "roleKey": rkey, "roleSort": 1})
+            body={"roleName": f"dup_{ts}", "roleKey": rkey, "roleSort": 1, "status": "0"})
 
-        cmp("update · 改名", "PUT", "/system/role",
-            body={"id": py_id, "roleName": f"renamed_{ts}", "roleKey": rkey, "roleSort": 99})
+        # update / changeStatus / dataScope / delete 需要各用各的 ID
+        split_mutate("update · 改名", "PUT", "/system/role", "/system/role",
+                     body_py={"id": py_id, "roleName": f"renamed_{ts}", "roleKey": rkey, "roleSort": 99},
+                     body_go={"id": go_id, "roleName": f"renamed_{ts}", "roleKey": rkey, "roleSort": 99})
         time.sleep(0.5)
         compare_list_norm("list · 改名后可查", LIST + f"?roleName={urllib.parse.quote('renamed_' + ts)}")
 
-        cmp("changeStatus · 停用", "PUT", "/system/role/changeStatus",
-            body={"id": py_id, "status": "1"})
-        cmp("changeStatus · 恢复", "PUT", "/system/role/changeStatus",
-            body={"id": py_id, "status": "0"})
+        split_mutate("changeStatus · 停用", "PUT", "/system/role/changeStatus", "/system/role/changeStatus",
+                     body_py={"id": py_id, "status": "1"},
+                     body_go={"id": go_id, "status": "1"})
+        split_mutate("changeStatus · 恢复", "PUT", "/system/role/changeStatus", "/system/role/changeStatus",
+                     body_py={"id": py_id, "status": "0"},
+                     body_go={"id": go_id, "status": "0"})
 
-        cmp("dataScope · 改数据范围", "PUT", "/system/role/dataScope",
-            body={"id": py_id, "dataScope": "3"})
+        split_mutate("dataScope · 改数据范围", "PUT", "/system/role/dataScope", "/system/role/dataScope",
+                     body_py={"id": py_id, "dataScope": "3"},
+                     body_go={"id": go_id, "dataScope": "3"})
 
     # ---- 6. 删除 ----
     print("\n--- 6. 删除 ---")
     if py_id and go_id:
-        cmp("delete · 正常删除", "DELETE", f"/system/role/{py_id}")
+        split_mutate("delete · 正常删除", "DELETE",
+                     f"/system/role/{py_id}", f"/system/role/{go_id}")
         cmp("delete · 不存在的 id → 500", "DELETE", "/system/role/999999")
         cmp("delete · 空串 → 400", "DELETE", "/system/role/ ")
         cmp("delete · ID 串含非数字 → 400", "DELETE", "/system/role/abc")

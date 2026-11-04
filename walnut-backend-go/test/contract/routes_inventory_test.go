@@ -43,6 +43,15 @@ var exemptPythonRoutes = map[string]string{
 	"GET /redoc":                "P5 补齐 API 文档 UI",
 }
 
+// inventedExemptions 是 Go 有、但 Python golden 契约（routes.txt）里**看不到**的路由。
+//
+// routes.txt 由 Python 的 openapi.json 导出，FastAPI 不把 WebSocket 路由
+// 包含在 OpenAPI schema 里，故 routes.txt 天然缺失。列在这里的必须是
+// 「Python 确实实现了但 OpenAPI 不导出」的路由，不能用来掩盖单端私自新增。
+var inventedExemptions = map[string]string{
+	"GET /resource/websocket": "Python 有实现但 OpenAPI 不导出 WS 路由",
+}
+
 // ---- Python → Go 的路径归一化 ----
 
 var (
@@ -154,7 +163,7 @@ func TestNoInventedRoutes(t *testing.T) {
 
 	var invented []string
 	for route := range golang {
-		if !python[route] {
+		if !python[route] && inventedExemptions[route] == "" {
 			invented = append(invented, route)
 		}
 	}

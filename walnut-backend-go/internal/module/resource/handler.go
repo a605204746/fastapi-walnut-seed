@@ -3,37 +3,138 @@ package resource
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/coder/websocket"
 	"github.com/gin-gonic/gin"
 
 	"walnut-seed-go/internal/config"
 	"walnut-seed-go/internal/pkg/authctx"
+	"walnut-seed-go/internal/pkg/cachex"
 	"walnut-seed-go/internal/pkg/cryptox"
 	"walnut-seed-go/internal/pkg/envelope"
 	"walnut-seed-go/internal/pkg/errs"
 	"walnut-seed-go/internal/pkg/routex"
 	"walnut-seed-go/internal/pkg/ssex"
+	"walnut-seed-go/internal/pkg/wsx"
 )
 
 // Handler 资源域端点。
 type Handler struct {
-	sse *ssex.Manager
-	cfg *config.Config
-	err *errs.Handler
+	sse   *ssex.Manager
+	ws    *wsx.Manager
+	cache *cachex.Client
+	cfg   *config.Config
+	err   *errs.Handler
+	log   *slog.Logger
 }
 
 // NewHandler 构造资源 handler。
-func NewHandler(sse *ssex.Manager, cfg *config.Config, eh *errs.Handler) *Handler {
-	return &Handler{sse: sse, cfg: cfg, err: eh}
+func NewHandler(sse *ssex.Manager, ws *wsx.Manager, cache *cachex.Client, cfg *config.Config, eh *errs.Handler, log *slog.Logger) *Handler {
+	return &Handler{sse: sse, ws: ws, cache: cache, cfg: cfg, err: eh, log: log}
 }
 
 // Mount 注册资源路由。/sse 需要登录，/sse/close 在白名单内无需登录。
+// /websocket 在白名单内（浏览器 WebSocket 无法设自定义头）。
 func (h *Handler) Mount(protected routex.Binder, public routex.Binder) {
 	protected.GET("/sse", h.SSEConnect)
 	public.GET("/sse/close", h.SSEClose)
+	public.GET("/websocket", h.WebSocket)
+}
+
+// WebSocket GET /resource/websocket — WebSocket 连接。
+//
+// 认证：从查询参数或请求头读 token，解码并校验 clientid，
+// 通过后注册会话。认证失败关闭连接（code=4401）。
+func (h *Handler) WebSocket(c *gin.Context) {
+	// 从 query 或 header 取 token
+	token := c.Query("token")
+	if token == "" {
+		auth := c.GetHeader(h.cfg.TokenName)
+		if strings.HasPrefix(auth, h.cfg.TokenPrefix+" ") {
+			token = strings.TrimPrefix(auth, h.cfg.TokenPrefix+" ")
+		}
+	}
+
+	// JWT 解码（exp 始终按硬过期校验）
+	claims, err := cryptox.ParseToken(token, h.cfg.SecretKey, true)
+	if err != nil || claims.UserID == nil {
+		h.log.Warn("WebSocket 认证失败", slog.String("err", errString(err)))
+		c.JSON(http.StatusOK, gin.H{"code": 4401, "msg": "认证失败"})
+		return
+	}
+
+	// Redis 会话检查
+	if h.cache != nil && claims.Sub != "" {
+		sessionKey := h.cache.Key("user_session:" + claims.Sub)
+		exists, _ := h.cache.Client.Exists(c.Request.Context(), sessionKey).Result()
+		if exists == 0 {
+			h.log.Warn("WebSocket 会话不存在", slog.String("sub", claims.Sub))
+			c.JSON(http.StatusOK, gin.H{"code": 4401, "msg": "认证已失效"})
+			return
+		}
+	}
+
+	// clientid 一致性检查
+	if claims.ClientID != nil {
+		requestClient := c.Query(h.cfg.ClientIDHeader)
+		if requestClient == "" {
+			requestClient = c.GetHeader(h.cfg.ClientIDHeader)
+		}
+		if requestClient != *claims.ClientID {
+			h.log.Warn("WebSocket clientid 不匹配")
+			c.JSON(http.StatusOK, gin.H{"code": 4401, "msg": "客户端ID与Token不匹配"})
+			return
+		}
+	}
+
+	userID := *claims.UserID
+
+	// 升级为 WebSocket
+	conn, err := websocket.Accept(c.Writer, c.Request, &websocket.AcceptOptions{
+		InsecureSkipVerify: h.cfg.WebSocketAllowedOrigin == "*",
+	})
+	if err != nil {
+		h.log.Warn("WebSocket 升级失败", slog.String("err", err.Error()))
+		return
+	}
+
+	h.ws.Sessions().Add(userID, conn)
+	h.log.Info("WebSocket 连接建立", slog.Int64("user_id", userID))
+
+	defer func() {
+		h.ws.Sessions().Remove(userID)
+		conn.Close(websocket.StatusNormalClosure, "")
+		h.log.Info("WebSocket 连接关闭", slog.Int64("user_id", userID))
+	}()
+
+	ctx := c.Request.Context()
+	for {
+		_, data, err := conn.Read(ctx)
+		if err != nil {
+			if websocket.CloseStatus(err) == websocket.StatusNormalClosure {
+				return
+			}
+			h.log.Warn("WebSocket 读取异常", slog.String("err", err.Error()))
+			return
+		}
+		msg := string(data)
+		if msg == "ping" {
+			if err := conn.Write(ctx, websocket.MessageText, []byte("pong")); err != nil {
+				h.log.Warn("WebSocket 发送 pong 失败", slog.String("err", err.Error()))
+				return
+			}
+			continue
+		}
+		// 其他消息通过 pub/sub 管道回发
+		dto := wsx.Message{SessionKeys: []int64{userID}, Message: msg}
+		if err := h.ws.PublishMessage(ctx, dto); err != nil {
+			h.log.Warn("WebSocket 消息发布失败", slog.String("err", err.Error()))
+		}
+	}
 }
 
 // SSEConnect GET /resource/sse — SSE 连接（需登录，token 可走 query 参数）。
@@ -138,4 +239,11 @@ func extractToken(c *gin.Context) string {
 		return strings.TrimPrefix(auth, "Bearer ")
 	}
 	return extractQueryToken(c)
+}
+
+func errString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }

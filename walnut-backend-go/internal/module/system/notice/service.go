@@ -1,7 +1,4 @@
 // 本文件实现通知公告域的业务逻辑，对应 Python 端 module_system/notice/service.py。
-//
-// ⚠️ 新增公告后的全站 SSE 广播（sse_manager.publish_all）属 P4 能力
-// （/resource/sse 端点尚未迁移），当前无可观测契约影响，handler 里留 TODO。
 
 package notice
 
@@ -162,6 +159,18 @@ func (s *Service) DeleteByIDs(ctx context.Context, ids []int64) (int64, error) {
 }
 
 // ---- 内部工具 ----
+
+// GetNoticeTypeLabel 查 sys_notice_type 字典标签，对应 get_notice_type_label。
+func (s *Service) GetNoticeTypeLabel(ctx context.Context, noticeType *string) string {
+	if noticeType == nil {
+		return ""
+	}
+	m, err := s.repo.DictLabelMap(ctx, "sys_notice_type", []string{*noticeType})
+	if err != nil || m == nil {
+		return ""
+	}
+	return m[*noticeType]
+}
 
 func (s *Service) toOuts(rows []SysNotice) []Out {
 	outs := make([]Out, 0, len(rows))

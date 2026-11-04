@@ -28,9 +28,11 @@ import (
 	"walnut-seed-go/internal/pkg/logx"
 	"walnut-seed-go/internal/pkg/middleware"
 	"walnut-seed-go/internal/pkg/migratex"
+	"walnut-seed-go/internal/pkg/operlogx"
 	"walnut-seed-go/internal/pkg/seedx"
 	"walnut-seed-go/internal/pkg/ssex"
 	"walnut-seed-go/internal/pkg/storagex"
+	"walnut-seed-go/internal/pkg/wsx"
 )
 
 // App 持有全部运行时依赖，负责启动与优雅停机。
@@ -44,6 +46,8 @@ type App struct {
 	cache   *cachex.Client
 	storage storagex.Service
 	sse     *ssex.Manager
+	ws      *wsx.Manager
+	operlog *operlogx.Logger
 
 	errHandler *errs.Handler
 	health     *health.Service
@@ -144,6 +148,23 @@ func New(cfg *config.Config) (*App, error) {
 		logger.Info("✅ SSE 管理器初始化完成（Redis pub/sub 已订阅）")
 	} else {
 		logger.Info("✅ SSE 管理器初始化完成（本地模式，无跨实例广播）")
+	}
+
+	// ---- 5d. WebSocket 管理器 ----
+	app.ws = wsx.NewManager(app.cache, logger)
+	if cfg.WebSocketEnabled && app.cache != nil {
+		go app.ws.Subscribe(context.Background())
+		logger.Info("✅ WebSocket 管理器初始化完成（Redis pub/sub 已订阅）")
+	} else {
+		logger.Info("✅ WebSocket 管理器初始化完成（本地模式）")
+	}
+
+	// ---- 5e. 操作日志采集器 ----
+	if app.db != nil {
+		app.operlog = operlogx.NewLogger(app.db, logger, 4, 1024)
+		app.operlog.Start(4)
+	} else {
+		logger.Warn("⚠️ DB 不可用，操作日志采集器未启动")
 	}
 
 	// ---- 6. Gin 引擎与路由 ----
@@ -379,6 +400,12 @@ func (a *App) Shutdown(ctx context.Context) error {
 // 请求跑完），之后才调本方法，故此时已无 handler 在跑。
 // 若在服务仍在处理请求时直接调用本方法（例如测试里的 Close），就构成 data race（见计划 R8）。
 func (a *App) closeResources() {
+	// 操作日志 worker 必须在 DB 关闭之前排空，否则残余事件写入会失败
+	if a.operlog != nil {
+		operlog := a.operlog
+		a.operlog = nil
+		operlog.Stop()
+	}
 	if a.cache != nil {
 		cache := a.cache
 		a.cache = nil

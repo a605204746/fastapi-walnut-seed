@@ -310,7 +310,7 @@ func (h *Handler) Delete(c *gin.Context) {
 		return
 	}
 	if n <= 0 {
-		envelope.Fail(c, errs.MsgDBFailed)
+		envelope.Fail(c, envelope.MsgFail)
 		return
 	}
 	envelope.OK(c, nil)

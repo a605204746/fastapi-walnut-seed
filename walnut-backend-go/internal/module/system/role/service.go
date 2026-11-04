@@ -132,9 +132,16 @@ func (s *Service) InsertRole(ctx context.Context, in CreateIn) (bool, error) {
 	if err := s.CheckRoleAllowed(ctx, nil, in.RoleKey); err != nil {
 		return false, err
 	}
+	// 默认值与 Python 端 SQLAlchemy 列默认对齐：
+	// data_scope='1' (全部), menu_check_strictly=1, dept_check_strictly=1, status='0'
+	defaultScope := "1"
+	defaultStrictly := 1
 	row := SysRole{
-		Status:  modelx.Normal,
-		DelFlag: modelx.Normal,
+		Status:            modelx.Normal,
+		DelFlag:           modelx.Normal,
+		DataScope:         &defaultScope,
+		MenuCheckStrictly: &defaultStrictly,
+		DeptCheckStrictly: &defaultStrictly,
 	}
 	if in.RoleName != nil {
 		row.RoleName = *in.RoleName
