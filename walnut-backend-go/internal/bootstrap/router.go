@@ -16,9 +16,11 @@ import (
 	sysconfig "walnut-seed-go/internal/module/system/config"
 	"walnut-seed-go/internal/module/system/dept"
 	"walnut-seed-go/internal/module/system/dict"
+	syslog "walnut-seed-go/internal/module/system/log"
 	"walnut-seed-go/internal/module/system/menu"
 	"walnut-seed-go/internal/module/system/notice"
 	"walnut-seed-go/internal/module/system/post"
+	"walnut-seed-go/internal/module/system/role"
 	"walnut-seed-go/internal/module/system/social"
 	"walnut-seed-go/internal/module/system/user"
 	"walnut-seed-go/internal/module/web/auth"
@@ -383,12 +385,14 @@ func (a *App) registerRoutes(b *Builder) {
 	a.mountAuthRoutes(b)
 
 	// ---- /system/* ----
-	// 已完成（72 条）：auth(5) health(3) root(1) menu(9) post(8) dept(8) dict(15)
-	//   config(9) notice(5) client(7) social(1) user/getInfo(1) getRouters(in menu)
-	// 剩余（44 条）：role(15) user(20 含 profile 4) monitor(9)
+	// 已完成（93 条）：auth(5) health(3) root(1) menu(9) post(8) dept(8) dict(15)
+	//   config(9) notice(5) client(7) social(1) role(15) user(21) getRouters(in menu)
+	// 剩余（20 条）：file(3) sse(2) upload(1) + P4/P5
 	a.mountSystemRoutes(b)
 
-	// TODO(P3): /monitor/*  —— operlog(4) / logininfor(5)
+	// ---- /monitor/* ----
+	a.mountMonitorRoutes(b)
+
 	// TODO(P4): /common/file/*、/upload/{key}、/resource/sse、/resource/websocket
 }
 
@@ -424,7 +428,7 @@ func (a *App) mountSystemRoutes(b *Builder) {
 		idem = idempotentx.New(a.cache, a.errHandler, middleware.LocaleFrom)
 	}
 
-	user.NewHandler(a.db, a.errHandler).Mount(system.Group("/user").Binder())
+	user.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/user").Binder())
 	menu.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/menu").Binder())
 	post.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/post").Binder())
 	dept.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/dept").Binder())
@@ -433,6 +437,19 @@ func (a *App) mountSystemRoutes(b *Builder) {
 	notice.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/notice").Binder())
 	client.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/client").Binder())
 	social.NewHandler(a.db, a.errHandler).Mount(system.Group("/social").Binder())
+	role.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/role").Binder())
+}
+
+func (a *App) mountMonitorRoutes(b *Builder) {
+	monitor := b.Protected("/monitor")
+
+	perm := permguard.New(a.errHandler)
+	var idem *idempotentx.Guard
+	if a.cache != nil {
+		idem = idempotentx.New(a.cache, a.errHandler, middleware.LocaleFrom)
+	}
+
+	syslog.NewHandler(a.db, a.errHandler, perm, idem, a.cache).Mount(monitor.Binder())
 }
 
 func containsStar(list []string) bool {
