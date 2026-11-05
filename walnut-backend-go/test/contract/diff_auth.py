@@ -185,6 +185,18 @@ def main():
     print("\n--- 1. 无请求体端点 ---")
     compare("GET /auth/tenant/list", "GET", "/auth/tenant/list")
     compare("GET /auth/code（归一化 uuid/img）", "GET", "/auth/code")
+    # ⚠️ img 必须是**裸 base64**（不带 data URI 前缀）：前端自行拼接
+    # `data:image/png;base64,`。多带前缀会让前端裂图（2026-11-04 实测踩过）。
+    # compare() 把 img 归一化成 <IMG> 会掩盖这个偏差，故单独断言。
+    for side, base in (("py", PY), ("go", GO)):
+        _, _, raw = call(base, "GET", "/auth/code")
+        try:
+            img = (json.loads(raw).get("data") or {}).get("img") or ""
+        except Exception:  # noqa: BLE001
+            img = ""
+        record(f"/auth/code img 裸 base64（{side}，无 data: 前缀）",
+               not img.startswith("data:"),
+               f"img 前 30 字符: {img[:30]}")
     compare("POST /auth/logout（无 token，应幂等成功）", "POST", "/auth/logout")
     compare("GET /auth/login（方法不匹配 → 405）", "GET", "/auth/login")
     compare("GET /auth/code/（尾斜杠 307）", "GET", "/auth/code/")

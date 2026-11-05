@@ -153,9 +153,8 @@ cryptointerop: ## Python↔Go 加解密互通全链路（生成向量 → Go 测
 		.venv/Scripts/python ../walnut-backend-go/test/cryptointerop/verify_go_output.py
 
 .PHONY: smoke
-smoke: ## 全端点冒烟（P5 交付，对应 Python 端 scripts/smoke_all.py）
-	@echo "尚未实现：P5 阶段落地 scripts/smoke（对应 Python 端 scripts/smoke_all.py）"
-	@echo "当前可用的端到端校验是 make contract-diff"
+smoke: ## 全端点冒烟（对应 Python 端 scripts/smoke_all.py；SMOKE_BASE 非空时打在线服务，否则自动起 18091）
+	go run ./scripts/smoke_all.go -base "$(SMOKE_BASE)"
 
 ## ---------- 容器 ----------
 

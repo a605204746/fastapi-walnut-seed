@@ -27,6 +27,7 @@ import (
 	"walnut-seed-go/internal/config"
 	"walnut-seed-go/internal/pkg/errs"
 )
+
 // UploadResult 上传结果，对应 Python 端 UploadResult dataclass。
 type UploadResult struct {
 	URL              string `json:"url"`
