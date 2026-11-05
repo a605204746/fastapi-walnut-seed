@@ -9,6 +9,7 @@ package dept
 
 import (
 	"context"
+	"errors"
 	"strconv"
 
 	"gorm.io/gorm"
@@ -61,7 +62,7 @@ func (r *Repo) Get(ctx context.Context, id int64) (*SysDept, error) {
 		Where("id = ? AND del_flag = ?", id, modelx.Normal).
 		First(&row).Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, err

@@ -268,7 +268,7 @@ func (h *Handler) LogininforUnlock(c *gin.Context) {
 		keys, err := h.cache.Client.Keys(c.Request.Context(), pattern).Result()
 		if err == nil {
 			for _, key := range keys {
-				h.cache.Client.Del(c.Request.Context(), key)
+				h.cache.Del(c.Request.Context(), key)
 			}
 		}
 	}

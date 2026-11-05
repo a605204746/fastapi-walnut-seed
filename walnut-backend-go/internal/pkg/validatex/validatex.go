@@ -169,7 +169,7 @@ func isStringKind(fe validator.FieldError) bool {
 		return true
 	}
 	// 指针字段：解一层看元素类型
-	if t.Kind() == reflect.Ptr && t.Elem() != nil {
+	if t.Kind() == reflect.Pointer && t.Elem() != nil {
 		return t.Elem().Kind() == reflect.String
 	}
 	return false

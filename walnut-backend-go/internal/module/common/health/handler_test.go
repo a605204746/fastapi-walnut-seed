@@ -34,7 +34,7 @@ func newTestEngine(t *testing.T, checkers map[string]DependencyChecker) *gin.Eng
 func get(t *testing.T, e *gin.Engine, path string) (int, map[string]any, string) {
 	t.Helper()
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, path, nil)
 	e.ServeHTTP(w, req)
 
 	raw := w.Body.String()
@@ -271,7 +271,7 @@ func TestNoTrailingNewline(t *testing.T) {
 	for _, path := range []string{"/common/health/check", "/common/health/live"} {
 		e := newTestEngine(t, nil)
 		w := httptest.NewRecorder()
-		e.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		e.ServeHTTP(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, path, nil))
 		raw := w.Body.String()
 		if len(raw) > 0 && raw[len(raw)-1] == '\n' {
 			t.Errorf("%s 响应体末尾有换行符，Python 端 JSONResponse 没有", path)

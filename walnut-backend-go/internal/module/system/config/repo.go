@@ -6,6 +6,7 @@ package config
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"gorm.io/gorm"
@@ -56,7 +57,7 @@ func (r *Repo) Get(ctx context.Context, id int64) (*SysConfig, error) {
 	var row SysConfig
 	err := r.db.WithContext(ctx).Where("id = ?", id).First(&row).Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, err
@@ -69,7 +70,7 @@ func (r *Repo) GetByKey(ctx context.Context, key string) (*SysConfig, error) {
 	var row SysConfig
 	err := r.db.WithContext(ctx).Where("config_key = ?", key).First(&row).Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, err

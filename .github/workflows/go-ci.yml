@@ -81,9 +81,10 @@ jobs:
           go-version-file: walnut-backend-go/.go-version
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          # 钉死版本：latest 跨大版本（v1→v2）会因配置格式不兼容直接失败
+          version: v2.15.0
           working-directory: walnut-backend-go
 
       - name: govulncheck

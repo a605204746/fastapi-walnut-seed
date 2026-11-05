@@ -8,6 +8,7 @@ package post
 
 import (
 	"context"
+	"errors"
 	"strconv"
 
 	"gorm.io/gorm"
@@ -178,7 +179,7 @@ func (r *Repo) DeleteBatch(ctx context.Context, ids []int64) (int64, error) {
 // ancestors 为 NULL 时 CONCAT 结果为 NULL，LIKE 不匹配 → 该行被排除，
 // 与 Python 端 `literal(",") + NULL + literal(",")` 的行为一致。
 func (r *Repo) DeptAndChildIDs(ctx context.Context, deptID int64) ([]int64, error) {
-	ids := make([]int64, 0)
+	ids := make([]int64, 0, 1)
 	pattern := "%," + strconv.FormatInt(deptID, 10) + ",%"
 	err := r.db.WithContext(ctx).Table("sys_dept").
 		Where("del_flag = ? AND CONCAT(',', ancestors, ',') LIKE ?", modelx.Normal, pattern).
@@ -254,5 +255,5 @@ func countGTZero(q *gorm.DB) (bool, error) {
 }
 
 func isNotFound(err error) bool {
-	return err == gorm.ErrRecordNotFound
+	return errors.Is(err, gorm.ErrRecordNotFound)
 }

@@ -8,6 +8,7 @@ package role
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"gorm.io/gorm"
@@ -67,7 +68,7 @@ func (r *Repo) Get(ctx context.Context, id int64, scope permx.Scope) (*SysRole, 
 	q := r.db.WithContext(ctx).Where("id = ? AND del_flag = ?", id, modelx.Normal)
 	q = scope.Apply(q)
 	if err := q.First(&row).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, err
@@ -78,7 +79,7 @@ func (r *Repo) Get(ctx context.Context, id int64, scope permx.Scope) (*SysRole, 
 func (r *Repo) GetByIDNoScope(ctx context.Context, id int64) (*SysRole, error) {
 	var row SysRole
 	if err := r.db.WithContext(ctx).Where("id = ? AND del_flag = ?", id, modelx.Normal).First(&row).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, err

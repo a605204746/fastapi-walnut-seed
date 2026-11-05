@@ -2,7 +2,6 @@ package log
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"time"
 
@@ -342,14 +341,6 @@ func operatorTypeLabel(v *int) string {
 	return "其它"
 }
 
-func intPtrToStr(v *int) *string {
-	if v == nil {
-		return nil
-	}
-	s := strconv.Itoa(*v)
-	return &s
-}
-
 func timePtrStr(t *time.Time) *string {
 	if t == nil {
 		return nil
@@ -371,10 +362,6 @@ func pickSnake(field string) func(any) any {
 		}
 		return m[field]
 	}
-}
-
-func strFmt(format string, args ...any) string {
-	return fmt.Sprintf(format, args...)
 }
 
 func dateRange(beginTime, endTime string) (time.Time, time.Time, bool) {

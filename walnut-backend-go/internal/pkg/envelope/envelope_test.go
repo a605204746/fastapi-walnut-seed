@@ -1,6 +1,7 @@
 package envelope
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,17 +12,19 @@ import (
 
 func init() { gin.SetMode(gin.TestMode) }
 
-// serve 用一个临时 gin 引擎执行 handler，返回状态码与原始响应体。
-func serve(t *testing.T, h gin.HandlerFunc) (int, string, *http.Response) {
+// serve 用一个临时 gin 引擎执行 handler，返回状态码、原始响应体与响应头。
+func serve(t *testing.T, h gin.HandlerFunc) (int, string, http.Header) {
 	t.Helper()
 	e := gin.New()
 	e.GET("/probe", h)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/probe", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/probe", nil)
 	e.ServeHTTP(w, req)
 
-	return w.Code, w.Body.String(), w.Result()
+	resp := w.Result()
+	defer resp.Body.Close()
+	return w.Code, w.Body.String(), resp.Header
 }
 
 // TestSuccessShape 验证信封的字节级形状。
@@ -172,8 +175,8 @@ func TestNewPageNormalizesNil(t *testing.T) {
 // TestContentType 验证 Content-Type 与 Python 端 EnvelopeResponse 一致。
 // Python 显式设置 "application/json; charset=utf-8"。
 func TestContentType(t *testing.T) {
-	_, _, resp := serve(t, func(c *gin.Context) { OK(c, nil) })
-	ct := resp.Header.Get("Content-Type")
+	_, _, header := serve(t, func(c *gin.Context) { OK(c, nil) })
+	ct := header.Get("Content-Type")
 	if ct != "application/json" && ct != "application/json; charset=utf-8" {
 		t.Errorf("Content-Type = %q", ct)
 	}

@@ -8,6 +8,7 @@
 package config
 
 import (
+	"errors"
 	"io"
 	"strconv"
 	"strings"
@@ -22,7 +23,6 @@ import (
 	"walnut-seed-go/internal/pkg/excelx"
 	"walnut-seed-go/internal/pkg/permguard"
 	"walnut-seed-go/internal/pkg/routex"
-	"walnut-seed-go/internal/pkg/timex"
 )
 
 // Handler 参数配置域端点。
@@ -137,14 +137,7 @@ func (h *Handler) UpdateByKey(c *gin.Context) {
 	if !ok {
 		return
 	}
-	err = svc.Update(c.Request.Context(), updateParam{
-		ID:          in.ID,
-		ConfigName:  in.ConfigName,
-		ConfigKey:   in.ConfigKey,
-		ConfigValue: in.ConfigValue,
-		ConfigType:  in.ConfigType,
-		Remark:      in.Remark,
-	})
+	err = svc.Update(c.Request.Context(), updateParam(in))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -194,7 +187,7 @@ func (h *Handler) Add(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	if err := svc.CheckKeyUnique(ctx, in.ConfigKey, nil); err != nil {
-		if err == errDuplicateKey {
+		if errors.Is(err, errDuplicateKey) {
 			h.errs.Abort(c, errs.Newf("新增参数'%s'失败，参数键名已存在", deref(in.ConfigName)))
 			return
 		}
@@ -221,7 +214,7 @@ func (h *Handler) Update(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	if err := svc.CheckKeyUnique(ctx, in.ConfigKey, in.ID); err != nil {
-		if err == errDuplicateKey {
+		if errors.Is(err, errDuplicateKey) {
 			h.errs.Abort(c, errs.Newf("修改参数'%s'失败，参数键名已存在", deref(in.ConfigName)))
 			return
 		}
@@ -329,7 +322,7 @@ func camelMap(o Out) map[string]any {
 		m["remark"] = *o.Remark
 	}
 	if o.CreateTime != nil {
-		m["createTime"] = timex.JSONTime(*o.CreateTime).Time().Format("2006-01-02 15:04:05")
+		m["createTime"] = o.CreateTime.Time().Format("2006-01-02 15:04:05")
 	}
 	return m
 }

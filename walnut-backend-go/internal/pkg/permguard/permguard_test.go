@@ -1,6 +1,7 @@
 package permguard
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -30,7 +31,7 @@ func newEngine(g *Guard, rule Rule, withAuth *authctx.Context) *gin.Engine {
 
 func do(e *gin.Engine) (int, map[string]any) {
 	w := httptest.NewRecorder()
-	e.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/t", nil))
+	e.ServeHTTP(w, httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/t", nil))
 	var body map[string]any
 	_ = json.Unmarshal(w.Body.Bytes(), &body)
 	return w.Code, body

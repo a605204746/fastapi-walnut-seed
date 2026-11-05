@@ -16,7 +16,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"walnut-seed-go/internal/pkg/crudx"
@@ -427,14 +426,4 @@ func intPtr(v *int64) *int {
 	}
 	n := int(*v)
 	return &n
-}
-
-func strPtr(v string) *string { return &v }
-
-func jsonTimeOrNil(t *time.Time) *timex.JSONTime {
-	if t == nil {
-		return nil
-	}
-	jt := timex.FromTime(*t)
-	return &jt
 }

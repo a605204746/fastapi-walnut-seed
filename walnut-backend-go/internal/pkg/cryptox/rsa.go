@@ -146,7 +146,7 @@ func EncryptByRSA(data string, pub *rsa.PublicKey) (string, error) {
 	if len(raw) == 0 {
 		// Python: chunks = [raw[i:i+max_chunk] for i in range(0, len(raw), max_chunk)] or [b""]
 		// 空输入时列表推导得到 []，`or [b""]` 兜底成"一个空块"，故仍要加密一次
-		enc, err := rsa.EncryptPKCS1v15(rand.Reader, pub, []byte{})
+		enc, err := rsa.EncryptPKCS1v15(rand.Reader, pub, []byte{}) //nolint:staticcheck // 与前端 jsencrypt / Python 端契约固定为 PKCS#1 v1.5，不可换 OAEP
 		if err != nil {
 			return "", fmt.Errorf("RSA 加密失败: %w", err)
 		}
@@ -154,7 +154,7 @@ func EncryptByRSA(data string, pub *rsa.PublicKey) (string, error) {
 	} else {
 		for i := 0; i < len(raw); i += maxChunk {
 			end := min(i+maxChunk, len(raw))
-			enc, err := rsa.EncryptPKCS1v15(rand.Reader, pub, raw[i:end])
+			enc, err := rsa.EncryptPKCS1v15(rand.Reader, pub, raw[i:end]) //nolint:staticcheck // 与前端 jsencrypt / Python 端契约固定为 PKCS#1 v1.5，不可换 OAEP
 			if err != nil {
 				return "", fmt.Errorf("RSA 分段加密失败（第 %d 块）: %w", i/maxChunk+1, err)
 			}
@@ -192,7 +192,7 @@ func DecryptByRSA(b64 string, priv *rsa.PrivateKey) (string, error) {
 	// 不是 (priv, ciphertext) 两参形式——传错会编译失败。
 	var out []byte
 	for i := 0; i < len(raw); i += chunkSize {
-		dec, err := rsa.DecryptPKCS1v15(rand.Reader, priv, raw[i:i+chunkSize])
+		dec, err := rsa.DecryptPKCS1v15(rand.Reader, priv, raw[i:i+chunkSize]) //nolint:staticcheck // 与前端 jsencrypt / Python 端契约固定为 PKCS#1 v1.5，不可换 OAEP
 		if err != nil {
 			return "", fmt.Errorf("RSA 分段解密失败（第 %d 块）: %w", i/chunkSize+1, err)
 		}

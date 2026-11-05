@@ -9,6 +9,7 @@
 package menu
 
 import (
+	"errors"
 	"io"
 	"strconv"
 	"strings"
@@ -210,7 +211,7 @@ func (h *Handler) Add(c *gin.Context) {
 	name := deref(in.MenuName)
 
 	if err := svc.CheckNameUnique(ctx, in); err != nil {
-		if err == errDupName {
+		if errors.Is(err, errDupName) {
 			h.errs.Abort(c, errs.Newf("新增菜单'%s'失败，菜单名称已存在", name))
 			return
 		}
@@ -222,7 +223,7 @@ func (h *Handler) Add(c *gin.Context) {
 		return
 	}
 	if err := svc.CheckRouteConfigUnique(ctx, in); err != nil {
-		if err == errDupRoute {
+		if errors.Is(err, errDupRoute) {
 			h.errs.Abort(c, errs.Newf("新增菜单'%s'失败，路由名称或地址已存在", name))
 			return
 		}
@@ -256,7 +257,7 @@ func (h *Handler) Update(c *gin.Context) {
 	name := deref(in.MenuName)
 
 	if err := svc.CheckNameUnique(ctx, in.CreateIn); err != nil {
-		if err == errDupName {
+		if errors.Is(err, errDupName) {
 			h.errs.Abort(c, errs.Newf("修改菜单'%s'失败，菜单名称已存在", name))
 			return
 		}
@@ -272,7 +273,7 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 	if err := svc.CheckRouteConfigUnique(ctx, in.CreateIn); err != nil {
-		if err == errDupRoute {
+		if errors.Is(err, errDupRoute) {
 			h.errs.Abort(c, errs.Newf("修改菜单'%s'失败，路由名称或地址已存在", name))
 			return
 		}

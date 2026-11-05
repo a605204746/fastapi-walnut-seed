@@ -2,6 +2,7 @@ package menu
 
 import (
 	"context"
+	"errors"
 
 	"gorm.io/gorm"
 
@@ -86,7 +87,7 @@ func (r *Repo) SelectMenuByID(ctx context.Context, id int64) (*SysMenu, error) {
 	var row SysMenu
 	err := r.db.WithContext(ctx).Where("id = ?", id).First(&row).Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, err

@@ -203,7 +203,7 @@ func TestTrailingSlashRedirects307(t *testing.T) {
 
 	// 查询串必须在重定向中保留，否则分页/筛选参数会丢
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/common/health/check/?pageNum=1&pageSize=10", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/common/health/check/?pageNum=1&pageSize=10", nil)
 	app.Engine().ServeHTTP(w, req)
 	if loc := w.Header().Get("Location"); loc != "/common/health/check?pageNum=1&pageSize=10" {
 		t.Errorf("重定向丢失了查询串：Location=%q", loc)
@@ -341,7 +341,7 @@ func TestTrustedProxiesConfigured(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/ip-probe", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/ip-probe", nil)
 	// 伪造转发头：来源不可信时必须被完全忽略
 	req.Header.Set("X-Forwarded-For", "8.8.8.8")
 	req.Header.Set("X-Real-IP", "8.8.4.4")
@@ -395,7 +395,7 @@ func TestTrustedProxiesHonoredWhenConfigured(t *testing.T) {
 	})
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/ip-probe2", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/ip-probe2", nil)
 	req.Header.Set("X-Forwarded-For", "203.0.113.7")
 	app.Engine().ServeHTTP(w, req)
 
@@ -497,7 +497,7 @@ func TestProdRejectsWeakSecret(t *testing.T) {
 func do(t *testing.T, app *App, method, path string) *httptest.ResponseRecorder {
 	t.Helper()
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(method, path, nil)
+	req := httptest.NewRequestWithContext(context.Background(), method, path, nil)
 	app.Engine().ServeHTTP(w, req)
 	return w
 }

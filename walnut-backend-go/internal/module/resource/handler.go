@@ -217,8 +217,7 @@ func (h *Handler) SSEClose(c *gin.Context) {
 
 	if userIDStr != "" && token != "" {
 		var userID int64
-		fmt.Sscanf(userIDStr, "%d", &userID)
-		if userID > 0 {
+		if _, err := fmt.Sscanf(userIDStr, "%d", &userID); err == nil && userID > 0 {
 			h.sse.Disconnect(userID, token)
 		}
 	}

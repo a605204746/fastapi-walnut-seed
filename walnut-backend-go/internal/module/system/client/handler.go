@@ -8,6 +8,7 @@
 package client
 
 import (
+	"errors"
 	"io"
 	"strconv"
 	"strings"
@@ -160,7 +161,7 @@ func (h *Handler) Add(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	if err := svc.CheckKeyUnique(ctx, in.ClientKey, nil); err != nil {
-		if err == errDupKey {
+		if errors.Is(err, errDupKey) {
 			h.errs.Abort(c, errs.Newf("新增客户端'%s'失败，客户端key已存在", deref(in.ClientKey)))
 			return
 		}
@@ -192,7 +193,7 @@ func (h *Handler) Update(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	if err := svc.CheckKeyUnique(ctx, in.ClientKey, in.ID); err != nil {
-		if err == errDupKey {
+		if errors.Is(err, errDupKey) {
 			h.errs.Abort(c, errs.Newf("修改客户端'%s'失败，客户端key已存在", deref(in.ClientKey)))
 			return
 		}

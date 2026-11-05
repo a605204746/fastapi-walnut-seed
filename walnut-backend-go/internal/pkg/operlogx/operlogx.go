@@ -72,11 +72,8 @@ type Logger struct {
 	closeCh chan struct{}
 }
 
-// NewLogger 构造操作日志采集器。
-func NewLogger(db *gorm.DB, log *slog.Logger, workerCount, chanBuf int) *Logger {
-	if workerCount < 1 {
-		workerCount = 4
-	}
+// NewLogger 构造操作日志采集器。worker 数量由 Start 决定。
+func NewLogger(db *gorm.DB, log *slog.Logger, chanBuf int) *Logger {
 	if chanBuf < 1 {
 		chanBuf = 1024
 	}
@@ -201,20 +198,20 @@ func (l *Logger) insert(evt Event) {
 	row := sysOperLog{
 		ID:            idgen.NextID(),
 		Title:         nilStr(evt.Title),
-		BusinessType:  nilInt(evt.BusinessType),
+		BusinessType:  intPtr(evt.BusinessType),
 		Method:        nilStr(evt.Method),
 		RequestMethod: nilStr(evt.RequestMethod),
-		OperatorType:  nilInt(evt.OperatorType),
+		OperatorType:  intPtr(evt.OperatorType),
 		OperName:      nilStr(evt.OperName),
 		DeptName:      nilStr(evt.DeptName),
 		OperURL:       nilStr(evt.OperURL),
 		OperIP:        nilStr(evt.OperIP),
 		OperParam:     nilStr(evt.OperParam),
 		JsonResult:    nilStr(evt.JSONResult),
-		Status:        nilInt(evt.Status),
+		Status:        intPtr(evt.Status),
 		ErrorMsg:      nilStr(evt.ErrorMsg),
 		OperTime:      &evt.OperTime,
-		CostTime:      nilInt64(evt.CostTime),
+		CostTime:      int64Ptr(evt.CostTime),
 	}
 	if err := l.db.Create(&row).Error; err != nil {
 		l.log.Error("操作日志写入失败",
@@ -369,16 +366,12 @@ func nilStr(s string) *string {
 	return &s
 }
 
-func nilInt(v int) *int {
-	if v == 0 {
-		return nil
-	}
+// business_type/operator_type/status/cost_time 的 0 均为合法业务值
+// （其它/其它/正常/0ms），按空值省略会写 NULL，前端字典匹配不到显示 unknown。
+func intPtr(v int) *int {
 	return &v
 }
 
-func nilInt64(v int64) *int64 {
-	if v == 0 {
-		return nil
-	}
+func int64Ptr(v int64) *int64 {
 	return &v
 }

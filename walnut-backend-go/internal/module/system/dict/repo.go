@@ -9,6 +9,7 @@ package dict
 
 import (
 	"context"
+	"errors"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -60,7 +61,7 @@ func (r *TypeRepo) Get(ctx context.Context, id int64) (*SysDictType, error) {
 	var row SysDictType
 	err := r.db.WithContext(ctx).Where("id = ?", id).First(&row).Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, err
@@ -151,7 +152,7 @@ func (r *DataRepo) Get(ctx context.Context, id int64) (*SysDictData, error) {
 	var row SysDictData
 	err := r.db.WithContext(ctx).Where("id = ?", id).First(&row).Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, err

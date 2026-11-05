@@ -179,7 +179,7 @@ func (m *Manager) Subscribe(ctx context.Context) {
 		return
 	}
 	topicKey := m.cache.Key(Topic)
-	sub := m.cache.Client.Subscribe(ctx, topicKey)
+	sub := m.cache.Subscribe(ctx, topicKey)
 	defer sub.Close()
 
 	ch := sub.Channel()

@@ -2,6 +2,7 @@ package cachex
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -41,7 +42,7 @@ func (c *Client) log() *slog.Logger {
 func (c *Client) Get(ctx context.Context, key string) (value string, ok bool) {
 	v, err := c.Client.Get(ctx, c.Key(key)).Result()
 	if err != nil {
-		if err != redis.Nil {
+		if !errors.Is(err, redis.Nil) {
 			c.log().Error("获取缓存失败", slog.String("key", c.Key(key)), slog.String("err", err.Error()))
 		}
 		return "", false
@@ -91,7 +92,7 @@ func (c *Client) Delete(ctx context.Context, keys ...string) bool {
 // 避免 INCR 成功后进程崩溃导致留下一个无 TTL 的键。
 func (c *Client) IncrWithTTL(ctx context.Context, key string, ttl time.Duration) (int64, bool) {
 	full := c.Key(key)
-	pipe := c.Client.TxPipeline()
+	pipe := c.TxPipeline()
 	incr := pipe.Incr(ctx, full)
 	// EXPIRE 每次刷新：与 Python 端 `set(error_key, n, expire=lock_time*60)` 的
 	// 行为一致——每次失败都重置锁定窗口（滑动而非固定）

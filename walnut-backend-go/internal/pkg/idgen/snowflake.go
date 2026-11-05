@@ -12,6 +12,7 @@
 package idgen
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -113,7 +114,9 @@ func deriveWorkerID() int64 {
 // localIP 获取本机默认出口 IP，与 Python 端 _local_ip 同一套回退链：
 // UDP connect 让内核选路（不实际发包，可离线安全使用）→ 主机名解析 → 主机名本身。
 func localIP() string {
-	conn, err := net.Dial("udp", "114.114.114.114:53")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	conn, err := (&net.Dialer{}).DialContext(ctx, "udp", "114.114.114.114:53")
 	if err == nil {
 		defer conn.Close()
 		if addr, ok := conn.LocalAddr().(*net.UDPAddr); ok {
@@ -121,8 +124,8 @@ func localIP() string {
 		}
 	}
 	if host, err := os.Hostname(); err == nil {
-		if ips, err := net.LookupIP(host); err == nil && len(ips) > 0 {
-			return ips[0].String()
+		if ips, err := (&net.Resolver{}).LookupIPAddr(ctx, host); err == nil && len(ips) > 0 {
+			return ips[0].IP.String()
 		}
 		return host
 	}

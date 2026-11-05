@@ -35,13 +35,6 @@ func NewRepo(db *gorm.DB) *Repo { return &Repo{db: db} }
 // 最终在某个字段上炸掉，错误信息完全指不到根因。
 var ErrNotFound = errors.New("记录不存在")
 
-func notFound(err error) error {
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return ErrNotFound
-	}
-	return err
-}
-
 // FindUserByUsername 按账号查可登录用户。
 //
 // 找不到返回 (nil, nil) 而**不是** error —— 调用方需要区分

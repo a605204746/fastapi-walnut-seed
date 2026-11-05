@@ -70,7 +70,7 @@ func CheckPasswordStrict(hashed, plain string) (bool, error) {
 		return false, fmt.Errorf("密码哈希为空")
 	}
 	if !hasKnownPrefix(hashed) {
-		return false, fmt.Errorf("密码哈希前缀无法识别（接受 %s/%s/%s）: %.7s...",
+		return false, fmt.Errorf("密码哈希前缀无法识别（接受 %s/%s/%s）: %.7s",
 			prefix2a, prefix2b, prefix2y, hashed)
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(hashed), []byte(plain)); err != nil {

@@ -318,7 +318,7 @@ func (r *Repo) MapDeptNames(ctx context.Context, deptIDs []int64) (map[int64]*st
 }
 
 func (r *Repo) DescendantAndSelfIDs(ctx context.Context, deptID int64) ([]int64, error) {
-	ids := make([]int64, 0)
+	ids := make([]int64, 0, 1)
 	pattern := "%," + strconv.FormatInt(deptID, 10) + ",%"
 	err := r.db.WithContext(ctx).Table("sys_dept").
 		Where("del_flag = ? AND CONCAT(',', ancestors, ',') LIKE ?", modelx.Normal, pattern).

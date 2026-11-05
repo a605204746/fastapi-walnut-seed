@@ -9,6 +9,7 @@
 package dict
 
 import (
+	"errors"
 	"io"
 	"strconv"
 	"strings"
@@ -23,7 +24,6 @@ import (
 	"walnut-seed-go/internal/pkg/excelx"
 	"walnut-seed-go/internal/pkg/permguard"
 	"walnut-seed-go/internal/pkg/routex"
-	"walnut-seed-go/internal/pkg/timex"
 )
 
 // Handler 字典域端点。
@@ -179,7 +179,7 @@ func (h *Handler) TypeAdd(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	if err := svc.CheckTypeUnique(ctx, in.DictType, nil); err != nil {
-		if err == errDuplicateType {
+		if errors.Is(err, errDuplicateType) {
 			h.errs.Abort(c, errs.Newf("新增字典'%s'失败，字典类型已存在", deref(in.DictName)))
 			return
 		}
@@ -206,7 +206,7 @@ func (h *Handler) TypeUpdate(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	if err := svc.CheckTypeUnique(ctx, in.DictType, in.ID); err != nil {
-		if err == errDuplicateType {
+		if errors.Is(err, errDuplicateType) {
 			h.errs.Abort(c, errs.Newf("修改字典'%s'失败，字典类型已存在", deref(in.DictName)))
 			return
 		}
@@ -333,7 +333,7 @@ func (h *Handler) DataAdd(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	if err := svc.CheckDataUnique(ctx, in.DictType, in.DictValue, nil); err != nil {
-		if err == errDuplicateValue {
+		if errors.Is(err, errDuplicateValue) {
 			h.errs.Abort(c, errs.Newf("新增字典数据'%s'失败，字典键值已存在", deref(in.DictValue)))
 			return
 		}
@@ -360,7 +360,7 @@ func (h *Handler) DataUpdate(c *gin.Context) {
 	}
 	ctx := c.Request.Context()
 	if err := svc.CheckDataUnique(ctx, in.DictType, in.DictValue, in.ID); err != nil {
-		if err == errDuplicateValue {
+		if errors.Is(err, errDuplicateValue) {
 			h.errs.Abort(c, errs.Newf("修改字典数据'%s'失败，字典键值已存在", deref(in.DictValue)))
 			return
 		}
@@ -457,7 +457,7 @@ func typeCamelMap(o TypeOut) map[string]any {
 		m["remark"] = *o.Remark
 	}
 	if o.CreateTime != nil {
-		m["createTime"] = timex.JSONTime(*o.CreateTime).Time().Format("2006-01-02 15:04:05")
+		m["createTime"] = o.CreateTime.Time().Format("2006-01-02 15:04:05")
 	}
 	return m
 }
@@ -519,7 +519,7 @@ func dataCamelMap(o DataOut) map[string]any {
 		m["remark"] = *o.Remark
 	}
 	if o.CreateTime != nil {
-		m["createTime"] = timex.JSONTime(*o.CreateTime).Time().Format("2006-01-02 15:04:05")
+		m["createTime"] = o.CreateTime.Time().Format("2006-01-02 15:04:05")
 	}
 	return m
 }

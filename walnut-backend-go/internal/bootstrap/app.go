@@ -161,7 +161,7 @@ func New(cfg *config.Config) (*App, error) {
 
 	// ---- 5e. 操作日志采集器 ----
 	if app.db != nil {
-		app.operlog = operlogx.NewLogger(app.db, logger, 4, 1024)
+		app.operlog = operlogx.NewLogger(app.db, logger, 1024)
 		app.operlog.Start(4)
 	} else {
 		logger.Warn("⚠️ DB 不可用，操作日志采集器未启动")

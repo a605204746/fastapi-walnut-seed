@@ -205,7 +205,7 @@ func buildKey(filename string) string {
 func checkAllowedExtension(filename string, allowed []string) error {
 	ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(filename)), ".")
 	if ext == "" {
-		return errs.BadRequest(fmt.Sprintf("不允许上传的文件扩展名：.<空>"))
+		return errs.BadRequest("不允许上传的文件扩展名：.<空>")
 	}
 	for _, a := range allowed {
 		if strings.ToLower(a) == ext {

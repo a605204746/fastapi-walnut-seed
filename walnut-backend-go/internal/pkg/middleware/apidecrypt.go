@@ -158,7 +158,7 @@ func ApiDecrypt(cfg ApiDecryptConfig) gin.HandlerFunc {
 			return
 		}
 
-		h := bw.ResponseWriter.Header()
+		h := bw.Header()
 		// 必须暴露该头，否则前端跨域时读不到（CORS expose headers 限制）
 		h.Set("Access-Control-Expose-Headers", header)
 		h.Set(header, wrappedKey)

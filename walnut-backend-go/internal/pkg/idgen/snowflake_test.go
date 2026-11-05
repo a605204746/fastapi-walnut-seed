@@ -251,7 +251,7 @@ func TestUUID(t *testing.T) {
 		t.Errorf("UUID 长度 = %d，期望 32（无横线）", len(u))
 	}
 	for _, c := range u {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			t.Errorf("UUID 含非小写十六进制字符: %q", u)
 			break
 		}

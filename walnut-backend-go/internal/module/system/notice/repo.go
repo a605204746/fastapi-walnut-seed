@@ -8,6 +8,7 @@ package notice
 
 import (
 	"context"
+	"errors"
 	"sort"
 
 	"gorm.io/gorm"
@@ -57,7 +58,7 @@ func (r *Repo) Get(ctx context.Context, id int64) (*SysNotice, error) {
 	var row SysNotice
 	err := r.db.WithContext(ctx).Where("id = ?", id).First(&row).Error
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, err

@@ -10,6 +10,7 @@ package cachex
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -93,7 +94,7 @@ func (c *Client) Prefix() string { return c.prefix }
 // Ping 健康探测，供 /common/health/ready 使用。
 func (c *Client) Ping(ctx context.Context) error {
 	if c == nil || c.Client == nil {
-		return fmt.Errorf("Redis 未初始化")
+		return errors.New("redis 未初始化")
 	}
 	return c.Client.Ping(ctx).Err()
 }

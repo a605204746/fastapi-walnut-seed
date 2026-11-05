@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -81,7 +82,7 @@ func (a *App) checkDatabase(ctx context.Context) error {
 // checkRedis 供 /common/health/ready 探测 Redis 连通性。
 func (a *App) checkRedis(ctx context.Context) error {
 	if a.cache == nil {
-		return fmt.Errorf("Redis 未初始化")
+		return errors.New("redis 未初始化")
 	}
 	return a.cache.Ping(ctx)
 }

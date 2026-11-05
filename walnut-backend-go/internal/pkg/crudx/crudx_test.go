@@ -26,8 +26,7 @@ type tPost struct {
 
 func (tPost) TableName() string { return "sys_post" }
 
-func sp(s string) *string { return &s }
-func ip(i int64) *int64   { return &i }
+func ip(i int64) *int64 { return &i }
 
 // dryDB 构造不连库、只生成 SQL 的 *gorm.DB（两个开关缺一不可，见 permx 的同名注释）。
 func dryDB(t *testing.T) *gorm.DB {

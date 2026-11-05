@@ -40,7 +40,6 @@ import (
 	"walnut-seed-go/internal/pkg/idempotentx"
 	"walnut-seed-go/internal/pkg/permguard"
 	"walnut-seed-go/internal/pkg/routex"
-	"walnut-seed-go/internal/pkg/timex"
 )
 
 // sheetName 是导出工作表名，同时决定默认文件名（{sheetName}_{时间}.xlsx）。
@@ -465,7 +464,7 @@ func toCamelMap(o Out) map[string]any {
 		m["remark"] = *o.Remark
 	}
 	if o.CreateTime != nil {
-		m["createTime"] = timex.JSONTime(*o.CreateTime).Time().Format("2006-01-02 15:04:05")
+		m["createTime"] = o.CreateTime.Time().Format("2006-01-02 15:04:05")
 	}
 	if o.DeptName != nil {
 		m["deptName"] = *o.DeptName

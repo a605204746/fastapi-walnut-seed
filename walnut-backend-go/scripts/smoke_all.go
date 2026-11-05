@@ -95,7 +95,7 @@ func do(method, path string, body any, headers map[string]string) (int, *envelop
 		}
 		rdr = bytes.NewReader(b)
 	}
-	req, err := http.NewRequest(method, baseURL+path, rdr)
+	req, err := http.NewRequestWithContext(context.Background(), method, baseURL+path, rdr)
 	if err != nil {
 		return 0, nil, fmt.Sprintf("<构造请求失败: %v>", err)
 	}
@@ -212,7 +212,7 @@ func auth(token string) map[string]string {
 func startServer() (stop func(), err error) {
 	// 端口预检：若上一轮 smoke 异常退出留下孤儿进程仍占着端口，新服务会绑定失败
 	// 退出，而就绪轮询会打到孤儿进程上——拿旧代码的结果继续跑，造成假象。
-	if ln, e := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", *flagPort)); e != nil {
+	if ln, e := (&net.ListenConfig{}).Listen(context.Background(), "tcp", fmt.Sprintf("127.0.0.1:%d", *flagPort)); e != nil {
 		return nil, fmt.Errorf("端口 %d 已被占用（可能有上一轮 smoke 的孤儿进程，Windows 下 taskkill /F /IM smoke-server.exe 清理）: %w", *flagPort, e)
 	} else {
 		ln.Close()
@@ -223,14 +223,14 @@ func startServer() (stop func(), err error) {
 	}
 	if !*flagSkipBuild {
 		fmt.Printf("构建服务二进制 → %s …\n", binPath)
-		build := exec.Command("go", "build", "-o", binPath, ".")
+		build := exec.CommandContext(context.Background(), "go", "build", "-o", binPath, ".")
 		build.Stdout, build.Stderr = os.Stdout, os.Stderr
 		if e := build.Run(); e != nil {
 			return nil, fmt.Errorf("go build 失败: %w", e)
 		}
 	}
 	var logBuf bytes.Buffer
-	cmd := exec.Command(binPath, "run", "--env", "dev")
+	cmd := exec.CommandContext(context.Background(), binPath, "run", "--env", "dev")
 	cmd.Env = append(os.Environ(), fmt.Sprintf("SERVER_PORT=%d", *flagPort))
 	cmd.Stdout = &logBuf
 	cmd.Stderr = &logBuf
@@ -240,21 +240,23 @@ func startServer() (stop func(), err error) {
 	baseURL = fmt.Sprintf("http://127.0.0.1:%d", *flagPort)
 	deadline := time.Now().Add(*flagReadyWait)
 	for time.Now().Before(deadline) {
-		if resp, e := httpClient.Get(baseURL + "/common/health/ready"); e == nil {
-			io.Copy(io.Discard, resp.Body)
-			resp.Body.Close()
-			if resp.StatusCode == 200 {
-				fmt.Printf("服务就绪（%s，PID %d）\n", baseURL, cmd.Process.Pid)
-				return func() {
-					cmd.Process.Kill()
-					cmd.Wait()
-				}, nil
+		if req, e := http.NewRequestWithContext(context.Background(), http.MethodGet, baseURL+"/common/health/ready", nil); e == nil {
+			if resp, e := httpClient.Do(req); e == nil {
+				_, _ = io.Copy(io.Discard, resp.Body)
+				resp.Body.Close()
+				if resp.StatusCode == 200 {
+					fmt.Printf("服务就绪（%s，PID %d）\n", baseURL, cmd.Process.Pid)
+					return func() {
+						_ = cmd.Process.Kill()
+						_ = cmd.Wait()
+					}, nil
+				}
 			}
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
-	cmd.Process.Kill()
-	cmd.Wait()
+	_ = cmd.Process.Kill()
+	_ = cmd.Wait()
 	return nil, fmt.Errorf("等待就绪超时（%s），服务日志尾部:\n%s", *flagReadyWait, tail(logBuf.String(), 2000))
 }
 
@@ -320,7 +322,7 @@ func smoke() {
 	record("auth/code", env != nil && env.Code == 200 && uuid != "", raw)
 
 	// 错误密码 → 10005（先造一个新鲜验证码）
-	_, env, raw = do("GET", "/auth/code", nil, nil)
+	_, env, _ = do("GET", "/auth/code", nil, nil)
 	d = dataMap(env)
 	uuid, _ = d["uuid"].(string)
 	wrongBody := map[string]any{
