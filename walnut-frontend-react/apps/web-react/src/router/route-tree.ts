@@ -177,4 +177,30 @@ function mergeMatchMeta(matches: Array<{ handle?: unknown }>): RouteHandle['meta
   return merged as RouteHandle['meta'];
 }
 
-export { mergeMatchMeta, relativizePath, toRouteObjects };
+/**
+ * 摘掉顶层动态路由的 Component（当它有子路由时）。
+ *
+ * 后端对一级目录下发 `component: 'Layout'`，`back-menu` 把它映射成 `BasicLayout`；
+ * 而 Root 本身已经是 BasicLayout，不摘就会套两层后台外壳。对应 Vue 侧
+ * `packages/effects/access/src/accessible.ts` 的 `delete route.component`
+ * （该处注释同样标明这是为避免多层 BasicLayout 的兼容写法）。
+ *
+ * 中间层（`ParentView`）的 component 是空串，`generateRoutesByBackend` 不会给它赋
+ * `Component`，天然就是透传节点，无需在这里处理——所以只处理顶层，与 Vue 侧一致。
+ *
+ * 同时过滤掉外链路由：它们不进路由表，由菜单直接开新窗口（同 Vue 侧）。
+ */
+function stripNestedLayout(routes: AppRouteObject[]): AppRouteObject[] {
+  return routes
+    .filter((route) => !/^https?:\/\//.test(route.path ?? ''))
+    .map((route) => {
+      if (!route.children || route.children.length === 0) {
+        return route;
+      }
+      const { Component: _nestedLayout, ...rest } = route;
+      void _nestedLayout;
+      return rest;
+    });
+}
+
+export { mergeMatchMeta, relativizePath, stripNestedLayout, toRouteObjects };

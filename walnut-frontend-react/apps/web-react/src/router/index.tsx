@@ -1,64 +1,62 @@
-import type { ReactNode } from 'react';
+import { lazy, Suspense } from 'react';
 
-import { LOGIN_PATH } from '@vben/constants';
-import { useAccessStore } from '@vben/stores';
-import {
-  createBrowserRouter,
-  Navigate,
-  useLocation,
-} from 'react-router';
+import { getPreferences } from '@vben/preferences';
+import { useUserStore } from '@vben/stores';
+import { createBrowserRouter, Navigate } from 'react-router';
 
 import { AuthLayout } from '@/layouts/AuthLayout';
-import { BasicLayout } from '@/layouts/BasicLayout';
+import { RootLayout } from '@/layouts/RootLayout';
 import { LoginPage } from '@/views/_core/authentication/login';
-import { ConfigPage } from '@/views/system/config';
+
+import { bindRouter, ROOT_ROUTE_ID } from './guard';
+
+const NotFound = lazy(() => import('@/views/_core/fallback/not-found'));
 
 /**
- * 布局路由守卫（对应 Vue 侧 router/guard.ts 的 token 检查）。
- * 无 token 时跳登录页并带上 redirect；完整动态菜单 + patchRoutes 在阶段 ④ 落地。
+ * 首页重定向（对应 Vue 侧 Root 路由的 `redirect: preferences.app.defaultHomePath`）。
+ * RR7 的路由对象没有 `redirect` 字段，用一条 index 路由 + `<Navigate>` 等价实现。
+ *
+ * 只在 Root 挂载后渲染，此时 `RootLayout` 已完成 bootstrap，userInfo 一定可用。
  */
-function RequireAuth({ children }: { children: ReactNode }) {
-  const token = useAccessStore((state) => state.accessToken);
-  const location = useLocation();
-  if (!token) {
-    const redirect = encodeURIComponent(
-      location.pathname + location.search,
-    );
-    return <Navigate replace to={`${LOGIN_PATH}?redirect=${redirect}`} />;
-  }
-  return <>{children}</>;
-}
-
-function NotFound() {
-  return (
-    <div className="flex-center h-screen flex-col gap-2">
-      <div className="text-2xl font-semibold">404</div>
-      <div className="text-muted-foreground text-sm">页面不存在</div>
-    </div>
-  );
+function HomeRedirect() {
+  const userInfo = useUserStore((state) => state.userInfo);
+  const homePath = userInfo?.homePath || getPreferences().app.defaultHomePath;
+  return <Navigate replace to={homePath as string} />;
 }
 
 /**
- * PoC 路由：静态挂载登录页与 system/config 页。
- * 后端动态菜单驱动（backMenuToRouteObjects + patchRoutes）在阶段 ④ 接入。
+ * 应用路由表（对应 Vue 侧 `router/routes/core.ts` 的 coreRoutes）。
+ *
+ * 静态部分只有认证页与 Root 骨架；业务路由由后端菜单在运行时 patch 进 Root
+ * （见 `./guard.ts`）。Root 的 `*` 子路由兜住未知路径，同时保证任何导航都会
+ * 先经过 `RootLayout` 的鉴权与 bootstrap。
  */
 export const router = createBrowserRouter([
   {
     children: [{ element: <LoginPage />, path: 'login' }],
-    path: '/auth',
     element: <AuthLayout />,
+    id: 'Auth',
+    path: '/auth',
   },
   {
     children: [
-      { element: <Navigate replace to="/system/config" />, index: true },
-      { element: <ConfigPage />, path: 'system/config' },
+      { element: <HomeRedirect />, id: 'HomeRedirect', index: true },
+      {
+        element: (
+          <Suspense fallback={null}>
+            <NotFound />
+          </Suspense>
+        ),
+        id: 'FallbackNotFound',
+        path: '*',
+      },
     ],
-    element: (
-      <RequireAuth>
-        <BasicLayout />
-      </RequireAuth>
-    ),
+    element: <RootLayout />,
+    id: ROOT_ROUTE_ID,
     path: '/',
   },
-  { element: <NotFound />, path: '*' },
 ]);
+
+// 动态路由注入需要 router 实例。绑定放在创建之后，
+// 以断开 router/index → layouts/RootLayout → router/guard → router/index 的循环依赖。
+bindRouter(router);

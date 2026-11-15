@@ -25,7 +25,7 @@ import { columns, querySchema } from './data';
  * 参数配置页（对应 Vue 侧 views/system/config/index.vue）。
  * 模式：Page > useGrid(查询表单 + 工具栏 + 表格 + 分页) + ConfigModal。
  */
-export function ConfigPage() {
+export default function ConfigPage() {
   // 订阅字典 store：字典异步到达后重渲染（查询下拉 + 表格 DictTag）
   useDictStore((state) => state.map);
   const modalRef = useRef<ConfigModalHandle>(null);

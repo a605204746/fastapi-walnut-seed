@@ -9,6 +9,7 @@ import type { TenantResp } from '@/api/core/auth';
 
 import { DEFAULT_TENANT_ID } from '@vben/constants';
 import { $t } from '@vben/locales';
+import { getPreferences } from '@vben/preferences';
 import { Input, Select } from 'antd';
 import { useNavigate, useSearchParams } from 'react-router';
 
@@ -172,9 +173,13 @@ export function LoginPage() {
         param.code = values.code;
         param.uuid = captchaInfo.uuid;
       }
-      await authLogin(param as any);
+      const { userInfo } = await authLogin(param as any);
       const redirect = searchParams.get('redirect');
-      navigate(redirect ? decodeURIComponent(redirect) : '/system/config', {
+      // 落地优先级与 Vue 侧 guard.ts 一致：redirect > userInfo.homePath > defaultHomePath
+      const homePath =
+        (userInfo?.homePath as string) ||
+        getPreferences().app.defaultHomePath;
+      navigate(redirect ? decodeURIComponent(redirect) : homePath, {
         replace: true,
       });
     } catch (error) {

@@ -2,7 +2,12 @@ import type { AppRouteObject } from '@vben-core/typings';
 
 import { describe, expect, it } from 'vitest';
 
-import { mergeMatchMeta, relativizePath, toRouteObjects } from '../route-tree';
+import {
+  mergeMatchMeta,
+  relativizePath,
+  stripNestedLayout,
+  toRouteObjects,
+} from '../route-tree';
 
 /** 取出 loader 的重定向目标（react-router 的 redirect() 返回 302 Response） */
 async function loaderTarget(loader: unknown): Promise<null | string> {
@@ -239,5 +244,80 @@ describe('mergeMatchMeta', () => {
 
   it('无 handle 的 match 被安全跳过', () => {
     expect(mergeMatchMeta([{}, { handle: undefined }])).toEqual({});
+  });
+});
+
+describe('stripNestedLayout', () => {
+  const BasicLayout = () => null;
+  const ConfigPage = () => null;
+
+  it('顶层有子路由时摘掉 Component，避免与 Root 套两层 BasicLayout', () => {
+    const [route] = stripNestedLayout([
+      {
+        children: [{ Component: ConfigPage, name: 'Config106', path: '/system/config' }],
+        Component: BasicLayout,
+        name: 'System1',
+        path: '/system',
+      },
+    ]);
+
+    expect(route?.Component).toBeUndefined();
+    expect(route?.children).toHaveLength(1);
+    // 子级的 Component 必须保留，否则页面渲染不出来
+    expect(route?.children?.[0]?.Component).toBe(ConfigPage);
+  });
+
+  it('顶层叶子路由保留 Component', () => {
+    const [route] = stripNestedLayout([
+      { Component: BasicLayout, name: 'About', path: '/about' },
+    ]);
+
+    expect(route?.Component).toBe(BasicLayout);
+  });
+
+  it('中间层的 Component 不受影响（只处理顶层，与 Vue 侧一致）', () => {
+    const [route] = stripNestedLayout([
+      {
+        children: [
+          {
+            children: [{ name: 'Operlog500', path: '/system/log/operlog' }],
+            Component: BasicLayout,
+            name: 'Log108',
+            path: '/system/log',
+          },
+        ],
+        Component: BasicLayout,
+        name: 'System1',
+        path: '/system',
+      },
+    ]);
+
+    expect(route?.Component).toBeUndefined();
+    expect(route?.children?.[0]?.Component).toBe(BasicLayout);
+  });
+
+  it('外链路由被过滤掉（不入路由表，由菜单开新窗口）', () => {
+    const routes = stripNestedLayout([
+      { name: 'Doc', path: 'https://doc.walnut.seed' },
+      { Component: ConfigPage, name: 'Config106', path: '/system/config' },
+    ]);
+
+    expect(routes).toHaveLength(1);
+    expect(routes[0]?.path).toBe('/system/config');
+  });
+
+  it('不改写入参（accessibleRoutes 还要存进 store）', () => {
+    const input: AppRouteObject[] = [
+      {
+        children: [{ name: 'Config106', path: '/system/config' }],
+        Component: BasicLayout,
+        name: 'System1',
+        path: '/system',
+      },
+    ];
+
+    stripNestedLayout(input);
+
+    expect(input[0]?.Component).toBe(BasicLayout);
   });
 });

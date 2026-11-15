@@ -35,6 +35,13 @@ export const overridesPreferences = defineOverridesPreferences({
      */
     accessMode: 'mixed',
     /**
+     * 首页路径。Vue 侧为默认的 `/analytics`，由前端静态模块 dashboard 提供。
+     * dashboard 视图尚未移植，`router/routes/modules/` 目前为空，指向 `/analytics`
+     * 会落到 404，故暂指向已落地的 config 页。
+     * ⚠️ 阶段 ⑦ 补上 dashboard 模块后必须改回 `/analytics`（删掉本条覆盖即可）。
+     */
+    defaultHomePath: '/system/config',
+    /**
      * 不需要refresh token 由后端处理
      */
     enableRefreshToken: false,

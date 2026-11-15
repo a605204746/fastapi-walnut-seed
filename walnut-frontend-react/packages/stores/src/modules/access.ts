@@ -1,4 +1,4 @@
-import type { MenuRecordRaw } from '@vben-core/typings';
+import type { AppRouteObject, MenuRecordRaw } from '@vben-core/typings';
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
@@ -7,19 +7,13 @@ import { storeNamespace } from '../namespace';
 
 type AccessToken = null | string;
 
-/**
- * React Router 7 的路由对象类型在阶段 ④ 才引入，PoC 期间用宽松类型占位，
- * 键名/语义与 Vue 侧 accessRoutes 完全一致。
- */
-type RouteObjectLike = Record<string, any>;
-
 interface AccessState {
   /** 权限码 */
   accessCodes: string[];
   /** 可访问的菜单列表 */
   accessMenus: MenuRecordRaw[];
   /** 可访问的路由列表 */
-  accessRoutes: RouteObjectLike[];
+  accessRoutes: AppRouteObject[];
   /** 登录 accessToken */
   accessToken: AccessToken;
   /** 是否已经检查过权限 */
@@ -39,7 +33,7 @@ interface AccessActions {
   lockScreen(password: string): void;
   setAccessCodes(codes: string[]): void;
   setAccessMenus(menus: MenuRecordRaw[]): void;
-  setAccessRoutes(routes: RouteObjectLike[]): void;
+  setAccessRoutes(routes: AppRouteObject[]): void;
   setAccessToken(token: AccessToken): void;
   setIsAccessChecked(isAccessChecked: boolean): void;
   setLoginExpired(loginExpired: boolean): void;
