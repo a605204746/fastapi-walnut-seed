@@ -3,3 +3,4 @@ export type * from './basic';
 export type * from './helper';
 export type * from './menu-record';
 export type * from './react-router';
+export type * from './tabs';

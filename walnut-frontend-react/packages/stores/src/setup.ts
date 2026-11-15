@@ -1,4 +1,5 @@
 import { useAccessStore } from './modules/access';
+import { useTabbarStore } from './modules/tabbar';
 import { useUserStore } from './modules/user';
 import { storeNamespace } from './namespace';
 
@@ -15,15 +16,20 @@ export interface InitStoreOptions {
  */
 export function initStores(options: InitStoreOptions) {
   storeNamespace.prefix = options.namespace;
-  // 仅 access store 持久化（与 Vue 侧一致，user store 无 persist）
+  // access → localStorage、tabbar → sessionStorage，均与 Vue 侧一致（user 无 persist）
   useAccessStore.persist.setOptions({
     name: `${options.namespace}-core-access`,
   });
   void useAccessStore.persist.rehydrate();
+  useTabbarStore.persist.setOptions({
+    name: `${options.namespace}-core-tabbar`,
+  });
+  void useTabbarStore.persist.rehydrate();
 }
 
 /** 重置所有 store（登出时调用），对应 Vue 侧 resetAllStores */
 export function resetAllStores() {
   useAccessStore.getState().$reset();
+  useTabbarStore.getState().$reset();
   useUserStore.getState().$reset();
 }
