@@ -1078,7 +1078,7 @@ React 版 `getPreferences()` 返回不可变快照，三条立刻暴露。已按
 | ③ | SSE·WebSocket 提到 service 单例 | ✅ `apps/web-react/src/services/message.ts` |
 | ③ | lint 体系 + turbo | ❌ **未做**：无 `internal/lint-configs`、无 `turbo.json` |
 | ③ | `generate-routes-*` / `generate-menus` | ✅ `packages/utils/src/helpers/generate-{accessible,menus,routes-backend,routes-frontend}.ts`，已输出 RR7 结构 |
-| ④ | 后端动态菜单 → React Router 7（**PoC 关卡 1**） | ✅ **通过**。`router/back-menu.ts`(212) + `router/route-tree.ts`(162) + `router/access.ts`(36) + `router/index.tsx`(59) |
+| ④ | 后端动态菜单 → React Router 7（**PoC 关卡 1**） | ⚠️ **只完成转换层，运行时未接线**（→ 已于 §16 接通）。`router/back-menu.ts`(212) + `router/route-tree.ts`(162) + `router/access.ts`(36) 均已就位且单测覆盖（back-menu 15 例 + route-tree 19 例），但 `router/index.tsx`(59) **仍是静态 PoC 路由**（只挂 `/auth/login` 与 `/system/config`）；`generateAccess` / `toRouteObjects` / `createLazyPageMap` 三者在全仓**只被测试引用，运行时无任何调用点**。即「后端菜单能正确转成 RR7 路由树」已证明，「应用真的按后端菜单渲染」尚未发生 |
 | ④ | 真实契约 fixture | ✅ `src/__fixtures__/backend-menu-tree.json`（Go 后端实抓 16 节点）驱动 `back-menu.test.ts` 15 例 |
 | ⑤ | vxe-table → antd Table（**PoC 关卡 2**） | ✅ **通过**。`adapter/grid.tsx`(361) + `adapter/component.tsx`(24) |
 | ⑤ | form-ui / popup-ui | ✅ `@core/ui-kit/form-ui`(5 文件) + `popup-ui/modal`(3 文件)；**popup-ui 的 drawer 未建**（§5.3 另一半） |
@@ -1157,6 +1157,133 @@ client / config / dept / dict / log / menu / notice / post / role / social / use
 - widgets：global-search(Cmd+K) / user-dropdown / notification(SSE) / lock-screen / theme-toggle / check-updates / timezone / breadcrumb
 - `<Activity>` + LRU 页签缓存（§7.3）
 - `@core/ui-kit/layout-ui`、shadcn-ui 剩余 ~29 原语、popup-ui 的 drawer
+
+---
+
+## 16. 阶段 ⑥-a 实施记录（2026-11-15）
+
+决策是「**先跑通、后补 1:1**」，但原计划的 ProLayout 路线不可用（见 16.1），改走 antd 6 原生
+`Layout` + `Menu`。本阶段交付「可用外壳」：登录后进入真实后台，侧边栏由后端菜单驱动，
+多页签可开关，1:1 的视觉细节全部推到 ⑥-b。
+
+### 16.1 硬约束：ProLayout 与 antd 6 不兼容 ⚠️
+
+```
+$ npm view @ant-design/pro-components@2.8.10 peerDependencies
+{ antd: '^4.24.15 || ^5.11.2', react: '>=18.0.0', 'react-dom': '>=18.0.0' }
+```
+
+本仓 catalog 锁 `antd: ^6.7.0`。为用 ProLayout 而降回 antd 5，会推翻阶段 ② 已验收的
+antd 6 主题桥接（`useAntdDesignTokens` + 像素门禁实测按钮色与 `--primary` 精确相等）
+与全部 381 个单测，得不偿失。
+
+**因此清单里两条 D 类判断作废**：
+- §6.3「`basic/layout.vue` 441 行 → ProLayout 覆盖」→ 改为 antd `Layout` 自绘
+- §6.4「`breadcrumb.vue` 71 行 → ProLayout 自带」→ 改为 antd `Breadcrumb` 自绘
+
+### 16.2 已完成
+
+| 项 | 产出 |
+|---|---|
+| **阶段 ④ 遗留的运行时接线** | `router/guard.ts`（`ensureAccessRoutes`：并行拉 userInfo + 菜单 → `patchRoutes` 注入 Root → 重导航）、`layouts/RootLayout.tsx`（鉴权 + bootstrap + 加载/错误态）、`router/routes/`（mixed 模式的前端静态模块聚合，`modules/` 暂空）、`views/_core/fallback/`（403/404）、`router/access.ts` 补 `pageMap`/`layoutMap`/`forbiddenComponent` |
+| **BasicLayout 真实外壳** | 42 行 PoC 占位 → antd `Layout.Sider`（logo + 菜单 + 折叠）+ `Header`（折叠按钮 / 面包屑 / 主题 / 语言 / 用户下拉）+ `Content`；`--vben-content-height` 由内容区 `ResizeObserver` 实测，224px 假侧边栏移除 |
+| **菜单** | `adapter/menu.tsx`：`MenuRecordRaw` 树 → antd `Menu` items；`selectedKeys` 走 `meta.activePath` 让带参详情页高亮回指列表页；`openKeys` 按 `parents` 链展开且保留用户手动展开项；外链 `window.open` |
+| **图标** | `shadcn-ui/components/icon.tsx` 新增 `VbenIcon`（组件 / http 图 / Iconify 名 / fallback 四态，判断顺序与 Vue `icon.vue` 一致）；新增依赖 `@iconify/react ^5.2.1`（与 Vue 侧 `@iconify/vue ^5` 同主版本） |
+| **tabbar store** | `@core/typings/src/tabs.ts`（自包含 `TabDefinition`，不引路由库类型）+ `stores/src/modules/tabbar.ts`（Zustand）+ 60 例单测 |
+| **多页签栏** | `adapter/tabs.tsx` + `tabs.css`：antd `Tabs` 承载，路由变化登记页签、点击切换、关闭按钮、右键菜单（关闭/固定/新窗口/关闭左侧·右侧·其它·全部），文案复用已移植的 `preferences.tabbar.contextMenu.*` |
+| **像素门禁** | capture 新增 `shell` / `shell-dark` 两个整页目标；启动 Vue 端（8010）用同一份 mock 重采 golden；阈值按实测校准 |
+
+### 16.3 三个踩坑（都不是读代码能发现的）
+
+**① `router.patchRoutes()` 不会对当前 location 重新匹配。**
+重匹配只发生在 RR7 的 `patchRoutesOnNavigation` 钩子内部，而本仓用不上那个钩子——Root 带
+静态 `*` 子路由，任何路径都能匹配上，钩子根本不触发（它只在「无法匹配」或「匹配到含参数的
+路由」时才被调用）。第一版就栽在这：菜单拉到了、路由注入了，页面却停在 `*` 兜底的 404 上，
+要手点一次菜单才恢复。**修法**：patch 之后主动 `await router.navigate(同址, {replace:true})`。
+
+> 为什么保留静态 `*` 而不是靠 `patchRoutesOnNavigation`：未登录时若没有任何路由匹配，
+> RR 会渲染它自己的默认 404 错误页，而不是跳登录页。有了 `*` 兜底，未登录的任意路径都会
+> 匹配到 Root，`RootLayout` 就能把它重定向到登录页。
+
+**② `setIsAccessChecked(true)` 的时机导致页签永久丢失。**
+现象：页签栏渲染了，但 `.ant-tabs-nav-list` 是空的。**截图看不出来，是 DOM 探针发现的**。
+根因：`isAccessChecked` 是 `RootLayout` 渲染外壳的开关，而它原先在 `patchRoutes`/`navigate`
+**之前**置位，于是外壳在「当前匹配仍是 `*` 兜底路由」的那一刻挂载，`meta.hideInTab` 为真让
+`addTab` 直接跳过；随后重导航完成、地址未变，只依赖 `fullPath` 的 effect 不会重跑。
+**修法**：`setIsAccessChecked` 挪到 `await router.navigate()` 之后；页签 effect 的依赖加上
+`currentTab.name`（同一地址在动态路由注入前后匹配到不同路由，只看 fullPath 会漏）。
+
+**③ `@ant-design/pro-components` 的 peer 冲突**（见 16.1）。查 `npm view` 只要几秒钟，
+但如果不查就照着清单 §6.3 写下去，会在装依赖时才发现，届时外壳代码已经按 ProLayout 的
+API 写了一遍。
+
+### 16.4 对本清单的修正
+
+**① §5.5 menu-ui / §5.6 tabs-ui 的落点改了。** 不新建 `@core/ui-kit/menu-ui`、
+`@core/ui-kit/tabs-ui` 两个包，改为放 app 的 `adapter/menu.tsx`、`adapter/tabs.tsx`。
+理由：`@core/*` 在 vben 的分层里是 **UI 库无关层**，往里塞 antd 会破坏该约束；而 app 的
+`adapter/` 本来就是干这个的（§8.2「Vben 解耦层，迁移的枢纽」，已有 `grid.tsx`/`component.tsx`）。
+⑥-b 若做自绘版，再把它下沉成 `@core` 包，adapter 转为委托。
+
+**② §4.8 icons 不必照搬。** 不新建 `@vben-core/icons` 包：Vue 的集中再导出层
+（`lucide.ts` 一次性 re-export ~100 个图标）是 SFC/tree-shaking 的产物，React 侧直接
+`import { X } from 'lucide-react'` 就是惯用写法，照搬只是多一层无意义的间接。
+真正需要新建的只有 Iconify 渲染能力（后端 `sys_menu.icon` 下发的是 `eos-icons:system-group`
+这类 Iconify 名），已落在 `VbenIcon` 里。
+
+**③ 新增一条硬约束：页面文件必须有 `export default`。**
+`createLazyPageMap` 靠 `React.lazy` 装载 `import.meta.glob('../views/**\/*.tsx')`，
+没有 default export 的页面在渲染时才会炸（`lazy` 不校验未使用的条目，所以类型检查也发现不了）。
+`views/system/config/index.tsx` 已改；⑦ 铺开业务页时每个页面都要遵守。
+
+**④ `preferences.app.defaultHomePath` 暂时被覆盖为 `/system/config`。**
+默认值 `/analytics` 由前端静态模块 `dashboard.ts` 提供，而 dashboard 视图要到 ⑦ 才移植，
+`router/routes/modules/` 目前是空的，指向 `/analytics` 会落到 404。
+**⑦ 补上 dashboard 模块后必须删掉这条覆盖。**
+
+**⑤ §15.2 的「免后端」说法得到验证**：像素门禁的 mock 确实生效（DOM 探针实测
+`SIDEBAR_MENU=["系统管理","参数配置"]`、表格 3 行、`共 3 条`，与 `mock-api.ts` 的 fixture
+逐项吻合）。⚠️ 但**肉眼读截图会误判**——排查时曾把「参数配置」看成「参数设置」、
+把 3 行看成 10 行，进而错误地断定 mock 失效、e2e 打到了真实后端。
+结论：涉及「渲染内容是否正确」的判断，一律用 DOM 探针（`innerText`/`count`），不要看缩略图。
+
+**⑥ Playwright 的实际视口是 1280×720，不是配置里写的 1440×900。**
+`playwright.config.ts` 顶层 `use.viewport` 设了 1440×900，但 `projects[0].use` 展开了
+`devices['Desktop Chrome']`，其中自带的 viewport 覆盖了顶层设置。golden 与 React 端用的是
+同一份配置，所以不影响比对结论，但「1440×900」这个数字是假的。
+
+### 16.5 量化基线（2026-11-15 实测）
+
+- `pnpm typecheck`：16 个 project 零错误
+- `pnpm test:unit`：**31 文件 / 381 用例全绿**（⑥ 之前为 30/321；tabbar store 贡献 +60，
+  `stripNestedLayout` +5）
+- 像素门禁 5 项全过：
+
+| 目标 | 实测 | 阈值 | 性质 |
+|---|---|---|---|
+| `login-light` | 0.277% | 0.3% | 已达标 |
+| `login-dark` | 0.021% | 0.3% | 已达标 |
+| `config` | 5.245% | 6% | 回归基线，目标 1.5% |
+| `shell` | **9.316%** | 10% | 回归基线，⑥-b 持续下调 |
+| `shell-dark` | **4.719%** | 5.5% | 回归基线，⑥-b 持续下调 |
+
+- **外壳几何已对齐**：`config` 元素截图从 1024×688 变为 **1024×599**，Vue golden 是 1024×600，
+  差 1px。header(50) + tabbar(38) = 88px 正好补回 PoC 占位期缺的高度。
+  这也证明 `config` 残余的 5.245% 与布局无关，纯粹是 vxe-table ↔ antd Table 的渲染差异。
+- 重采 golden 后 `login-light`/`login-dark` 字节未变、`config` 的 diff 从 5.244% → 5.245%，
+  说明门禁本身是确定性的。
+
+### 16.6 阶段 ⑥-b 待办（按 shell diff 图的差异面积排序）
+
+从 `artifacts/diff/shell.png` 直接读出来的施工清单：
+
+1. **顶栏右侧 widget 群**（差异最大的一块）：全局搜索(Cmd+K) / 通知(SSE) / 全屏 / 偏好设置抽屉入口 / 锁屏 / 时区 / 检查更新。对应 §6.4 的 4,700 行 widgets
+2. **页签形状**：Vue 是自绘 chrome 弧形页签（§5.6 的 927 行），React 暂用 antd card 页签；同时补拖拽排序、滚轮横滚、中键关闭、`reload` 与 `maximize` 两个右键项（依赖 `<Activity>`）
+3. **菜单排版与 logo 区**：自绘 menu-ui（§5.5 的 2,243 行），含手风琴、动画、`badge`/`activeIcon`
+4. **折叠按钮位置**：从顶栏左侧移到侧边栏右缘悬浮（vben 的形态）
+5. **`<Activity>` + LRU 页签缓存**（§7.3）：`cachedTabs`/`excludeCachedTabs`/`refresh()` 在 store 里已就位，只差消费者
+6. **偏好设置抽屉** 577 行 + 24 个 block + 9 个布局示意 SVG，以及 6 种布局模式（§6.3 `basic/menu/` 441 行混合导航逻辑）
+7. **antd Table 主题覆盖层**：把 `config` 的 5.245% 压向 1.5% 的设计目标（§7.1 风险1 决策 (a)）
 
 ---
 
