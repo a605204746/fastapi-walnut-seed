@@ -6,7 +6,7 @@ import {
   AuthenticationLayoutToggle,
   LanguageToggle,
   ThemeToggle,
-} from './widgets';
+} from '../widgets';
 
 export type ToolbarType = 'color' | 'language' | 'layout' | 'theme';
 

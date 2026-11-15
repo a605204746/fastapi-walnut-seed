@@ -15,6 +15,9 @@ catalogs:
     '@ctrl/tinycolor':
       specifier: ^4.2.0
       version: 4.2.2
+    '@iconify/react':
+      specifier: ^5.2.1
+      version: 5.2.1
     '@iconify/tailwind4':
       specifier: ^1.2.3
       version: 1.2.3
@@ -631,6 +634,9 @@ importers:
 
   packages/@core/ui-kit/shadcn-ui:
     dependencies:
+      '@iconify/react':
+        specifier: 'catalog:'
+        version: 5.2.1(react@19.3.1)
       '@vben-core/shared':
         specifier: workspace:*
         version: link:../../shared
@@ -733,6 +739,9 @@ importers:
 
   packages/stores:
     dependencies:
+      '@vben-core/preferences':
+        specifier: workspace:*
+        version: link:../@core/preferences
       '@vben-core/shared':
         specifier: workspace:*
         version: link:../@core/shared
@@ -1386,6 +1395,11 @@ packages:
 
   '@epic-web/invariant@1.0.0':
     resolution: {integrity: sha512-lrTPqgvfFQtR/eY/qkIzp98OGdNJu0m5ji3q/nJI8v3SXkRKEnWiOxMmbvcSoAIzv/cGiuvRy57k4suKQSAdwA==}
+
+  '@iconify/react@5.2.1':
+    resolution: {integrity: sha512-37GDR3fYDZmnmUn9RagyaX+zca24jfVOMY8E1IXTqJuE8pxNtN51KWPQe3VODOWvuUurq7q9uUu3CFrpqj5Iqg==}
+    peerDependencies:
+      react: '>=16'
 
   '@iconify/tailwind4@1.2.3':
     resolution: {integrity: sha512-z8SKiMHRASJKF/IY//87MF88lcB7ulxh8vlhQXXLWsBkNtOh6ese9R41MyGpQeqXdRvQVt+/fX2glQtHFjQ+MA==}
@@ -5778,6 +5792,11 @@ snapshots:
   '@emotion/unitless@0.7.5': {}
 
   '@epic-web/invariant@1.0.0': {}
+
+  '@iconify/react@5.2.1(react@19.3.1)':
+    dependencies:
+      '@iconify/types': 2.0.0
+      react: 19.3.1
 
   '@iconify/tailwind4@1.2.3(tailwindcss@4.3.4)':
     dependencies:

@@ -50,6 +50,21 @@ const TARGETS: Target[] = [
     selector: '.rounded-md.bg-card',
     waitSelector: '.rounded-md.bg-card',
   },
+  {
+    // 整页外壳（侧边栏 + 顶栏 + 内容区）。不用元素级截图：两端侧边栏没有共有的
+    // class（Vue 是自绘，React 是 antd Sider），只有整页能双端对齐。
+    auth: true,
+    name: 'shell',
+    path: '/system/config',
+    waitSelector: '.rounded-md.bg-card',
+  },
+  {
+    auth: true,
+    dark: true,
+    name: 'shell-dark',
+    path: '/system/config',
+    waitSelector: '.rounded-md.bg-card',
+  },
 ];
 
 async function settle(page: Page) {

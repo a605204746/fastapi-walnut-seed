@@ -80,6 +80,8 @@ catalog:
 
   # ---- React 生态（新增）----
   '@ant-design/icons': ^6.3.4
+  # 与 Vue 侧 @iconify/vue@^5 保持同主版本，两端图标 API 与行为一致
+  '@iconify/react': ^5.2.1
   '@tanstack/react-query': ^5.90.0
   '@tanstack/react-store': ^0.11.0
   '@types/react': ^19.3.0
