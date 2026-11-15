@@ -21,6 +21,7 @@ import {
 import { Outlet, useLocation, useMatches, useNavigate } from 'react-router';
 
 import { VbenMenu } from '@/adapter/menu';
+import { VbenTabs } from '@/adapter/tabs';
 import { $t } from '@/locales';
 import { mergeMatchMeta } from '@/router/route-tree';
 import { useAuthStore } from '@/store/auth';
@@ -229,6 +230,8 @@ export function BasicLayout() {
             </div>
           </Header>
         ) : null}
+
+        {preferences.tabbar.enable ? <VbenTabs /> : null}
 
         <Content
           className="relative overflow-hidden"

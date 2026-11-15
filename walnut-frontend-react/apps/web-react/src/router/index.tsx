@@ -40,13 +40,27 @@ export const router = createBrowserRouter([
   },
   {
     children: [
-      { element: <HomeRedirect />, id: 'HomeRedirect', index: true },
+      {
+        element: <HomeRedirect />,
+        handle: { meta: { hideInTab: true, title: 'Home' } },
+        id: 'HomeRedirect',
+        index: true,
+      },
       {
         element: (
           <Suspense fallback={null}>
             <NotFound />
           </Suspense>
         ),
+        // 与 Vue 侧 fallbackNotFoundRoute 的 meta 一致：不进面包屑、不进菜单、不进页签
+        handle: {
+          meta: {
+            hideInBreadcrumb: true,
+            hideInMenu: true,
+            hideInTab: true,
+            title: '404',
+          },
+        },
         id: 'FallbackNotFound',
         path: '*',
       },

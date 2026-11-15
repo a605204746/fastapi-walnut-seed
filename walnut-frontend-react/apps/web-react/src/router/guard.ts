@@ -47,7 +47,6 @@ async function loadAccessRoutes() {
 
   accessStore.setAccessMenus(accessibleMenus);
   accessStore.setAccessRoutes(accessibleRoutes);
-  accessStore.setIsAccessChecked(true);
 
   router.patchRoutes(
     ROOT_ROUTE_ID,
@@ -59,7 +58,12 @@ async function loadAccessRoutes() {
   // 子路由，任何路径都能匹配上，钩子不会触发）。因此这里主动再发起一次同址导航，
   // 否则首屏会停在 `*` 兜底的 404 上，直到用户手动点一次菜单才正常。
   const { pathname, search } = router.state.location;
-  void router.navigate(`${pathname}${search}`, { replace: true });
+  await router.navigate(`${pathname}${search}`, { replace: true });
+
+  // ⚠️ 必须等重导航完成后再置位。`isAccessChecked` 是 RootLayout 渲染外壳的开关，
+  // 提前置位会让外壳在「当前匹配仍是 `*` 兜底路由」的那一刻挂载，此时 meta.hideInTab
+  // 为真，多页签的 addTab 会被跳过，而地址未变导致它再也不会重试。
+  accessStore.setIsAccessChecked(true);
 }
 
 /**

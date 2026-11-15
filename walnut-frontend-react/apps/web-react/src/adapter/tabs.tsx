@@ -1,0 +1,231 @@
+import type { MenuProps } from 'antd';
+
+import type { RouteHandle, TabDefinition } from '@vben-core/typings';
+
+import { useEffect } from 'react';
+
+import { usePreferences } from '@vben/preferences';
+import { getTabKey, useTabbarStore } from '@vben/stores';
+import { VbenIcon } from '@vben-core/shadcn-ui';
+import { Dropdown, Tabs } from 'antd';
+import { useLocation, useMatches, useNavigate } from 'react-router';
+import { useShallow } from 'zustand/react/shallow';
+
+import { $t } from '@/locales';
+import { mergeMatchMeta } from '@/router/route-tree';
+
+import './tabs.css';
+
+/** 把当前 location + 匹配链组装成 store 需要的 TabDefinition */
+function useCurrentTab(): TabDefinition {
+  const location = useLocation();
+  const matches = useMatches();
+
+  const leaf = matches.at(-1);
+  const handle = leaf?.handle as RouteHandle | undefined;
+
+  return {
+    fullPath: `${location.pathname}${location.search}`,
+    matched: matches.map((match) => {
+      const matchedHandle = match.handle as RouteHandle | undefined;
+      return {
+        meta: matchedHandle?.meta,
+        name: matchedHandle?.name,
+        path: match.pathname,
+      };
+    }),
+    meta: mergeMatchMeta(matches),
+    name: handle?.name,
+    params: leaf?.params as Record<string, string>,
+    path: location.pathname,
+    query: Object.fromEntries(new URLSearchParams(location.search)),
+  };
+}
+
+function tabTitle(tab: TabDefinition): string {
+  const { meta, name } = tab;
+  return (meta?.newTabTitle as string) || meta?.title || name || tab.path;
+}
+
+/**
+ * 多页签栏（对应 Vue 侧 `@vben-core/tabs-ui` + `layouts/src/basic/tabbar/`）。
+ *
+ * ⚠️ 与 Vue 版的刻意差异：Vue 侧 tabs-ui 是自绘的 chrome/card 弧形页签（927 行），
+ * React 侧按阶段 ⑥ 的决策先用 antd `Tabs`，自绘样式与拖拽排序留到 ⑥-b。
+ * 与 `adapter/menu.tsx` 同理放在 app 的 adapter/ 层，不进 `@core`（UI 库无关层）。
+ *
+ * ⑥-a 未接的右键菜单项：`reload` 与 `maximize` —— 两者都依赖 `<Activity>` 页签缓存
+ * （reload 要先把页面从缓存里剔掉再重挂），store 的 `refresh()` 已就位但没有消费者，
+ * 挂上去会是个点了没反应的菜单项。
+ */
+export function VbenTabs() {
+  const navigate = useNavigate();
+  const { preferences } = usePreferences();
+  const currentTab = useCurrentTab();
+
+  const addTab = useTabbarStore((state) => state.addTab);
+  const closeAllTabs = useTabbarStore((state) => state.closeAllTabs);
+  const closeLeftTabs = useTabbarStore((state) => state.closeLeftTabs);
+  const closeOtherTabs = useTabbarStore((state) => state.closeOtherTabs);
+  const closeRightTabs = useTabbarStore((state) => state.closeRightTabs);
+  const closeTab = useTabbarStore((state) => state.closeTab);
+  const openTabInNewWindow = useTabbarStore((state) => state.openTabInNewWindow);
+  const toggleTabPin = useTabbarStore((state) => state.toggleTabPin);
+
+  // selectTabs 每次返回新数组，必须用 useShallow 做浅比较，否则任何 store 变化都会重渲染
+  const tabs = useTabbarStore(useShallow((state) => state.getTabs()));
+
+  const activeKey = getTabKey(currentTab);
+
+  // 路由变化即登记页签；hideInTab 的过滤在 store 的 addTab 内部完成
+  useEffect(() => {
+    addTab(currentTab);
+    // 只按「地址 + 匹配到的路由名」触发：currentTab 每次渲染都是新对象，放进依赖会死循环。
+    // 带上 name 是因为同一个地址在动态路由注入前后会匹配到不同路由（`*` 兜底 → 真实页面），
+    // 只看 fullPath 会漏掉这次变化。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTab.fullPath, currentTab.name]);
+
+  // `tabbar.persist` 为 false 时丢掉 sessionStorage 水合回来的页签，只留当前这个。
+  // 与 Vue 侧 tabbar.vue 挂载时的处理一致（该偏好不控制 store 的 persist 本身）。
+  useEffect(() => {
+    if (preferences.tabbar.persist) {
+      return;
+    }
+    closeOtherTabs(currentTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function goToTab(key: string) {
+    if (key !== activeKey) {
+      navigate(key);
+    }
+  }
+
+  function handleClose(tab: TabDefinition) {
+    const target = closeTab(tab, activeKey);
+    if (target) {
+      navigate(target);
+    }
+  }
+
+  function contextMenuItems(tab: TabDefinition): MenuProps['items'] {
+    const affix = tab.meta?.affixTab ?? false;
+    return [
+      { key: 'close', label: $t('preferences.tabbar.contextMenu.close') },
+      {
+        key: 'affix',
+        label: affix
+          ? $t('preferences.tabbar.contextMenu.unpin')
+          : $t('preferences.tabbar.contextMenu.pin'),
+      },
+      { type: 'divider' },
+      {
+        key: 'open-in-new-window',
+        label: $t('preferences.tabbar.contextMenu.openInNewWindow'),
+      },
+      { type: 'divider' },
+      {
+        key: 'close-left',
+        label: $t('preferences.tabbar.contextMenu.closeLeft'),
+      },
+      {
+        key: 'close-right',
+        label: $t('preferences.tabbar.contextMenu.closeRight'),
+      },
+      {
+        key: 'close-other',
+        label: $t('preferences.tabbar.contextMenu.closeOther'),
+      },
+      {
+        key: 'close-all',
+        label: $t('preferences.tabbar.contextMenu.closeAll'),
+      },
+    ];
+  }
+
+  function handleContextClick(key: string, tab: TabDefinition) {
+    switch (key) {
+      case 'affix': {
+        toggleTabPin(tab);
+        break;
+      }
+      case 'close': {
+        handleClose(tab);
+        break;
+      }
+      case 'close-all': {
+        const target = closeAllTabs();
+        if (target) {
+          navigate(target);
+        }
+        break;
+      }
+      case 'close-left': {
+        closeLeftTabs(tab);
+        break;
+      }
+      case 'close-other': {
+        closeOtherTabs(tab);
+        break;
+      }
+      case 'close-right': {
+        closeRightTabs(tab);
+        break;
+      }
+      case 'open-in-new-window': {
+        openTabInNewWindow(tab);
+        break;
+      }
+    }
+  }
+
+  return (
+    <div
+      className="vben-tabs bg-header border-border shrink-0 border-b"
+      style={{ '--tabbar-height': `${preferences.tabbar.height}px` } as never}
+    >
+      <Tabs
+        activeKey={activeKey}
+        hideAdd
+        items={tabs.map((tab) => {
+          const key = tab.key ?? getTabKey(tab);
+          const affix = tab.meta?.affixTab ?? false;
+          return {
+            closable: !affix,
+            key,
+            label: (
+              <Dropdown
+                menu={{
+                  items: contextMenuItems(tab),
+                  onClick: ({ key: action }) => handleContextClick(action, tab),
+                }}
+                trigger={['contextMenu']}
+              >
+                <span className="flex items-center gap-1">
+                  {preferences.tabbar.showIcon && tab.meta?.icon ? (
+                    <VbenIcon className="size-3.5" icon={tab.meta.icon} />
+                  ) : null}
+                  <span>{tabTitle(tab)}</span>
+                </span>
+              </Dropdown>
+            ),
+          };
+        })}
+        onChange={goToTab}
+        onEdit={(targetKey, action) => {
+          if (action !== 'remove') {
+            return;
+          }
+          const key = typeof targetKey === 'string' ? targetKey : '';
+          const tab = tabs.find((item) => (item.key ?? getTabKey(item)) === key);
+          if (tab) {
+            handleClose(tab);
+          }
+        }}
+        size="small"
+        type="editable-card"
+      />
+    </div>
+  );
+}

@@ -1,0 +1,28 @@
+/**
+ * 多页签栏样式。
+ *
+ * 只做一件事：把 antd Tabs 的导航条压到 `--tabbar-height`（来自
+ * `preferences.tabbar.height`，默认 38px），并去掉它自带的 16px 下边距与
+ * 空的内容区。外壳的内容高度是按「视口 - header - tabbar」算的，这里多出
+ * 一像素，业务页的 `autoContentHeight` 就会跟着偏一像素。
+ *
+ * chrome/card 弧形页签的自绘样式属于阶段 ⑥-b（对应 Vue 侧 tabs-ui 的 927 行）。
+ */
+.vben-tabs .ant-tabs-nav {
+  height: var(--tabbar-height);
+  margin: 0;
+}
+
+.vben-tabs .ant-tabs-nav::before {
+  border-bottom: none;
+}
+
+.vben-tabs .ant-tabs-content-holder {
+  display: none;
+}
+
+.vben-tabs .ant-tabs-tab {
+  height: calc(var(--tabbar-height) - 8px);
+  padding-top: 0;
+  padding-bottom: 0;
+}
