@@ -127,7 +127,7 @@ schema-parity: ## 校验本端 schema 与 Python 库逐字段一致（计划 R13
 		PYTHONIOENCODING=utf-8 .venv/Scripts/python ../walnut-backend-go/scripts/verify_schema_parity.py
 
 .PHONY: key-pairing
-key-pairing: ## 校验前端三个 env 与 Python/Go 后端的 RSA 密钥配对关系
+key-pairing: ## 校验 Vue/React 两个前端的 env 与 Python/Go 后端、docker 编排的 RSA 密钥配对关系
 	cd ../walnut-backend-python && \
 		PYTHONIOENCODING=utf-8 .venv/Scripts/python ../walnut-backend-go/scripts/verify_key_pairing.py
 

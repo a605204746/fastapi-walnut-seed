@@ -126,3 +126,5 @@ skills-lock.json
 # ---------- 其他 ----------
 .DS_Store
 .omx
+.workbuddy
+.opencode

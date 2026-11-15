@@ -1,4 +1,4 @@
-"""校验前端与三个后端的 RSA 密钥配对关系。
+"""校验两个前端与三个后端的 RSA 密钥配对关系。
 
 配对规则（见各 env 文件的注释）：
     前端 VITE_GLOB_RSA_PUBLIC_KEY  （请求加密）↔ 后端 API_DECRYPT_PRIVATE_KEY（解请求）
@@ -7,6 +7,12 @@
 验证方法：从私钥**派生**公钥（私钥内部含公钥信息），再与对端声明的公钥比对模数 N。
 模数相同 ⇒ 同一对密钥。这比肉眼比 base64 可靠——两者编码形式不同，
 且 base64 前缀相同不代表模数相同。
+
+覆盖范围：
+  - 前端：Vue 侧 walnut-frontend/apps/web-antd 的 development/production/test，
+           React 侧 walnut-frontend-react/apps/web-react 的 development/production
+  - 后端：Python / Go 的 env/.env.dev
+  - 编排：docker/.env（两份 Go 编排的插值来源，已 gitignore）——仅在填了密钥时纳入
 
 同时检查：
   - 密钥位数（前端 jsencrypt 上限 1024；后端最小要求 1024）
@@ -30,14 +36,26 @@ KNOWN_BAD_PUBLIC_PREFIX = "MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAKoR8mX0rGKLqzcWmOzbf
 KNOWN_BAD_PRIVATE_PREFIX = "MIIBVAIBADANBgkqhkiG9w0BAQEFAASCAT4wggE6AgEAAoEAmc3CuPiGL"
 
 FRONTEND_ENVS = {
-    "development": REPO / "walnut-frontend/apps/web-antd/.env.development",
-    "production": REPO / "walnut-frontend/apps/web-antd/.env.production",
-    "test": REPO / "walnut-frontend/apps/web-antd/.env.test",
+    "vue:development": REPO / "walnut-frontend/apps/web-antd/.env.development",
+    "vue:production": REPO / "walnut-frontend/apps/web-antd/.env.production",
+    "vue:test": REPO / "walnut-frontend/apps/web-antd/.env.test",
+    "react:development": REPO
+    / "walnut-frontend-react/apps/web-react/.env.development",
+    "react:production": REPO / "walnut-frontend-react/apps/web-react/.env.production",
 }
 
 BACKEND_ENVS = {
     "python": REPO / "walnut-backend-python/env/.env.dev",
     "go": REPO / "walnut-backend-go/env/.env.dev",
+}
+
+# docker/.env 是两份 Go 编排（docker-compose.go.yml / .go.demo.yml）的变量插值来源，
+# 已 gitignore。四个 API_DECRYPT_* 变量在编排里的默认值留空，即容器后端降级为明文；
+# 此时无需配对，故只在**填了密钥**时才纳入校验，避免未配置 docker/.env 的环境
+# （包括 CI）恒定失败。填了就要配对——否则开发模式前端（加密开启）对容器后端
+# 登录会失败，这正是本脚本要拦住的场景。
+OPTIONAL_BACKEND_ENVS = {
+    "docker-compose": REPO / "docker/.env",
 }
 
 
@@ -103,32 +121,54 @@ def describe(label: str, b64: str, kind: str) -> dict:
     return info
 
 
+def load_backend(name: str, path: Path) -> dict:
+    """读一个后端 env 文件的两把密钥，打印指纹并返回描述字典。"""
+    env = parse_env(path)
+    item = {
+        "path": path,
+        "enabled": env.get("API_DECRYPT_ENABLED", ""),
+        "public": describe(
+            f"{name}.API_DECRYPT_PUBLIC_KEY",
+            env.get("API_DECRYPT_PUBLIC_KEY", ""),
+            "public",
+        ),
+        "private": describe(
+            f"{name}.API_DECRYPT_PRIVATE_KEY",
+            env.get("API_DECRYPT_PRIVATE_KEY", ""),
+            "private",
+        ),
+    }
+    print(f"\n[{name}] {path.relative_to(REPO)}")
+    print(f"  API_DECRYPT_ENABLED = {env.get('API_DECRYPT_ENABLED', '(未设置)')}")
+    for k in ("public", "private"):
+        d = item[k]
+        if "error" in d:
+            print(f"  {k:8s}: {d['error']}")
+        else:
+            flag = "  ⚠️ 命中 RuoYi 出厂密钥黑名单" if d.get("known_bad") else ""
+            print(f"  {k:8s}: {d['bits']} 位{flag}")
+    return item
+
+
 def main() -> int:
     print("=" * 82)
-    print("RSA 密钥配对校验：前端 ↔ Python 后端 ↔ Go 后端")
+    print("RSA 密钥配对校验：Vue/React 前端 ↔ Python/Go 后端 ↔ docker 编排")
     print("=" * 82)
 
     # ---- 1. 后端密钥 ----
-    backends = {}
-    for name, path in BACKEND_ENVS.items():
+    backends = {name: load_backend(name, path) for name, path in BACKEND_ENVS.items()}
+
+    # 编排插值文件（docker/.env）：两把密钥都留空时容器后端降级为明文、无需配对，
+    # 跳过而不报错；只要填了任意一把就纳入完整校验（半填必然不配对，要拦住）。
+    for name, path in OPTIONAL_BACKEND_ENVS.items():
         env = parse_env(path)
-        pub = describe(f"{name}.API_DECRYPT_PUBLIC_KEY", env.get("API_DECRYPT_PUBLIC_KEY", ""), "public")
-        priv = describe(f"{name}.API_DECRYPT_PRIVATE_KEY", env.get("API_DECRYPT_PRIVATE_KEY", ""), "private")
-        backends[name] = {
-            "path": path,
-            "enabled": env.get("API_DECRYPT_ENABLED", ""),
-            "public": pub,
-            "private": priv,
-        }
-        print(f"\n[{name}] {path.relative_to(REPO)}")
-        print(f"  API_DECRYPT_ENABLED = {env.get('API_DECRYPT_ENABLED', '(未设置)')}")
-        for k in ("public", "private"):
-            d = backends[name][k]
-            if "error" in d:
-                print(f"  {k:8s}: {d['error']}")
-            else:
-                flag = "  ⚠️ 命中 RuoYi 出厂密钥黑名单" if d.get("known_bad") else ""
-                print(f"  {k:8s}: {d['bits']} 位{flag}")
+        if not env.get("API_DECRYPT_PUBLIC_KEY") and not env.get(
+            "API_DECRYPT_PRIVATE_KEY"
+        ):
+            print(f"\n[{name}] {path.relative_to(REPO)}")
+            print("  两把密钥均留空 → 容器后端降级为明文，无需配对，跳过")
+            continue
+        backends[name] = load_backend(name, path)
 
     # ---- 2. 前端各环境 ----
     frontends = {}

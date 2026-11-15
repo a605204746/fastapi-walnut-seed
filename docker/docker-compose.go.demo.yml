@@ -125,6 +125,28 @@ services:
       CORS_ALLOW_ORIGINS: "*"
       CORS_ALLOW_CREDENTIALS: "true"
 
+      # ---- 接口加解密（RSA 密钥对）----
+      # 两把密钥默认留空 = 后端自动停用加解密（config.ValidateSecurity 降级为明文并告警）。
+      # 本编排自带的 nginx 前端是**生产构建**（.env.production 里
+      # VITE_GLOB_ENABLE_ENCRYPT=false），不发 encrypt-key 头，留空即可正常工作。
+      #
+      # ⚠️ 但若把**开发模式**前端（walnut-frontend 的 8010 / walnut-frontend-react 的
+      #    8020，两者 .env.development 均为 VITE_GLOB_ENABLE_ENCRYPT=true）的 /api 代理
+      #    指向本容器，就必须在 docker/.env 里填入配对密钥，否则后端会把 AES 密文当 JSON
+      #    解析，返回「请求数据格式错误（JSON 解析失败）」。
+      #    请求解密按 encrypt-key 头 opt-in，响应加密需路由显式挂 EncryptResponse()
+      #    （当前无任何路由挂载），故填入密钥对生产前端无副作用。
+      #
+      # 配对规则（与 walnut-backend-go/env/.env.example 逐字一致）：
+      #   API_DECRYPT_PRIVATE_KEY 解前端请求 —— 对应前端 VITE_GLOB_RSA_PUBLIC_KEY
+      #   API_DECRYPT_PUBLIC_KEY  加后端响应 —— 对应前端 VITE_GLOB_RSA_PRIVATE_KEY
+      # 开发密钥对直接取自 walnut-backend-go/env/.env.dev（已与前两端 dev 环境三方配对，
+      # 可用 walnut-backend-go/scripts/verify_key_pairing.py 校验）。生产必须整体替换。
+      API_DECRYPT_ENABLED: ${API_DECRYPT_ENABLED:-true}
+      API_DECRYPT_HEADER_FLAG: ${API_DECRYPT_HEADER_FLAG:-encrypt-key}
+      API_DECRYPT_PUBLIC_KEY: ${API_DECRYPT_PUBLIC_KEY:-}
+      API_DECRYPT_PRIVATE_KEY: ${API_DECRYPT_PRIVATE_KEY:-}
+
       OSS_TYPE: s3
       OSS_S3_ENDPOINT: seaweedfs:8333
       OSS_S3_ACCESS_KEY: ""
@@ -137,6 +159,14 @@ services:
       WEBSOCKET_ENABLED: "false"
       XSS_ENABLED: "true"
       XSS_EXCLUDE_URLS: /system/notice
+
+      # ---- 验证码 ----
+      # 默认 true（与后端内置默认一致，不填则行为不变）。
+      # ⚠️ 自动化测试（Playwright 像素回归 / e2e 冒烟）需在 docker/.env 里置 false：
+      #    否则登录页多出验证码输入框且无法非交互式填写，会话建立不了。
+      #    置 false 后 /auth/code 返回 captchaEnabled=false，前端按契约不渲染该输入框
+      #    （两个前端同时生效，因此不影响双端对比的一致性）。
+      CAPTCHA_ENABLE: ${CAPTCHA_ENABLE:-true}
 
       TRUSTED_PROXY_IPS: ""
       ALLOWED_HOSTS: "*"
