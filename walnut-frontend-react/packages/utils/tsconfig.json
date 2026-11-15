@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@vben/tsconfig/library.json",
+  "compilerOptions": {
+    // TS 6 起不再自动装载 node_modules/@types，需显式声明。
+    // 本包的 encryption 测试用到 node:crypto 生成 RSA 密钥对。
+    // 不放 library.json 是因为并非所有 library 包都装了 @types/node。
+    "types": ["node"]
+  },
+  "include": ["src"],
+  "exclude": ["node_modules"]
+}

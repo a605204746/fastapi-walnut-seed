@@ -1,0 +1,36 @@
+{
+  "name": "@vben-core/shared",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./cache": "./src/cache/index.ts",
+    "./color": "./src/color/index.ts",
+    "./constants": "./src/constants/index.ts",
+    "./global-state": "./src/global-state.ts",
+    "./store": "./src/store.ts",
+    "./utils": "./src/utils/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit --skipLibCheck"
+  },
+  "dependencies": {
+    "@ctrl/tinycolor": "catalog:",
+    "@tanstack/react-store": "catalog:",
+    "clsx": "catalog:",
+    "dayjs": "catalog:",
+    "defu": "catalog:",
+    "es-toolkit": "catalog:",
+    "lodash.clonedeep": "catalog:",
+    "nprogress": "catalog:",
+    "tailwind-merge": "catalog:",
+    "theme-colors": "catalog:"
+  },
+  "devDependencies": {
+    "@types/lodash.clonedeep": "catalog:",
+    "@types/nprogress": "catalog:",
+    "@vben/tsconfig": "workspace:*"
+  }
+}

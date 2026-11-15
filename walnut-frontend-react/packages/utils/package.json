@@ -1,0 +1,27 @@
+{
+  "name": "@vben/utils",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit --skipLibCheck"
+  },
+  "dependencies": {
+    "@vben-core/shared": "workspace:*",
+    "@vben-core/typings": "workspace:*",
+    "crypto-js": "catalog:",
+    "file-type": "catalog:",
+    "jsencrypt": "catalog:",
+    "sm-crypto": "catalog:"
+  },
+  "devDependencies": {
+    "@types/crypto-js": "catalog:",
+    "@types/node": "catalog:",
+    "@types/sm-crypto": "catalog:",
+    "@vben/tsconfig": "workspace:*"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@vben/request",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit --skipLibCheck"
+  },
+  "dependencies": {
+    "@vben/locales": "workspace:*",
+    "@vben/utils": "workspace:*",
+    "axios": "catalog:",
+    "qs": "catalog:"
+  },
+  "devDependencies": {
+    "@types/qs": "catalog:",
+    "@vben/tsconfig": "workspace:*",
+    "axios-mock-adapter": "catalog:"
+  }
+}

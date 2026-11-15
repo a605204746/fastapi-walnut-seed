@@ -1,0 +1,27 @@
+{
+  "name": "@vben-core/shadcn-ui",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit --skipLibCheck"
+  },
+  "peerDependencies": {
+    "react": "catalog:"
+  },
+  "dependencies": {
+    "@vben-core/shared": "workspace:*",
+    "clsx": "catalog:",
+    "lucide-react": "catalog:",
+    "tailwind-merge": "catalog:"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "@vben/tsconfig": "workspace:*",
+    "react": "catalog:"
+  }
+}

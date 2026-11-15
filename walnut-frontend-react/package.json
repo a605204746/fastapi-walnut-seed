@@ -1,0 +1,42 @@
+{
+  "name": "walnut-seed-admin-react",
+  "version": "0.1.0",
+  "private": true,
+  "keywords": [
+    "walnut-seed",
+    "monorepo",
+    "react",
+    "react19",
+    "admin",
+    "starter"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "deepin_sir"
+  },
+  "type": "module",
+  "scripts": {
+    "bootstrap": "pnpm install",
+    "postinstall": "pnpm -r run --if-present stub",
+    "dev": "pnpm -F @walnut-seed/web-react run dev",
+    "build": "pnpm -F @walnut-seed/web-react run build",
+    "preview": "pnpm -F @walnut-seed/web-react run preview",
+    "typecheck": "pnpm -r --parallel run typecheck",
+    "test:unit": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@vben/tsconfig": "workspace:*",
+    "@vitejs/plugin-react": "catalog:",
+    "happy-dom": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": "^22.18.0 || ^24.0.0",
+    "pnpm": ">=11.0.0"
+  },
+  "packageManager": "pnpm@11.2.2"
+}

@@ -1,0 +1,25 @@
+{
+  "name": "@vben/hooks",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit --skipLibCheck"
+  },
+  "peerDependencies": {
+    "react": "catalog:"
+  },
+  "dependencies": {
+    "@vben-core/shared": "workspace:*",
+    "@vben/preferences": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "@vben/tsconfig": "workspace:*",
+    "react": "catalog:"
+  }
+}

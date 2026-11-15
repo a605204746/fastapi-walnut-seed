@@ -1,0 +1,142 @@
+/* 复刻自 Vue 侧 components/walnut-slogan/src/walnut-slogan.vue 的 <style scoped>。
+   React 侧作为全局 CSS 引入；.dark 选择器依赖 <html class="dark">（由 preferences 写入）。 */
+.walnut-slogan {
+  --ws-amber: #a05c26;
+  --ws-cyan: #0f7f8f;
+  --ws-glow: rgba(180, 105, 46, 0.16);
+  --ws-glow-c: rgba(15, 127, 143, 0.3);
+  --ws-star: #f4ede2;
+
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: min(78%, 400px);
+  aspect-ratio: 1;
+}
+
+.dark .walnut-slogan {
+  --ws-amber: #e8a752;
+  --ws-cyan: #56d8e4;
+  --ws-glow: rgba(232, 167, 82, 0.32);
+  --ws-glow-c: rgba(86, 216, 228, 0.45);
+}
+
+.walnut-slogan .halo {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--ws-glow) 0%, transparent 62%);
+  animation: ws-breath 5s ease-in-out infinite;
+}
+
+@keyframes ws-breath {
+  0%,
+  100% {
+    transform: scale(0.94);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.9;
+  }
+}
+
+/* 星点只在暗色出现，浅色下避免像屏幕污渍 */
+.walnut-slogan .star {
+  display: none;
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: var(--ws-star);
+  opacity: 0.15;
+  animation: ws-twinkle 4s ease-in-out infinite;
+}
+
+.dark .walnut-slogan .star {
+  display: block;
+}
+
+@keyframes ws-twinkle {
+  0%,
+  100% {
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.walnut-slogan .walnut-svg {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: auto;
+}
+
+.walnut-slogan .walnut-svg path {
+  fill: none;
+  stroke-linecap: round;
+}
+
+.walnut-slogan .w-outline {
+  stroke: var(--ws-amber);
+  stroke-width: 2;
+  opacity: 0.65;
+  filter: drop-shadow(0 0 6px var(--ws-glow));
+}
+
+.walnut-slogan .w-base path {
+  stroke: var(--ws-amber);
+  stroke-width: 1.2;
+  opacity: 0.4;
+}
+
+.walnut-slogan .w-pulse path {
+  stroke: var(--ws-cyan);
+  stroke-width: 1.6;
+  opacity: 0.9;
+  stroke-dasharray: 16 150;
+  animation: ws-flow 3.6s linear infinite;
+  filter: drop-shadow(0 0 4px var(--ws-glow-c));
+}
+
+@keyframes ws-flow {
+  to {
+    stroke-dashoffset: -166;
+  }
+}
+
+.walnut-slogan .w-nodes circle {
+  fill: var(--ws-cyan);
+  opacity: 0.35;
+  animation: ws-twinkle 2.6s ease-in-out infinite;
+}
+
+.walnut-slogan .w-nodes circle:nth-child(2n) {
+  animation-delay: 0.7s;
+}
+
+.walnut-slogan .w-nodes circle:nth-child(3n) {
+  animation-delay: 1.3s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .walnut-slogan *,
+  .walnut-slogan *::before,
+  .walnut-slogan *::after {
+    animation: none !important;
+  }
+
+  /* 关闭动画时隐藏脉冲叠层，保留完整实线线稿 */
+  .walnut-slogan .w-pulse {
+    display: none;
+  }
+
+  .walnut-slogan .w-nodes circle {
+    opacity: 0.6;
+  }
+}

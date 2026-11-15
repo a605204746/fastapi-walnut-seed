@@ -1,0 +1,42 @@
+/* 复刻自 Vue 侧 widgets/theme-toggle/theme-button.vue 的 <style scoped>。
+   @apply scale-50 / opacity-0 改写为等价的原生 CSS（React 侧全局 CSS 无 @reference）。 */
+.theme-toggle__moon > circle {
+  transition: transform 0.5s cubic-bezier(0, 0, 0.3, 1);
+}
+
+.theme-toggle__sun {
+  stroke: none;
+  transform-origin: center center;
+  transition: transform 1.6s cubic-bezier(0.25, 0, 0.2, 1);
+}
+
+.theme-toggle__sun-beams {
+  transform-origin: center center;
+  transition:
+    transform 1.6s cubic-bezier(0.5, 1.5, 0.75, 1.25),
+    opacity 0.6s cubic-bezier(0.25, 0, 0.3, 1);
+}
+
+.theme-toggle.is-light .theme-toggle__sun {
+  transform: scale(0.5);
+}
+
+.theme-toggle.is-light .theme-toggle__sun-beams {
+  transform: rotateZ(0.25turn);
+}
+
+.theme-toggle.is-dark .theme-toggle__moon > circle {
+  transform: translateX(-20px);
+}
+
+.theme-toggle.is-dark .theme-toggle__sun-beams {
+  opacity: 0;
+}
+
+.theme-toggle:hover > svg .theme-toggle__sun {
+  fill: hsl(var(--foreground));
+}
+
+.theme-toggle:hover > svg .theme-toggle__sun-beams {
+  stroke: hsl(var(--foreground));
+}

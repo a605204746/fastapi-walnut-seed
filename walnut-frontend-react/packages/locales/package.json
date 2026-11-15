@@ -1,0 +1,19 @@
+{
+  "name": "@vben/locales",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit --skipLibCheck"
+  },
+  "dependencies": {
+    "i18next": "catalog:"
+  },
+  "devDependencies": {
+    "@vben/tsconfig": "workspace:*"
+  }
+}

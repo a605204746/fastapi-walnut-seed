@@ -1,0 +1,34 @@
+/* 复刻自 Vue 侧 packages/effects/layouts/src/authentication/authentication.vue 的 <style scoped> */
+.slogan-grid {
+  background-image:
+    linear-gradient(rgba(180, 105, 46, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(180, 105, 46, 0.05) 1px, transparent 1px);
+  background-size: 36px 36px;
+  mask-image: radial-gradient(75% 65% at 50% 45%, #000 30%, transparent 100%);
+}
+
+.dark .slogan-grid {
+  background-image:
+    linear-gradient(rgba(86, 216, 228, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(86, 216, 228, 0.05) 1px, transparent 1px);
+}
+
+.login-background {
+  background: linear-gradient(
+    154deg,
+    #07070915 30%,
+    #b4692e29 48%,
+    #07070915 64%
+  );
+  filter: blur(100px);
+}
+
+.dark .login-background {
+  background: linear-gradient(
+    154deg,
+    #07070915 30%,
+    #e8a7521f 48%,
+    #07070915 64%
+  );
+  filter: blur(100px);
+}

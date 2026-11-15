@@ -1,0 +1,17 @@
+node_modules
+dist
+dist.zip
+.turbo
+*.tsbuildinfo
+*.local
+.DS_Store
+.vite
+coverage
+.eslintcache
+*.log
+
+# e2e 像素门禁：只有 golden（artifacts/vue）入库，其余都能由 React 端单独再生
+e2e/visual/artifacts/react
+e2e/visual/artifacts/diff
+e2e/visual/artifacts/test-results
+e2e/visual/report

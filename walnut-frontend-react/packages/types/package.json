@@ -1,0 +1,20 @@
+{
+  "name": "@vben/types",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./global": "./global.d.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit --skipLibCheck"
+  },
+  "dependencies": {
+    "@vben-core/typings": "workspace:*"
+  },
+  "devDependencies": {
+    "@vben/tsconfig": "workspace:*"
+  }
+}

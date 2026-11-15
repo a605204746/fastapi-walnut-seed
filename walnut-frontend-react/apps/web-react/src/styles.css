@@ -1,0 +1,34 @@
+:root {
+  color-scheme: light dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Microsoft YaHei', sans-serif;
+  color: hsl(var(--foreground, 222 47% 11%));
+  background: hsl(var(--background, 210 40% 98%));
+}
+
+/* vben-link：登录页「忘记密码 / 创建账号」等文字链接（对应 Vue 侧全局样式） */
+.vben-link {
+  color: hsl(var(--primary));
+  cursor: pointer;
+}
+
+.vben-link:hover {
+  color: hsl(var(--primary-hover, var(--primary)));
+  text-decoration: underline;
+}
