@@ -15,3 +15,5 @@ e2e/visual/artifacts/react
 e2e/visual/artifacts/diff
 e2e/visual/artifacts/test-results
 e2e/visual/report
+# 排查时手工裁剪的局部放大图，直接落在 artifacts/ 根下
+e2e/visual/artifacts/crop-*.png
