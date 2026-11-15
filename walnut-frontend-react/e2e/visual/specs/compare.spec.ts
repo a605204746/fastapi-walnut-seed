@@ -15,19 +15,30 @@ const DIFF_DIR = path.join(ARTIFACTS, 'diff');
 /**
  * 分层阈值（差异像素占比上限）。
  *
- * - 登录页（纯外壳 + SVG + antd 表单）：严格 0.3%，实测 light 0.28% / dark 0.02%，
+ * - 登录页（纯外壳 + SVG + antd 表单）：严格 0.3%，实测 light 0.277% / dark 0.021%，
  *   证明方案 C 全自绘复刻在外壳层达到像素级一致。
- * - config 页：初值 1.5%（Spec §6）。实测 5.2%，残余全部来自 vxe-table 与 antd Table
- *   的原生差异（垂直节奏 / 分页「总数在左+页码在右」布局 / 分页字形），
- *   以及 PoC 最小布局与 Vue 完整布局的高差（Spec §7 风险1、§10 假设）。
- *   按 Spec §10「阈值为起点、PoC 中按实测校准」，此处校准为 6% 作为 PoC 回归基线
- *   （防止后续改动回退）；1.5% 的设计目标留待阶段 ⑤ 的 antd Table 主题覆盖层达成
- *   （Spec §7 风险1 决策：选 (a) 继续加 CSS 覆盖，而非自绘或永久放宽）。
+ * - config 页：初值 1.5%（Spec §6）。实测 5.245%，残余全部来自 vxe-table 与 antd Table
+ *   的原生差异（垂直节奏 / 分页「总数在左+页码在右」布局 / 分页字形）。
+ *   按 Spec §10「阈值为起点、PoC 中按实测校准」，此处校准为 6% 作为回归基线。
+ *   ⚠️ 原先记的「PoC 最小布局与 Vue 完整布局的高差」这一项已在阶段 ⑥ 消除：
+ *   真实 header(50) + tabbar(38) 补上后，React 侧元素截图从 1024x688 变为 1024x599，
+ *   与 Vue golden 的 1024x600 只差 1px。剩下的 5.245% 纯粹是表格自身的渲染差异，
+ *   要压到 1.5% 只能靠 antd Table 主题覆盖层（Spec §7.1 风险1 决策 (a)）。
+ * - shell / shell-dark：阶段 ⑥-a 新增的整页外壳门禁，实测 9.316% / 4.719%，
+ *   阈值取实测值上浮到 10% / 5.5% 作为**回归基线**（防止后续改动把外壳改得更歪），
+ *   不是验收目标。差异集中在四处，即 ⑥-b 的施工清单：
+ *   1. 顶栏右侧 widget 群——Vue 有全局搜索/通知/全屏/偏好设置/锁屏等，React 只有主题+语言+用户
+ *   2. 页签形状——Vue 是自绘 chrome 弧形页签，React 暂用 antd card 页签
+ *   3. 菜单项排版与 logo 区——Vue 自绘 menu-ui，React 暂用 antd Menu
+ *   4. 折叠按钮位置——Vue 贴在侧边栏右缘，React 暂放顶栏左侧
+ *   ⑥-b 逐项对齐后这两个阈值应持续下调。
  */
 const THRESHOLDS: Record<string, number> = {
   'config': 0.06,
   'login-dark': 0.003,
   'login-light': 0.003,
+  'shell': 0.1,
+  'shell-dark': 0.055,
 };
 
 const NAMES = Object.keys(THRESHOLDS);
