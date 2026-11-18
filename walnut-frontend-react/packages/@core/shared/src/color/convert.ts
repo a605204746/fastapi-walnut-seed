@@ -34,11 +34,27 @@ function convertToHslCssVar(color: string): string {
  * TinyColor无法处理hsl内包含'deg'、'grad'、'rad'或'turn'的字符串
  * 比如 hsl(231deg 98% 65%)将被解析为rgb(0, 0, 0)
  * 这里在转换之前先将这些单位去掉
+ *
+ * ⚠️  additionally：TinyColor 也解析不了 **CSS Color 4 空格语法 + 斜杠透明度**
+ * （如 `hsl(0 0% 0% / 45%)`，设计令牌 `--overlay` 正是这种写法），
+ * 会静默退化成**不透明** `rgb(0, 0, 0)`。后果实测过：antd 的 `colorBgMask`
+ * 拿到纯黑不透明值，Drawer/Modal 遮罩把整个应用盖成黑屏。
+ * 这里先把空格语法归一化成逗号语法（透明度百分比转小数）再交给 TinyColor。
+ *
  * @param str 表示HLS颜色值的字符串
  * @returns 如果颜色值有效，则返回对应的RGB颜色字符串；如果无效，则返回rgb(0, 0, 0)
  */
 function convertToRgb(str: string): string {
-  return new TinyColor(str.replaceAll(/deg|grad|rad|turn/g, '')).toRgbString();
+  const cleaned = str.replaceAll(/deg|grad|rad|turn/g, '');
+  const spaceSyntax = cleaned.match(
+    /^hsl\(\s*([\d.]+)\s+([\d.]+)%\s+([\d.]+)%(?:\s*\/\s*([\d.]+)(%)?)?\s*\)$/,
+  );
+  if (spaceSyntax) {
+    const [, h, s, l, a, pct] = spaceSyntax;
+    const alpha = a === undefined ? 1 : Number(a) / (pct ? 100 : 1);
+    return new TinyColor(`hsla(${h}, ${s}%, ${l}%, ${alpha})`).toRgbString();
+  }
+  return new TinyColor(cleaned).toRgbString();
 }
 
 /**

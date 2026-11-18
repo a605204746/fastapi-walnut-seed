@@ -10,6 +10,8 @@ import { initStores } from '@vben/stores';
 import { unmountGlobalLoading } from '@vben/utils';
 
 import { setupComponents } from './adapter/component';
+import { setupDrawer } from './adapter/drawer';
+import { initSetupVbenForm } from './adapter/form';
 import { App } from './App';
 import { appConfig } from './lib/config';
 import { loadAppMessages } from './locales';
@@ -36,6 +38,12 @@ async function bootstrap() {
 
   // 注册表单组件映射表（componentMap）
   setupComponents();
+
+  // 注册必填校验的国际化文案（对应 Vue 侧 setupVbenForm 的 defineRules）
+  initSetupVbenForm();
+
+  // 注入抽屉底部按钮的 i18n 文案（@core 层不能依赖 @vben/locales）
+  setupDrawer();
 
   createRoot(document.querySelector('#root')!).render(
     <StrictMode>

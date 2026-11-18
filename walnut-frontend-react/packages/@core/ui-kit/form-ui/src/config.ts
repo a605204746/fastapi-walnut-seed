@@ -21,3 +21,35 @@ export function getComponent(name: string): ComponentType<any> | undefined {
 export function hasComponent(name: string): boolean {
   return componentMap.has(name);
 }
+
+/**
+ * 必填校验的文案解析器。
+ *
+ * Vue 侧在 `adapter/form.ts` 的 `setupVbenForm({ defineRules })` 里注册
+ * `required` / `selectRequired` 两条规则，文案走 `$t('ui.formRules.required', [label])`
+ * （词典里是 `请输入{0}` / `请选择{0}`）。`@core/*` 不能依赖 `@vben/locales`，
+ * 故同样采用注入式解析器（与 popup-ui 的 `setDrawerTextResolver` 一个套路），
+ * app 在 bootstrap 时调 `initSetupVbenForm()` 注入。
+ *
+ * 解析器在**校验时**调用，语言切换后自动生效。
+ */
+export type FormRuleMessageKey = 'required' | 'selectRequired';
+
+let ruleMessageResolver = (
+  key: FormRuleMessageKey,
+  label: string,
+): string =>
+  key === 'required' ? `${label}不能为空` : `请选择${label}`;
+
+export function setFormRuleMessages(
+  resolver: (key: FormRuleMessageKey, label: string) => string,
+) {
+  ruleMessageResolver = resolver;
+}
+
+export function resolveRuleMessage(
+  key: FormRuleMessageKey,
+  label: string,
+): string {
+  return ruleMessageResolver(key, label);
+}

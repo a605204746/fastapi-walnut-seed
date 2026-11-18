@@ -5,6 +5,7 @@ import type { FormProps, FormSchema } from '@vben-core/form-ui';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { $t } from '@vben/locales';
+import { listToTree } from '@vben/utils';
 import { useVbenForm } from '@vben-core/form-ui';
 import { Store, useStore } from '@vben-core/shared/store';
 import { cn } from '@vben-core/shared/utils';
@@ -18,34 +19,96 @@ import {
 
 type Key = number | string;
 
+/** 排序项（对应 vxe-table 的 `ProxyAjaxQuerySortCheckedParams` 子集） */
+export interface GridSortParam {
+  field: string;
+  order: 'asc' | 'desc';
+}
+
 export interface GridColumn {
   align?: 'center' | 'left' | 'right';
   field?: string;
   fixed?: 'left' | 'right';
+  /**
+   * 单元格格式化（对应 vxe 的 `formatter`）。
+   * 与 `slots.default` 同时存在时 slots 优先。
+   */
+  formatter?: (params: { cellValue: any; row: any }) => ReactNode;
+  /**
+   * 最小列宽（对应 vxe 的 minWidth）。
+   * ⚠️ 仅作为 schema 层面的记录，**不会**透传给 antd（ColumnType 无此属性），
+   * 实际列宽由 `scroll.x = 'max-content'` 的内容自适应决定。
+   */
+  minWidth?: number | string;
   resizable?: boolean;
   slots?: {
     default?: ((params: { row: any }) => ReactNode) | string;
   };
+  /** 可排序（配合 `sortConfig.remote` 走后端排序） */
+  sortable?: boolean;
   title?: string;
+  /** 树形表格的展开图标挂在这一列（对应 vxe 的 `treeNode: true`） */
+  treeNode?: boolean;
   type?: 'checkbox';
   width?: number | string;
 }
 
 export interface GridOptions {
-  checkboxConfig?: { highlight?: boolean; reserve?: boolean };
+  checkboxConfig?: {
+    /**
+     * 行是否可勾选（对应 vxe 的 `checkboxConfig.checkMethod`）。
+     * 返回 false 的行复选框置灰，例如客户端管理页禁止勾选 id === 1 的内置记录。
+     */
+    checkMethod?: (params: { row: any }) => boolean;
+    highlight?: boolean;
+    reserve?: boolean;
+  };
   columns: GridColumn[];
+  /**
+   * 表格事件（对应 vxe 的 `gridEvents`）。
+   * 只实现业务页真正用到的两个：`cellClick`（字典类型页点行打开数据面板）、
+   * `cellDblclick`（部门/菜单页双击展开子节点）。
+   */
+  gridEvents?: {
+    cellClick?: (e: { row: any }) => void;
+    cellDblclick?: (e: { row: any }) => void;
+  };
   height?: string;
   id?: string;
+  /** 表格最小高度（px），弹窗内的表格用来避免空数据时高度塌陷 */
+  minHeight?: number;
   pagerConfig?: false | Record<string, any>;
   proxyConfig?: {
     ajax: {
       query: (
-        params: { page: { currentPage: number; pageSize: number } },
+        params: {
+          page: { currentPage: number; pageSize: number };
+          /** 当前排序状态，配合 `addSortParams` 转成后端参数 */
+          sorts: GridSortParam[];
+        },
         formValues?: Record<string, any>,
-      ) => Promise<{ rows: any[]; total: number }>;
+      ) => Promise<{ rows: any[]; total?: number }>;
+      /** 查询成功后的回调（对应 vxe 的 `proxyConfig.ajax.querySuccess`） */
+      querySuccess?: (rows: any[]) => void;
     };
   };
   rowConfig?: { keyField?: string };
+  /** 行 class（对应 vxe 的 rowClassName），可以是字符串或按行计算的函数 */
+  rowClassName?: string | ((params: { row: any }) => string);
+  /** 排序配置（对应 vxe 的 sortConfig）；`remote: true` 时排序变化触发重新查询 */
+  sortConfig?: { multiple?: boolean; remote?: boolean };
+  /**
+   * 树形表格配置（对应 vxe 的 treeConfig）。
+   * - `transform: true`：后端返回**平铺列表**，由适配层用 `listToTree` 组成树
+   * - `transform: false`：页面自己在 query 里组好树再返回（如菜单管理）
+   * - `reserve: true`：刷新后保留展开状态
+   */
+  treeConfig?: {
+    parentField?: string;
+    reserve?: boolean;
+    rowField?: string;
+    transform?: boolean;
+  };
   toolbarConfig?: { search?: boolean };
 }
 
@@ -55,6 +118,7 @@ export interface UseGridOptions {
 }
 
 export interface GridToolbarContext {
+  clearCheckboxRow: () => void;
   getCheckboxRecords: () => any[];
 }
 
@@ -62,25 +126,92 @@ export interface GridComponentProps {
   class?: string;
   slots?: Record<string, (params: { row: any }) => ReactNode>;
   tableTitle?: ReactNode;
+  /** 标题旁的帮助提示（对应 vxe toolbar 的 tableTitleHelp） */
+  tableTitleHelp?: ReactNode;
   toolbarTools?: ((ctx: GridToolbarContext) => ReactNode) | ReactNode;
 }
 
 interface GridState {
   current: number;
   dataSource: any[];
+  /** 树形表格的展开行 key（对应 vxe 的 row.expand 标记，React 侧集中管理） */
+  expandedKeys: Key[];
   loading: boolean;
   pageSize: number;
   selectedKeys: Key[];
   selectedRows: any[];
   showSearchForm: boolean;
+  sorts: GridSortParam[];
   total: number;
 }
 
 export interface GridApi {
   formApi?: ReturnType<typeof useVbenForm>[1];
-  grid: { getCheckboxRecords: () => any[] };
+  grid: {
+    clearCheckboxRow: () => void;
+    /** 当前展示的数据（树形表格下为组树后的结果，对应 vxe 的 grid.getData()） */
+    getData: () => any[];
+    getCheckboxRecords: () => any[];
+    /** 展开/折叠全部树节点（对应 vxe 的 setAllTreeExpand） */
+    setAllTreeExpand: (expanded: boolean) => void;
+    /** 展开/折叠单个节点（对应 vxe 的 setTreeExpand） */
+    setTreeExpand: (row: any, expanded: boolean) => void;
+  };
   query: () => Promise<void>;
   reload: (formValues?: Record<string, any>) => Promise<void>;
+}
+
+/**
+ * 平铺列表 → 树（对应 vxe `treeConfig.transform: true`）。
+ * 先浅拷贝每一行，避免 `listToTree` 往接口返回的对象上写 `children`。
+ */
+function buildTreeData(
+  rows: any[],
+  treeConfig?: GridOptions['treeConfig'],
+): any[] {
+  if (!treeConfig?.transform) return rows;
+  const tree = listToTree<any>(
+    rows.map((row) => ({ ...row })),
+    {
+      id: treeConfig.rowField ?? 'id',
+      pid: treeConfig.parentField ?? 'parentId',
+    },
+  );
+  pruneEmptyChildren(tree);
+  return tree;
+}
+
+/**
+ * 删掉空的 `children` 数组。`listToTree` 会给每个节点补 `children: []`，
+ * 而 antd Table 判断「有无子节点」是真值检查，空数组会让叶子节点也长出展开箭头。
+ *
+ * 导出给页面复用：`treeConfig.transform: false` 的页面（如菜单管理）自己在
+ * query 里组树，需要手动调这个函数。
+ */
+export function pruneEmptyChildren(nodes: any[]) {
+  for (const node of nodes) {
+    const children = node.children;
+    if (Array.isArray(children) && children.length > 0) {
+      pruneEmptyChildren(children);
+    } else {
+      delete node.children;
+    }
+  }
+}
+
+/** 收集所有「有子节点」的行 key，用于一键展开全部 */
+function collectParentKeys(nodes: any[], keyField: string): Key[] {
+  const keys: Key[] = [];
+  const walk = (list: any[]) => {
+    for (const node of list) {
+      if (Array.isArray(node.children) && node.children.length > 0) {
+        keys.push(node[keyField]);
+        walk(node.children);
+      }
+    }
+  };
+  walk(nodes);
+  return keys;
 }
 
 /**
@@ -112,11 +243,13 @@ export function useGrid(
     storeRef.current = new Store<GridState>({
       current: 1,
       dataSource: [],
+      expandedKeys: [],
       loading: false,
       pageSize: 10,
       selectedKeys: [],
       selectedRows: [],
       showSearchForm: true,
+      sorts: [],
       total: 0,
     });
   }
@@ -133,19 +266,35 @@ export function useGrid(
     try {
       const formValues = fo ? await fa.getValues() : {};
       const result = await go.proxyConfig.ajax.query(
-        { page: { currentPage: page, pageSize: size } },
+        {
+          page: { currentPage: page, pageSize: size },
+          // 排序状态从 store 取，保证 query 闭包拿到的是最新值
+          sorts: store.state.sorts,
+        },
         formValues,
       );
+      const rows = result?.rows ?? [];
+      // 树形表格：平铺 → 树。store 里存的就是最终展示用的数据，
+      // 因此 grid.getData() 与 vxe 的语义一致（返回组树后的结果）
+      const data = buildTreeData(rows, go.treeConfig);
       store.setState((prev) => ({
         ...prev,
         current: page,
-        dataSource: result?.rows ?? [],
+        dataSource: data,
+        // 新数据到达后的展开态：treeConfig.reserve 为 true 时保留（对应 vxe 的
+        // 「刷新接口后记录展开行的情况」），否则清空、由页面的 querySuccess 决定
+        expandedKeys: go.treeConfig
+          ? go.treeConfig.reserve
+            ? prev.expandedKeys
+            : []
+          : prev.expandedKeys,
         loading: false,
         pageSize: size,
         selectedKeys: go.checkboxConfig?.reserve ? prev.selectedKeys : [],
         selectedRows: go.checkboxConfig?.reserve ? prev.selectedRows : [],
         total: result?.total ?? 0,
       }));
+      go.proxyConfig.ajax.querySuccess?.(rows);
     } catch {
       store.setState((prev) => ({ ...prev, loading: false }));
     }
@@ -163,7 +312,33 @@ export function useGrid(
     () => ({
       formApi,
       grid: {
+        clearCheckboxRow: () => {
+          store.setState((prev) => ({
+            ...prev,
+            selectedKeys: [],
+            selectedRows: [],
+          }));
+        },
+        getData: () => store.state.dataSource,
         getCheckboxRecords: () => store.state.selectedRows,
+        setAllTreeExpand: (expanded: boolean) => {
+          store.setState((prev) => ({
+            ...prev,
+            expandedKeys: expanded
+              ? collectParentKeys(prev.dataSource, keyField)
+              : [],
+          }));
+        },
+        setTreeExpand: (row: any, expanded: boolean) => {
+          const key = row?.[keyField];
+          if (key === undefined || key === null) return;
+          store.setState((prev) => ({
+            ...prev,
+            expandedKeys: expanded
+              ? [...new Set([...prev.expandedKeys, key as Key])]
+              : prev.expandedKeys.filter((item) => item !== key),
+          }));
+        },
       },
       query: async () => {
         await runQueryRef.current(store.state.current, store.state.pageSize);
@@ -180,23 +355,41 @@ export function useGrid(
     return gridOptions.columns
       .filter((col) => col.type !== 'checkbox')
       .map((col) => ({
-        align: col.align,
+        // ⚠️ vxe 的全局配置是 `align: 'center'`（见 Vue 侧 setupVbenVxeTable），
+        // 即「未显式声明对齐方式的列一律居中」。antd Table 默认左对齐，
+        // 不补这个默认值会导致所有表格与 Vue 端肉眼可见地不一致。
+        align: col.align ?? 'center',
         dataIndex: col.field,
         fixed: col.fixed,
         key: col.field,
+        // ⚠️ `minWidth` 不透传：antd 的 ColumnType 没有这个属性（vxe 专有）。
+        // 表格已设 `scroll={{x:'max-content'}}`，列宽按内容自适应，效果接近 minWidth。
         render:
           typeof col.slots?.default === 'function'
             ? (_: any, row: any) =>
                 (col.slots!.default as (p: { row: any }) => ReactNode)({ row })
-            : undefined,
+            : col.formatter
+              ? (_: any, row: any) =>
+                  col.formatter!({ cellValue: row[col.field ?? ''], row })
+              : undefined,
+        // `sortable: true` + 远程排序：交给 antd 渲染排序箭头，实际排序由后端完成
+        sorter: col.sortable ? true : undefined,
         title: col.title,
         width: col.width === 'auto' ? undefined : col.width,
       }));
   }, [gridOptions.columns]);
 
   const hasCheckbox = gridOptions.columns.some((col) => col.type === 'checkbox');
-  const pager = gridOptions.pagerConfig !== false;
+  // pagerConfig 支持两种关闭写法：`false` 或 `{ enabled: false }`（后者是 vxe 的形式）
+  const pager =
+    gridOptions.pagerConfig !== false &&
+    (gridOptions.pagerConfig as Record<string, any> | undefined)?.enabled !==
+      false;
+  // 只要声明了 treeConfig 就是树形表格；`transform` 只决定「是否由适配层做平铺转树」
+  // （菜单管理页 transform: false，由页面自己在 query 里组树，但同样需要展开/双击能力）
+  const isTree = !!gridOptions.treeConfig;
   const reserve = !!gridOptions.checkboxConfig?.reserve;
+  const remoteSort = !!gridOptions.sortConfig?.remote;
   const columns = gridOptions.columns;
 
   // 稳定的 Grid 组件：通过 useStore 订阅状态，身份不随渲染变化
@@ -206,19 +399,25 @@ export function useGrid(
         {...props}
         antdColumns={antdColumns}
         api={api}
+        checkMethod={gridOptions.checkboxConfig?.checkMethod}
         columns={columns}
         Form={Form}
         formApi={formApi}
+        gridEvents={gridOptions.gridEvents}
         hasCheckbox={hasCheckbox}
+        isTree={isTree}
         keyField={keyField}
+        minHeight={gridOptions.minHeight}
         pager={pager}
+        remoteSort={remoteSort}
         reserve={reserve}
+        rowClassName={gridOptions.rowClassName}
         runQuery={runQuery}
         store={store}
       />
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [antdColumns, api, columns, Form, formApi, hasCheckbox, keyField, pager, reserve, runQuery, store],
+    [antdColumns, api, columns, Form, formApi, hasCheckbox, isTree, keyField, pager, remoteSort, reserve, runQuery, store],
   );
 
   return [Grid, api];
@@ -227,13 +426,19 @@ export function useGrid(
 interface GridViewProps extends GridComponentProps {
   antdColumns: TableProps<any>['columns'];
   api: GridApi;
+  checkMethod?: (params: { row: any }) => boolean;
   columns: GridColumn[];
   Form: ComponentType<any>;
   formApi: FormApi2;
+  gridEvents?: GridOptions['gridEvents'];
   hasCheckbox: boolean;
+  isTree: boolean;
   keyField: string;
+  minHeight?: number;
   pager: boolean;
+  remoteSort: boolean;
   reserve: boolean;
+  rowClassName?: GridOptions['rowClassName'];
   runQuery: (page: number, size: number) => Promise<void>;
   store: Store<GridState>;
 }
@@ -243,22 +448,37 @@ type FormApi2 = ReturnType<typeof useVbenForm>[1];
 function GridView({
   antdColumns,
   api,
+  checkMethod,
   class: className,
   columns,
   Form,
   formApi,
+  gridEvents,
   hasCheckbox,
+  isTree,
   keyField,
+  minHeight,
   pager,
+  remoteSort,
   reserve,
+  rowClassName,
   runQuery,
   slots,
   store,
   tableTitle,
+  tableTitleHelp,
   toolbarTools,
 }: GridViewProps) {
-  const { current, dataSource, loading, pageSize, selectedKeys, showSearchForm, total } =
-    useStore(store);
+  const {
+    current,
+    dataSource,
+    expandedKeys,
+    loading,
+    pageSize,
+    selectedKeys,
+    showSearchForm,
+    total,
+  } = useStore(store);
 
   // 解析列里用具名字符串引用的 slot（如 action）
   const resolvedColumns = (antdColumns ?? []).map((col: any) => {
@@ -275,6 +495,10 @@ function GridView({
 
   const rowSelection: TableProps<any>['rowSelection'] = hasCheckbox
     ? {
+        // checkMethod 返回 false 的行禁用复选框（antd 用 getCheckboxProps 表达）
+        getCheckboxProps: checkMethod
+          ? (row: any) => ({ disabled: !checkMethod({ row }) })
+          : undefined,
         onChange: (keys: any, rows: any) => {
           store.setState((prev) => ({
             ...prev,
@@ -287,9 +511,88 @@ function GridView({
       }
     : undefined;
 
+  /**
+   * 树形表格的展开控制。antd 用受控的 `expandedRowKeys`，
+   * 等价于 vxe 侧写在每行上的 `row.expand` 标记。
+   */
+  const expandable: TableProps<any>['expandable'] = isTree
+    ? {
+        expandedRowKeys: expandedKeys,
+        onExpand: (expanded, record) => {
+          const key = record?.[keyField];
+          if (key === undefined || key === null) return;
+          store.setState((prev) => ({
+            ...prev,
+            expandedKeys: expanded
+              ? [...new Set([...prev.expandedKeys, key as Key])]
+              : prev.expandedKeys.filter((item) => item !== key),
+          }));
+        },
+      }
+    : undefined;
+
+  /** 双击行展开/收起子节点（对应 Vue 侧 gridEvents.cellDblclick） */
+  const onRow = (row: any) => ({
+    onClick: () => {
+      gridEvents?.cellClick?.({ row });
+    },
+    onDoubleClick: () => {
+      if (isTree && row?.children) {
+        const key = row[keyField] as Key;
+        const expanded = !expandedKeys.includes(key);
+        store.setState((prev) => ({
+          ...prev,
+          expandedKeys: expanded
+            ? [...new Set([...prev.expandedKeys, key])]
+            : prev.expandedKeys.filter((item) => item !== key),
+        }));
+      }
+      gridEvents?.cellDblclick?.({ row });
+    },
+  });
+
   const toolbarCtx: GridToolbarContext = {
+    clearCheckboxRow: () => api.grid.clearCheckboxRow(),
     getCheckboxRecords: () => api.grid.getCheckboxRecords(),
   };
+
+  /**
+   * antd Table 的分页与排序都走这一个 onChange（Table 级 onChange 会同时收到
+   * pagination / filters / sorter，若再给 pagination 单独挂 onChange 会触发两次查询）。
+   */
+  function handleTableChange(
+    pagination: any,
+    _filters: any,
+    sorter: any,
+  ) {
+    const list: any[] = Array.isArray(sorter)
+      ? sorter
+      : sorter
+        ? [sorter]
+        : [];
+    // antd 的 'ascend'/'descend' → 后端约定的 'asc'/'desc'
+    const nextSorts: GridSortParam[] = list
+      .filter((item) => item?.order && item?.field)
+      .map((item) => ({
+        field: String(item.field),
+        order: item.order === 'ascend' ? 'asc' : 'desc',
+      }));
+
+    const sortsChanged =
+      JSON.stringify(nextSorts) !== JSON.stringify(store.state.sorts);
+    if (sortsChanged) {
+      store.setState((prev) => ({ ...prev, sorts: nextSorts }));
+      // 远程排序：排序变化后回到第一页重新查询（对应 vxe 的 gridEvents.sortChange）
+      if (remoteSort) {
+        void runQuery(1, pagination?.pageSize ?? store.state.pageSize);
+        return;
+      }
+    }
+    void runQuery(
+      pagination?.current ?? 1,
+      pagination?.pageSize ?? store.state.pageSize,
+    );
+  }
 
   return (
     <div className={cn('h-full rounded-md bg-card', className)}>
@@ -300,6 +603,13 @@ function GridView({
             <div className="mt-2 flex justify-end gap-2">
               <Button
                 onClick={async () => {
+                  // formOptions.handleReset 存在时完全接管（对应 Vue 侧语义），
+                  // 用于「重置时还要清掉表单之外的联动状态」的页面
+                  const customReset = formApi.latestOptions.handleReset;
+                  if (customReset) {
+                    await customReset();
+                    return;
+                  }
                   await formApi.resetForm();
                   await runQuery(1, pageSize);
                 }}
@@ -329,6 +639,11 @@ function GridView({
           <div className="mb-2 flex items-center justify-between">
             <div className="flex-center gap-1 text-[1rem] font-bold">
               {tableTitle}
+              {tableTitleHelp ? (
+                <span className="text-muted-foreground text-xs font-normal">
+                  {tableTitleHelp}
+                </span>
+              ) : null}
             </div>
             <div className="flex items-center gap-2">
               {typeof toolbarTools === 'function'
@@ -346,11 +661,15 @@ function GridView({
           </div>
         ) : null}
 
-        <div className="min-h-0 flex-1">
+        <div
+          className="min-h-0 flex-1"
+          style={minHeight === undefined ? undefined : { minHeight }}
+        >
           <Table
             bordered
             columns={resolvedColumns}
             dataSource={dataSource}
+            expandable={expandable}
             loading={loading}
             locale={{
               emptyText: (
@@ -364,7 +683,6 @@ function GridView({
               pager
                 ? {
                     current,
-                    onChange: (page, size) => runQuery(page, size),
                     pageSize,
                     pageSizeOptions: [10, 20, 30, 50, 100, 200],
                     showQuickJumper: true,
@@ -374,6 +692,13 @@ function GridView({
                     total,
                   }
                 : false
+            }
+            onChange={handleTableChange}
+            onRow={onRow}
+            rowClassName={
+              typeof rowClassName === 'function'
+                ? (row: any) => rowClassName({ row })
+                : rowClassName
             }
             rowKey={keyField}
             rowSelection={rowSelection}
@@ -392,4 +717,22 @@ export const useVbenVxeGrid = useGrid;
 /** 是否有勾选行（对应 adapter/vxe-table.ts 的 vxeCheckboxChecked） */
 export function vxeCheckboxChecked(gridApi: GridApi): boolean {
   return gridApi.grid.getCheckboxRecords().length > 0;
+}
+
+/**
+ * 把排序状态转成后端约定的查询参数（对应 Vue 侧 adapter/vxe-table.ts 的 addSortParams）。
+ *
+ * 后端契约：`orderByColumn` 为逗号分隔的字段名、`isAsc` 为逗号分隔的 asc/desc，
+ * 两者按位置一一对应，支持多字段排序（见 `api/common.ts` 里 PageQuery 的注释）。
+ * 排序为空时**不写这两个参数**，避免后端收到空串。
+ */
+export function addSortParams(
+  params: Record<string, any>,
+  sortList: GridSortParam[],
+) {
+  if (!sortList || sortList.length === 0) {
+    return;
+  }
+  params.orderByColumn = sortList.map((item) => item.field).join(',');
+  params.isAsc = sortList.map((item) => item.order).join(',');
 }

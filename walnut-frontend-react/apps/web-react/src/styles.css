@@ -32,3 +32,114 @@ body {
   color: hsl(var(--primary-hover, var(--primary)));
   text-decoration: underline;
 }
+
+/* 偏好设置页签条：outline 风格（Vue VbenSegmented 观感），非 antd 默认灰底 */
+.vben-pref-segmented.ant-segmented {
+  background: transparent;
+  border: 1px solid hsl(var(--border));
+  padding: 2px;
+}
+.vben-pref-segmented .ant-segmented-item {
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+}
+.vben-pref-segmented .ant-segmented-item-selected {
+  background: hsl(var(--background));
+  color: hsl(var(--primary));
+  box-shadow: 0 0 0 1px hsl(var(--border));
+}
+.vben-pref-segmented .ant-segmented-thumb {
+  background: hsl(var(--background));
+}
+
+/* 页面切换动画（preferences.transition.enable / name），对应 Vue 侧 transition 组件 */
+@keyframes vben-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes vben-fade-slide {
+  from { opacity: 0; transform: translateX(-12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes vben-fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes vben-fade-down {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.page-transition--fade { animation: vben-fade 0.25s ease both; }
+.page-transition--fade-slide { animation: vben-fade-slide 0.25s ease both; }
+.page-transition--fade-up { animation: vben-fade-up 0.25s ease both; }
+.page-transition--fade-down { animation: vben-fade-down 0.25s ease both; }
+
+/* 导航菜单圆角风格（preferences.navigation.styleType = rounded） */
+.vben-menu-rounded .ant-menu-item,
+.vben-menu-rounded .ant-menu-submenu-title {
+  margin-inline: 8px;
+  width: calc(100% - 16px);
+  border-radius: calc(var(--radius) * 1rem);
+}
+
+/* 页签风格（preferences.tabbar.styleType）。chrome 弧形属 B3 自绘，这里先做卡片/_plain/brisk 区分 */
+.vben-tabs--plain .ant-tabs-tab {
+  background: transparent !important;
+  border: none !important;
+}
+.vben-tabs--brisk .ant-tabs-tab {
+  border-radius: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  border-bottom: 2px solid transparent !important;
+}
+.vben-tabs--brisk .ant-tabs-tab-active {
+  border-bottom-color: hsl(var(--primary)) !important;
+}
+.vben-tabs--chrome .ant-tabs-tab {
+  border-radius: calc(var(--radius) * 1rem) calc(var(--radius) * 1rem) 0 0 !important;
+}
+
+/* 侧边栏拖拽调宽条（preferences.sidebar.draggable），对应 Vue layout-ui 右缘拖拽 */
+.vben-sidebar-dragger {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 4px;
+  cursor: col-resize;
+  z-index: 10;
+}
+.vben-sidebar-dragger:hover {
+  background: hsl(var(--primary) / 0.3);
+}
+
+/* 面包屑背景风格（preferences.breadcrumb.styleType = background） */
+.vben-breadcrumb-background {
+  background: hsl(var(--accent));
+  padding: 4px 8px;
+  border-radius: calc(var(--radius) * 1rem);
+}
+
+/* 页面切换顶部进度条（preferences.transition.progress） */
+.vben-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 2px;
+  width: 100%;
+  z-index: 2000;
+  background: hsl(var(--primary));
+  transform-origin: left;
+  animation: vben-progress 0.45s ease-out both;
+}
+@keyframes vben-progress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* 动画预览卡慢速循环（设置抽屉 animation 块，对应 Vue `${name}-slow`） */
+.fade-slow { animation: vben-fade 1.5s ease infinite; }
+.fade-slide-slow { animation: vben-fade-slide 1.5s ease infinite; }
+.fade-up-slow { animation: vben-fade-up 1.5s ease infinite; }
+.fade-down-slow { animation: vben-fade-down 1.5s ease infinite; }

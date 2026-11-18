@@ -1,6 +1,8 @@
 {
   "title": "Preferences",
   "subtitle": "Customize Preferences & Preview in Real Time",
+  "pendingTip": "The component this feature depends on has not been migrated yet; it will be enabled in the shell 1:1 phase",
+  "layoutPendingNote": "Layout switching will be enabled in the shell 1:1 phase (B5); only sidebar navigation is supported now.",
   "enableStickyPreferencesNavigationBar": "Enable sticky preferences navigation bar",
   "disableStickyPreferencesNavigationBar": "Disable sticky preferences navigation bar",
   "resetTip": "Data has changed, click to reset",

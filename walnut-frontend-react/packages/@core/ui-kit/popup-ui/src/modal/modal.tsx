@@ -42,8 +42,13 @@ export function ModalRenderer({
       afterClose={() => api.onClosed()}
       centered={state.centered}
       confirmLoading={state.submitting || state.confirmLoading}
-      destroyOnClose={state.destroyOnClose}
+      // ⚠️ antd 6 把 `destroyOnClose` 改名为 `destroyOnHidden`（旧名已弃用并会告警）。
+      // state 字段名仍保留 `destroyOnClose` 以与 Vue 侧 DrawerState/ModalState 对齐，
+      // 只在这里映射到新的 antd prop（drawer.tsx 同样处理）。
+      destroyOnHidden={state.destroyOnClose}
       footer={state.footer ? undefined : null}
+      // antd 6：`maskClosable` 已弃用，改用 `mask.closable`
+      mask={{ closable: state.closeOnClickModal !== false }}
       okButtonProps={{ disabled: state.confirmDisabled }}
       onCancel={() => api.onCancel()}
       onOk={() => api.onConfirm()}

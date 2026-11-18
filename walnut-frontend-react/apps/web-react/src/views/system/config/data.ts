@@ -1,4 +1,4 @@
-import type { FormSchema } from '@vben-core/form-ui';
+import type { FormSchemaGetter } from '@/adapter/form';
 
 import type { GridColumn } from '@/adapter/grid';
 
@@ -7,8 +7,6 @@ import { getPopupContainer } from '@vben/utils';
 
 import { getDictOptions } from '@/utils/dict';
 import { renderDict } from '@/utils/render';
-
-export type FormSchemaGetter = () => FormSchema[];
 
 export const querySchema: FormSchemaGetter = () => [
   {

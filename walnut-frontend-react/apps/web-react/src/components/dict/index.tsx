@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 import type { DictOption } from '@/store/dict';
 
 import { Spin, Tag } from 'antd';
@@ -21,6 +23,29 @@ export const tagTypes: TagType = {
   success: { color: 'success', label: '成功(success)' },
   warning: { color: 'warning', label: '警告(warning)' },
 };
+
+/** 字典选择使用 { label: ReactNode; value: string }[] */
+interface TagSelectOption {
+  label: ReactNode;
+  value: string;
+}
+
+/**
+ * 回显样式的下拉选项（对应 Vue 侧 components/dict/src/data.tsx 的 tagSelectOptions）。
+ * label 直接渲染成带色的 Tag，用户在表单里看到的就是最终效果。
+ */
+export function tagSelectOptions(): TagSelectOption[] {
+  const selectArray: TagSelectOption[] = [];
+  for (const key of Object.keys(tagTypes)) {
+    const item = tagTypes[key];
+    if (!item) continue;
+    selectArray.push({
+      label: <Tag color={item.color}>{item.label}</Tag>,
+      value: key,
+    });
+  }
+  return selectArray;
+}
 
 export interface DictTagProps {
   dicts?: DictOption[];

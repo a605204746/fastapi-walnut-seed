@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { LOGIN_PATH } from '@vben/constants';
+import { usePreferences } from '@vben/preferences';
 import { useAccessStore } from '@vben/stores';
 
 import { Button, Result, Spin } from 'antd';
@@ -10,6 +11,7 @@ import { $t } from '@/locales';
 import { ensureAccessRoutes } from '@/router/guard';
 
 import { BasicLayout } from './BasicLayout';
+import { PreferencesDrawer, PreferencesFixedButton } from './widgets/preferences';
 
 /**
  * Root 路由组件：鉴权 + 动态路由 bootstrap + 后台外壳。
@@ -22,6 +24,7 @@ import { BasicLayout } from './BasicLayout';
 export function RootLayout() {
   const accessToken = useAccessStore((state) => state.accessToken);
   const isAccessChecked = useAccessStore((state) => state.isAccessChecked);
+  const { preferences, preferencesButtonPosition } = usePreferences();
   const location = useLocation();
   const [error, setError] = useState<null | string>(null);
   const [retryToken, setRetryToken] = useState(0);
@@ -76,5 +79,14 @@ export function RootLayout() {
     );
   }
 
-  return <BasicLayout />;
+  // 偏好抽屉挂在布局之上：切换布局（BasicLayout↔MultiLayout）时不卸载，保持打开状态
+  return (
+    <>
+      <BasicLayout />
+      {preferences.app.enablePreferences && preferencesButtonPosition.fixed ? (
+        <PreferencesFixedButton />
+      ) : null}
+      <PreferencesDrawer />
+    </>
+  );
 }

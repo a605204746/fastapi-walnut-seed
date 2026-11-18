@@ -46,8 +46,9 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
 
       if (userInfo?.realName) {
         getMessageApi()?.notification.success({
-          message: '登录成功',
+          // ⚠️ antd 6 把 notification 的 `message` 改名为 `title`（`message` 已弃用并会告警）
           description: `欢迎回来:${userInfo.realName}`,
+          title: '登录成功',
         });
       }
     } finally {

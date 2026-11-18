@@ -1,8 +1,13 @@
 import type { DictData } from './dict-data-model';
 
+import type { ID, IDS, PageQuery, PageResult } from '@/api/common';
+
+import { commonExport } from '@/api/helper';
 import { request } from '@/lib/request';
 
 enum Api {
+  dictDataExport = '/system/dict/data/export',
+  dictDataList = '/system/dict/data/list',
   root = '/system/dict/data',
 }
 
@@ -13,4 +18,58 @@ enum Api {
  */
 export function dictDataInfo(dictType: string) {
   return request.get<DictData[]>(`${Api.root}/type/${dictType}`);
+}
+
+/**
+ * 字典数据
+ * @param params 查询参数
+ * @returns 字典数据列表
+ */
+export function dictDataList(params?: PageQuery) {
+  return request.get<PageResult<DictData>>(Api.dictDataList, { params });
+}
+
+/**
+ * 导出字典数据
+ * @param data 表单参数
+ * @returns blob
+ */
+export function dictDataExport(data: Partial<DictData>) {
+  return commonExport(Api.dictDataExport, data);
+}
+
+/**
+ * 删除
+ * @param dictIds 字典ID Array
+ * @returns void
+ */
+export function dictDataRemove(dictIds: IDS) {
+  return request.deleteWithMsg<void>(`${Api.root}/${dictIds}`);
+}
+
+/**
+ * 新增
+ * @param data 表单参数
+ * @returns void
+ */
+export function dictDataAdd(data: Partial<DictData>) {
+  return request.postWithMsg<void>(Api.root, data);
+}
+
+/**
+ * 修改
+ * @param data 表单参数
+ * @returns void
+ */
+export function dictDataUpdate(data: Partial<DictData>) {
+  return request.putWithMsg<void>(Api.root, data);
+}
+
+/**
+ * 查询字典数据详细
+ * @param dictCode 字典编码
+ * @returns 字典数据
+ */
+export function dictDetailInfo(dictCode: ID) {
+  return request.get<DictData>(`${Api.root}/${dictCode}`);
 }

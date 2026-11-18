@@ -173,3 +173,5 @@ export const AuthenticationLogin = forwardRef<
     </div>
   );
 });
+
+export default AuthenticationLogin;

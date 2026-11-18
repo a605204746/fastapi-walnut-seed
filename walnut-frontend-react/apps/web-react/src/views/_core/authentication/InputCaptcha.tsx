@@ -56,3 +56,5 @@ export function InputCaptcha({
     </div>
   );
 }
+
+export default InputCaptcha;

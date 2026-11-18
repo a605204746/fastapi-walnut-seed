@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+
 import {
   COLOR_PRESETS,
   updatePreferences,
@@ -12,6 +14,8 @@ import {
 import {
   InspectionPanel,
   Languages,
+  Maximize,
+  Minimize,
   Palette,
   PanelLeft,
   PanelRight,
@@ -172,4 +176,36 @@ export function LanguageToggle() {
 /** 明暗主题切换（对应 widgets/theme-toggle/theme-toggle.vue，tooltip 默认禁用） */
 export function ThemeToggle() {
   return <ThemeButton />;
+}
+
+/**
+ * 全屏切换（对应 widgets/full-screen）。用原生 Fullscreen API，
+ * 并监听 fullscreenchange 同步图标状态（退出全屏可能来自 Esc 键）。
+ */
+export function FullscreenToggle() {
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+
+  function toggle() {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen();
+    } else {
+      void document.documentElement.requestFullscreen();
+    }
+  }
+
+  return (
+    <VbenIconButton onClick={toggle}>
+      {isFullscreen ? (
+        <Minimize className="size-4" />
+      ) : (
+        <Maximize className="size-4" />
+      )}
+    </VbenIconButton>
+  );
 }

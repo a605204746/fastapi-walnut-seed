@@ -1,6 +1,8 @@
 {
   "title": "偏好设置",
   "subtitle": "自定义偏好设置 & 实时预览",
+  "pendingTip": "该功能依赖的组件尚未迁移，将在外壳 1:1 阶段开放",
+  "layoutPendingNote": "布局模式切换将在外壳 1:1 阶段（B5）开放，当前仅支持侧边导航。",
   "enableStickyPreferencesNavigationBar": "开启首选项导航栏吸顶效果",
   "disableStickyPreferencesNavigationBar": "关闭首选项导航栏吸顶效果",
   "resetTitle": "重置偏好设置",

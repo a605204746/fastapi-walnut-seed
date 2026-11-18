@@ -6,11 +6,19 @@ import type {
 } from './types';
 
 import { Store } from '@vben-core/shared/store';
-import { cloneDeep } from '@vben-core/shared/utils';
+import { cloneDeep, mergeWithArrayOverride } from '@vben-core/shared/utils';
 import dayjs from 'dayjs';
+
+import { resolveRuleMessage } from './config';
 
 interface FormState {
   errors: Record<string, string>;
+  /**
+   * schema 版本号。`FormRenderer` 只订阅 store，而 schema 存放在
+   * `latestOptions` 上（非响应式），因此 `updateSchema` 必须 bump 这个计数器
+   * 才能触发重渲染。
+   */
+  revision: number;
   values: Record<string, any>;
 }
 
@@ -20,8 +28,10 @@ function isEmptyValue(value: any): boolean {
   return false;
 }
 
-function normalizeRules(
-  rules: FormSchema['rules'],
+export function normalizeRules(
+  // 允许 null：`dependencies.rules` 可以返回 null 表示「本状态下不校验」
+  // （如用户页的角色字段：新增可为空、编辑必填）
+  rules: FormSchema['rules'] | null,
 ): FormItemRule[] {
   if (!rules) return [];
   if (rules === 'required' || rules === 'selectRequired') {
@@ -50,12 +60,20 @@ export class FormApi {
   /** 最新的表单配置（非响应式，渲染时读取；由 useVbenForm 每次渲染同步） */
   latestOptions: FormProps;
 
+  /** 调用方传入的原始 schema（未叠加 updateSchema 的覆盖层） */
+  private baseSchema: FormSchema[];
+
+  /** `updateSchema` 累积的覆盖层，按 fieldName 索引；每次渲染都会重新叠加到 baseSchema 上 */
+  private readonly schemaOverrides = new Map<string, Partial<FormSchema>>();
+
   private readonly store: Store<FormState>;
 
   constructor(options: FormProps) {
     this.latestOptions = options;
+    this.baseSchema = options.schema ?? [];
     this.store = new Store<FormState>({
       errors: {},
+      revision: 0,
       values: buildDefaults(options.schema ?? []),
     });
   }
@@ -69,16 +87,30 @@ export class FormApi {
     return this.store.state.values;
   }
 
+  /** 把 updateSchema 的覆盖层叠加到基础 schema 上 */
+  private composeSchema(base: FormSchema[]): FormSchema[] {
+    if (this.schemaOverrides.size === 0) return base;
+    return base.map((field) => {
+      const override = this.schemaOverrides.get(field.fieldName);
+      // 与 Vue 侧一致：mergeWithArrayOverride(覆盖值, 原值)，前者胜出、数组整体替换
+      return override
+        ? (mergeWithArrayOverride(override, field) as FormSchema)
+        : field;
+    });
+  }
+
   /** 同步动态配置（schema 变化时不重置已填值） */
   syncOptions(options: FormProps) {
-    const prevSchema = this.latestOptions.schema;
-    this.latestOptions = options;
+    const prevBase = this.baseSchema;
+    const nextBase = options.schema ?? [];
+    this.baseSchema = nextBase;
+    this.latestOptions = { ...options, schema: this.composeSchema(nextBase) };
     // schema 新增字段时补默认值
-    if (options.schema !== prevSchema) {
+    if (nextBase !== prevBase) {
       const values = this.store.state.values;
       let changed = false;
       const next = { ...values };
-      for (const field of options.schema) {
+      for (const field of this.composeSchema(nextBase)) {
         if (!(field.fieldName in next)) {
           next[field.fieldName] =
             field.defaultValue === undefined
@@ -91,6 +123,45 @@ export class FormApi {
         this.store.setState((prev) => ({ ...prev, values: next }));
       }
     }
+  }
+
+  /**
+   * 更新 schema（对应 Vue 侧 form-api.ts 的 `updateSchema`）。
+   *
+   * 业务页大量用它注入异步选项（部门树、字典、岗位下拉等）。语义与 Vue 侧逐条对齐：
+   *
+   * - 每一项都必须带非空 `fieldName`，否则**整批不生效**并报错（Vue 侧同样如此）
+   * - 只更新已存在的字段，**不会新增字段**
+   * - 深合并、数组整体覆盖（`mergeWithArrayOverride`）
+   * - 多次调用**累积**生效
+   *
+   * React 侧差异：schema 不在 store 里，故通过 bump `revision` 触发 FormRenderer 重渲染。
+   */
+  async updateSchema(schema: Partial<FormSchema>[]) {
+    const hasField = schema.every(
+      (item) => 'fieldName' in item && !!item.fieldName,
+    );
+    if (!hasField) {
+      console.error(
+        'All items in the schema array must have a valid `fieldName` property to be updated',
+      );
+      return;
+    }
+
+    for (const item of schema) {
+      const fieldName = item.fieldName as string;
+      const prev = this.schemaOverrides.get(fieldName);
+      this.schemaOverrides.set(
+        fieldName,
+        prev ? (mergeWithArrayOverride(item, prev) as Partial<FormSchema>) : item,
+      );
+    }
+
+    this.latestOptions = {
+      ...this.latestOptions,
+      schema: this.composeSchema(this.baseSchema),
+    };
+    this.store.setState((prev) => ({ ...prev, revision: prev.revision + 1 }));
   }
 
   async getValues(): Promise<Record<string, any>> {
@@ -158,14 +229,26 @@ export class FormApi {
       if (deps?.if && !deps.if(values)) continue;
 
       const value = values[field.fieldName];
-      const rules = normalizeRules(field.rules);
+      // dependencies.rules 是动态规则（随其它字段变化），提供时覆盖 field.rules
+      const effectiveRules = deps?.rules ? deps.rules(values) : field.rules;
+      const rules = normalizeRules(effectiveRules);
       const dynamicRequired = deps?.required ? deps.required(values) : undefined;
+      const label = field.label ?? field.fieldName;
+      // 'required' → 请输入{label}；'selectRequired' → 请选择{label}
+      // （对应 Vue 侧 adapter/form.ts 里 defineRules 的两条国际化规则）
+      const presetMessage = resolveRuleMessage(
+        effectiveRules === 'selectRequired' ? 'selectRequired' : 'required',
+        label,
+      );
+      // selectRequired 把 false 也视为空（Vue 侧 `[false, null, undefined].includes(value)`）
+      const isEmpty =
+        isEmptyValue(value) ||
+        (effectiveRules === 'selectRequired' && value === false);
 
       for (const rule of rules) {
         const isRequired = rule.required || dynamicRequired === true;
-        if (isRequired && isEmptyValue(value)) {
-          errors[field.fieldName] =
-            rule.message ?? `${field.label ?? field.fieldName}不能为空`;
+        if (isRequired && isEmpty) {
+          errors[field.fieldName] = rule.message ?? presetMessage;
           break;
         }
         if (

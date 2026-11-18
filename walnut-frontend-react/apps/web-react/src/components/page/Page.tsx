@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 
+import { usePreferences } from '@vben/preferences';
 import { CSS_VARIABLE_LAYOUT_CONTENT_HEIGHT } from '@vben-core/shared/constants';
 import { cn } from '@vben-core/shared/utils';
 
@@ -28,6 +29,7 @@ export function Page({
   heightOffset = 0,
   title,
 }: PageProps) {
+  const { preferences } = usePreferences();
   const hasHeader = title || description;
 
   const contentStyle: CSSProperties = autoContentHeight
@@ -39,8 +41,14 @@ export function Page({
       }
     : {};
 
+  // 内容紧凑模式（app.contentCompact = compact）：限宽 + 居中，对应 Vue 侧 content 偏好
+  const compactStyle: CSSProperties =
+    preferences.app.contentCompact === 'compact'
+      ? { marginInline: 'auto', maxWidth: preferences.app.contentCompactWidth }
+      : {};
+
   return (
-    <div className="relative flex min-h-full flex-col">
+    <div className="relative flex min-h-full flex-col" style={compactStyle}>
       {hasHeader ? (
         <div className="border-border bg-card relative flex items-end border-b px-6 py-4">
           <div className="flex-auto">

@@ -97,3 +97,5 @@ export const ConfigModal = forwardRef<ConfigModalHandle, ConfigModalProps>(
     );
   },
 );
+
+export default ConfigModal;

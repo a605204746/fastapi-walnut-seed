@@ -1,4 +1,4 @@
-import type { ComponentType } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 
 /**
  * 表单字段组件类型：可以是注册表里的字符串名（'Input'/'Select'/...），
@@ -24,10 +24,40 @@ export interface FormFieldDependencies {
   /** 为 false 时字段不渲染、其值也不参与提交 */
   if?: (values: Record<string, any>) => boolean;
   required?: (values: Record<string, any>) => boolean;
+  /**
+   * 动态校验规则（对应 Vue 侧 `dependencies.rules`）。
+   *
+   * Vue 版返回 zod schema（`z.string().min(1, '请输入路由地址')`），React 版返回
+   * `FormItemRule`；提供时**覆盖** `FormSchema.rules`。用于「校验规则随其它字段
+   * 变化」的场景，例如菜单管理的路由地址：外链时必须 `http(s)://` 开头，
+   * 非外链时必须不带前导 `/`。
+   */
+  rules?: (
+    values: Record<string, any>,
+  ) =>
+    | 'required'
+    | 'selectRequired'
+    | FormItemRule
+    | FormItemRule[]
+    | null
+    | undefined;
   /** 为 false 时字段隐藏但保留值 */
   show?: (values: Record<string, any>) => boolean;
   triggerFields: string[];
 }
+
+/**
+ * `renderComponentContent` 的返回值：键是插槽名，值是节点或返回节点的函数。
+ *
+ * - `default`：**替换整个控件**（对应 Vue 的默认插槽，如角色页把 TreeSelect
+ *   换成自绘的 `TreeSelectPanel`）
+ * - 其它键（`addonBefore` / `addonAfter` / `prefix` / `suffix` …）：作为 prop
+ *   合并给控件（对应 Vue 的具名插槽 → antd 的同名 prop）
+ */
+export type FormComponentContent = Record<
+  string,
+  ((attrs: Record<string, any>) => ReactNode) | ReactNode
+>;
 
 export interface FormSchema {
   /** 组件名（查注册表）或 React 组件 */
@@ -41,15 +71,26 @@ export interface FormSchema {
   dependencies?: FormFieldDependencies;
   fieldName: string;
   formItemClass?: string;
+  /** label 旁的帮助提示（对应 Vue 侧 FormSchema.help，渲染为 Tooltip） */
+  help?: string;
   hideLabel?: boolean;
   label?: string;
   labelWidth?: number;
   modelPropName?: string;
+  /**
+   * 渲染控件的附加内容 / 替换控件本体（对应 Vue 侧同名属性）。
+   * 参数是当前表单值，返回插槽名 → 节点的映射，详见 `FormComponentContent`。
+   */
+  renderComponentContent?: (
+    values: Record<string, any>,
+  ) => FormComponentContent;
   rules?: 'required' | 'selectRequired' | FormItemRule | FormItemRule[];
 }
 
 export interface FormCommonConfig {
   componentProps?: Record<string, any>;
+  /** 所有表单项共用的容器 class（字段级 `formItemClass` 优先级更高） */
+  formItemClass?: string;
   hideLabel?: boolean;
   hideRequiredMark?: boolean;
   labelWidth?: number;
@@ -67,6 +108,19 @@ export interface FormProps {
     values: Record<string, any>,
     changed: Record<string, any>,
   ) => void;
+  /**
+   * 自定义「重置」行为（对应 Vue 侧 FormProps.handleReset）。
+   *
+   * 提供后**完全接管**重置：表格适配层不再执行默认的
+   * `resetForm() + 重新查询`。用于「重置时还要清掉表单之外的联动状态」的场景，
+   * 例如 `system/post`、`system/user` 页需要在重置时一并清空左侧部门树的选中。
+   */
+  handleReset?: () => Promise<void> | void;
+  /**
+   * 布局方向（对应 Vue 侧 FormProps.layout）。
+   * `vertical` = label 在控件上方；默认 `horizontal` = label 在左、宽度取 labelWidth。
+   */
+  layout?: 'horizontal' | 'vertical';
   schema: FormSchema[];
   showDefaultActions?: boolean;
   wrapperClass?: string;

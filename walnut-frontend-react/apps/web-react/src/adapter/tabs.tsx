@@ -1,18 +1,21 @@
 import type { MenuProps } from 'antd';
+import type { WheelEvent as ReactWheelEvent } from 'react';
 
 import type { RouteHandle, TabDefinition } from '@vben-core/typings';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { usePreferences } from '@vben/preferences';
 import { getTabKey, useTabbarStore } from '@vben/stores';
-import { VbenIcon } from '@vben-core/shadcn-ui';
+import { VbenIcon, VbenIconButton } from '@vben-core/shadcn-ui';
 import { Dropdown, Tabs } from 'antd';
+import { Ellipsis, Maximize2, Minimize2, RotateCw } from 'lucide-react';
 import { useLocation, useMatches, useNavigate } from 'react-router';
 import { useShallow } from 'zustand/react/shallow';
 
 import { $t } from '@/locales';
 import { mergeMatchMeta } from '@/router/route-tree';
+import { useUiStore } from '@/store/ui';
 
 import './tabs.css';
 
@@ -71,6 +74,12 @@ export function VbenTabs() {
   const closeTab = useTabbarStore((state) => state.closeTab);
   const openTabInNewWindow = useTabbarStore((state) => state.openTabInNewWindow);
   const toggleTabPin = useTabbarStore((state) => state.toggleTabPin);
+  const sortTabs = useTabbarStore((state) => state.sortTabs);
+  const refresh = useUiStore((state) => state.refresh);
+  const maximized = useUiStore((state) => state.maximized);
+  const toggleMaximized = useUiStore((state) => state.toggleMaximized);
+  const dragIndexRef = useRef<null | number>(null);
+  const navRef = useRef<HTMLDivElement>(null);
 
   // selectTabs 每次返回新数组，必须用 useShallow 做浅比较，否则任何 store 变化都会重渲染
   const tabs = useTabbarStore(useShallow((state) => state.getTabs()));
@@ -95,6 +104,38 @@ export function VbenTabs() {
     closeOtherTabs(currentTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // `tabbar.maxCount`：超出上限时关掉最旧的非常驻、非当前页签
+  useEffect(() => {
+    const max = preferences.tabbar.maxCount;
+    if (!max || max <= 0) return;
+    const list = useTabbarStore.getState().getTabs();
+    if (list.length <= max) return;
+    const victim = list.find(
+      (tab) => !tab.meta?.affixTab && getTabKey(tab) !== activeKey,
+    );
+    if (victim) closeTab(victim, activeKey);
+  }, [tabs.length, preferences.tabbar.maxCount, activeKey, closeTab]);
+
+  /** 滚轮横滚（tabbar.wheelable） */
+  function handleWheel(e: ReactWheelEvent) {
+    if (!preferences.tabbar.wheelable) return;
+    const wrap = navRef.current?.querySelector(
+      '.ant-tabs-nav-wrap',
+    ) as HTMLElement | null;
+    if (wrap) wrap.scrollLeft += e.deltaY;
+  }
+
+  function handleDragStart(index: number) {
+    dragIndexRef.current = index;
+  }
+
+  function handleDrop(index: number) {
+    const from = dragIndexRef.current;
+    dragIndexRef.current = null;
+    if (from === null || from === index) return;
+    sortTabs(from, index);
+  }
 
   function goToTab(key: string) {
     if (key !== activeKey) {
@@ -182,13 +223,16 @@ export function VbenTabs() {
 
   return (
     <div
-      className="vben-tabs bg-header border-border shrink-0 border-b"
+      className={`vben-tabs vben-tabs--${preferences.tabbar.styleType} bg-header border-border flex shrink-0 items-center border-b`}
+      onWheel={handleWheel}
+      ref={navRef}
       style={{ '--tabbar-height': `${preferences.tabbar.height}px` } as never}
     >
+      <div className="min-w-0 flex-1">
       <Tabs
         activeKey={activeKey}
         hideAdd
-        items={tabs.map((tab) => {
+        items={tabs.map((tab, index) => {
           const key = tab.key ?? getTabKey(tab);
           const affix = tab.meta?.affixTab ?? false;
           return {
@@ -202,7 +246,20 @@ export function VbenTabs() {
                 }}
                 trigger={['contextMenu']}
               >
-                <span className="flex items-center gap-1">
+                <span
+                  className="flex items-center gap-1"
+                  draggable={preferences.tabbar.draggable}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDragStart={() => handleDragStart(index)}
+                  onDrop={() => handleDrop(index)}
+                  onMouseDown={(e) => {
+                    // 中键关闭（tabbar.middleClickToClose）
+                    if (e.button === 1 && preferences.tabbar.middleClickToClose) {
+                      e.preventDefault();
+                      handleClose(tab);
+                    }
+                  }}
+                >
                   {preferences.tabbar.showIcon && tab.meta?.icon ? (
                     <VbenIcon className="size-3.5" icon={tab.meta.icon} />
                   ) : null}
@@ -226,6 +283,53 @@ export function VbenTabs() {
         size="small"
         type="editable-card"
       />
+      </div>
+      {/* 页签栏右侧工具：刷新 / 更多 / 最大化（tabbar.showRefresh / showMore / showMaximize） */}
+      <div className="flex shrink-0 items-center gap-0.5 px-1.5">
+        {preferences.tabbar.showRefresh ? (
+          <VbenIconButton onClick={refresh}>
+            <RotateCw className="size-4" />
+          </VbenIconButton>
+        ) : null}
+        {preferences.tabbar.showMore ? (
+          <Dropdown
+            menu={{
+              items: [
+                {
+                  key: 'close-other',
+                  label: $t('preferences.tabbar.contextMenu.closeOther'),
+                },
+                {
+                  key: 'close-all',
+                  label: $t('preferences.tabbar.contextMenu.closeAll'),
+                },
+              ],
+              onClick: ({ key }) => {
+                if (key === 'close-all') {
+                  const target = closeAllTabs();
+                  if (target) navigate(target);
+                } else {
+                  closeOtherTabs(currentTab);
+                }
+              },
+            }}
+            trigger={['click']}
+          >
+            <VbenIconButton>
+              <Ellipsis className="size-4" />
+            </VbenIconButton>
+          </Dropdown>
+        ) : null}
+        {preferences.tabbar.showMaximize ? (
+          <VbenIconButton onClick={toggleMaximized}>
+            {maximized ? (
+              <Minimize2 className="size-4" />
+            ) : (
+              <Maximize2 className="size-4" />
+            )}
+          </VbenIconButton>
+        ) : null}
+      </div>
     </div>
   );
 }

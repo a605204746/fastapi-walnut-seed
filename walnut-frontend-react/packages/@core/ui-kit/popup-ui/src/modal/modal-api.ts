@@ -3,6 +3,11 @@ import { Store } from '@vben-core/shared/store';
 export interface ModalState {
   centered?: boolean;
   class?: string;
+  /**
+   * 点击遮罩是否关闭（对应 Vue 侧 ModalProps.closeOnClickModal）。
+   * 默认 true；用户导入 / 重置密码这类弹窗会置 false 防误关。
+   */
+  closeOnClickModal?: boolean;
   confirmDisabled?: boolean;
   confirmLoading?: boolean;
   contentClass?: string;
@@ -66,6 +71,7 @@ export class ModalApi {
     const defaultState: ModalState = {
       centered: false,
       class: '',
+      closeOnClickModal: true,
       confirmDisabled: false,
       confirmLoading: false,
       contentClass: '',

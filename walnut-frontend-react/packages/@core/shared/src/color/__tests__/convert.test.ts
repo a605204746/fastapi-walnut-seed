@@ -43,6 +43,22 @@ describe('color conversion functions', () => {
     const expectedRgba = 'rgba(187, 0, 255, 0.92)';
     expect(convertToRgb(color)).toEqual(expectedRgba);
   });
+
+  // 回归：CSS Color 4 空格语法 + 斜杠透明度（设计令牌 --overlay 的写法）。
+  // 此前 TinyColor 解析失败退化成不透明 rgb(0,0,0)，导致 Drawer/Modal 遮罩纯黑盖住应用。
+  it('should preserve alpha for CSS Color 4 space syntax with slash alpha', () => {
+    expect(convertToRgb('hsl(0 0% 0% / 45%)')).toEqual('rgba(0, 0, 0, 0.45)');
+    expect(convertToRgb('hsl(0deg 0% 0% / 40%)')).toEqual('rgba(0, 0, 0, 0.4)');
+    expect(convertToRgb('hsl(215 100% 54% / 0.5)')).toEqual(
+      convertToRgb('hsla(215, 100%, 54%, 0.5)'),
+    );
+  });
+
+  it('should parse CSS Color 4 space syntax without alpha as opaque', () => {
+    expect(convertToRgb('hsl(215 100% 54%)')).toEqual(
+      convertToRgb('hsl(215, 100%, 54%)'),
+    );
+  });
 });
 
 describe('isValidColor', () => {

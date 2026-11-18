@@ -24,21 +24,20 @@ const DIFF_DIR = path.join(ARTIFACTS, 'diff');
  *   真实 header(50) + tabbar(38) 补上后，React 侧元素截图从 1024x688 变为 1024x599，
  *   与 Vue golden 的 1024x600 只差 1px。剩下的 5.245% 纯粹是表格自身的渲染差异，
  *   要压到 1.5% 只能靠 antd Table 主题覆盖层（Spec §7.1 风险1 决策 (a)）。
- * - shell / shell-dark：阶段 ⑥-a 新增的整页外壳门禁，实测 9.316% / 4.719%，
- *   阈值取实测值上浮到 10% / 5.5% 作为**回归基线**（防止后续改动把外壳改得更歪），
- *   不是验收目标。差异集中在四处，即 ⑥-b 的施工清单：
- *   1. 顶栏右侧 widget 群——Vue 有全局搜索/通知/全屏/偏好设置/锁屏等，React 只有主题+语言+用户
- *   2. 页签形状——Vue 是自绘 chrome 弧形页签，React 暂用 antd card 页签
- *   3. 菜单项排版与 logo 区——Vue 自绘 menu-ui，React 暂用 antd Menu
- *   4. 折叠按钮位置——Vue 贴在侧边栏右缘，React 暂放顶栏左侧
- *   ⑥-b 逐项对齐后这两个阈值应持续下调。
+ * - shell / shell-dark：阶段 ⑥-a 新增的整页外壳门禁。
+ *   历史：⑥-a 实测 9.316% / 4.719% → 2026-11-15 修掉「浅色主题下顶栏渲染成 antd
+ *   默认深蓝黑 #001529」的 bug 后（根因：Tailwind v4 utilities 在 @layer 内、antd
+ *   CSS-in-JS 无层，无层打赢有层；改走 ConfigProvider 的 Layout 组件 token）
+ *   实测降到 **4.753% / 4.464%**，即那条深色横带曾占 shell 差异的一半。
+ *   阈值据此收紧到 5.0% / 4.6% 作为回归基线；剩余差异集中在页签弧形 chrome 与
+ *   菜单排版（⑥-b 的 B2/B3），继续自绘后应再下调。
  */
 const THRESHOLDS: Record<string, number> = {
   'config': 0.06,
   'login-dark': 0.003,
   'login-light': 0.003,
-  'shell': 0.1,
-  'shell-dark': 0.055,
+  'shell': 0.05,
+  'shell-dark': 0.046,
 };
 
 const NAMES = Object.keys(THRESHOLDS);

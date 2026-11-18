@@ -35,3 +35,5 @@ export function OAuthLogin() {
     </div>
   );
 }
+
+export default OAuthLogin;

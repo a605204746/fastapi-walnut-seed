@@ -35,6 +35,10 @@ export function useAntdDesignTokens() {
     const radius = Number.parseFloat(
       rootStyles.getPropertyValue('--radius'),
     );
+    // ⚠️ 不要把 theme.fontSize 喂给 antd 的 fontSize token：Vue 侧的
+    // useAntdDesignTokens 只喂 borderRadius + 颜色，字号偏好只作用于自绘组件
+    // （--font-size-base / --menu-font-size）。喂了会让 antd 组件整体变大，
+    // 像素门禁实测 login 差异从 0.277% 跳到 1.325%（回归）。
 
     return {
       borderRadius: Number.isFinite(radius) ? radius * 16 : undefined,
@@ -56,5 +60,45 @@ export function useAntdDesignTokens() {
     };
     // 只在 theme 变化时重读：CSS 变量由 updateCSSVariables 同步写好，
     // 而它正是被 theme 分支触发的。
+  }, [theme]);
+}
+
+/**
+ * antd **组件级** token（与 {@link useAntdDesignTokens} 的全局 token 配套）。
+ *
+ * ⚠️ 为什么必须有这一段：antd `Layout` 的 `headerBg` / `siderBg` 默认是
+ * `#001529`（深蓝黑），而外壳写的是 Tailwind 的 `bg-header` / `bg-sidebar`。
+ * Tailwind v4 的 utilities 在 `@layer utilities` 里，antd 的 CSS-in-JS **不在任何层**，
+ * 按 cascade 规则无层样式打赢有层样式 —— 于是浅色主题下顶栏一直是深蓝黑
+ * （侧边栏因为碰巧给了 `theme="light"` 才幸免）。这类「Tailwind 背景色 vs antd
+ * 组件默认背景色」的冲突无法靠加 class 解决，只能走 antd 自己的 token 通道。
+ */
+export function useAntdComponentTokens() {
+  const { preferences } = usePreferences();
+  const { theme } = preferences;
+
+  return useMemo(() => {
+    const rootStyles = getComputedStyle(document.documentElement);
+    const readColor = (variable: string) => {
+      const triplet = rootStyles.getPropertyValue(variable).trim();
+      return triplet ? convertToRgb(`hsl(${triplet})`) : undefined;
+    };
+
+    return {
+      Layout: {
+        bodyBg: readColor('--background-deep'),
+        headerBg: readColor('--header'),
+        siderBg: readColor('--sidebar'),
+        triggerBg: readColor('--sidebar-deep'),
+        triggerColor: readColor('--foreground'),
+      },
+      Menu: {
+        // 侧边栏菜单底色跟随 sidebar，避免 antd Menu 自带白底盖住半暗侧边栏
+        darkItemBg: readColor('--sidebar'),
+        itemBg: 'transparent',
+        subMenuItemBg: 'transparent',
+      },
+    };
+    // 理由同 useAntdDesignTokens
   }, [theme]);
 }

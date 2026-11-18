@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 
-import { useAntdDesignTokens } from '@vben/hooks';
+import { useAntdComponentTokens, useAntdDesignTokens } from '@vben/hooks';
 import { usePreferences } from '@vben/preferences';
 import { App as AntdApp, ConfigProvider, theme as antdTheme } from 'antd';
 import enUS from 'antd/locale/en_US';
@@ -10,6 +10,7 @@ import 'dayjs/locale/zh-cn';
 import { RouterProvider } from 'react-router';
 
 import { router } from './router';
+import { ErrorBoundary } from './components/error-boundary';
 import { initMessageApi, type MessageApiLike } from './services/message';
 
 /**
@@ -32,6 +33,9 @@ function MessageBridge() {
 export function App() {
   const { isDark, preferences } = usePreferences();
   const token = useAntdDesignTokens();
+  // Layout / Menu 的组件级 token：修掉「浅色主题下顶栏是 antd 默认深蓝黑」的问题，
+  // 详见 useAntdComponentTokens 的注释（Tailwind 有层样式打不过 antd 无层样式）
+  const components = useAntdComponentTokens();
 
   const themeConfig = useMemo(() => {
     const algorithm = [
@@ -40,8 +44,8 @@ export function App() {
     if (preferences.app.compact) {
       algorithm.push(antdTheme.compactAlgorithm);
     }
-    return { algorithm, token };
-  }, [isDark, preferences.app.compact, token]);
+    return { algorithm, components, token };
+  }, [components, isDark, preferences.app.compact, token]);
 
   const isEn = preferences.app.locale === 'en-US';
 
@@ -50,10 +54,16 @@ export function App() {
   }, [isEn]);
 
   return (
-    <ConfigProvider locale={isEn ? enUS : zhCN} theme={themeConfig}>
+    <ConfigProvider
+      locale={isEn ? enUS : zhCN}
+      theme={themeConfig}
+      wave={{ disabled: preferences.theme.buttonWaveMode === 'Disabled' }}
+    >
       <AntdApp>
         <MessageBridge />
-        <RouterProvider router={router} />
+        <ErrorBoundary>
+          <RouterProvider router={router} />
+        </ErrorBoundary>
       </AntdApp>
     </ConfigProvider>
   );

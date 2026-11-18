@@ -81,3 +81,11 @@ export function authBinding(source: string, tenantId: string) {
 export function authCallback(data: AuthApi.OAuthLoginParams) {
   return request.post<void>('/auth/social/callback', data);
 }
+
+/**
+ * 取消绑定
+ * @param id id
+ */
+export function authUnbinding(id: string) {
+  return request.deleteWithMsg<void>(`/auth/unlock/${id}`);
+}
