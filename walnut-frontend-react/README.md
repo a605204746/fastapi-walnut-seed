@@ -2,8 +2,12 @@
 
 WalnutSeed 的 **React 版前端**，与 `walnut-frontend`（Vue 3 / Vben 5）并存，共用同一套后端接口契约。
 
-> 当前进度：**迁移阶段 ①（骨架 + 内核搬运）、阶段 ②（构建基建 + Tailwind + 主题系统）已完成**。
-> 完整的逐文件迁移计划见 [`../docs/frontend/05-React迁移-逐文件清单.md`](../docs/frontend/05-React迁移-逐文件清单.md)。
+> 当前进度：**迁移阶段 ①–⑤、⑥-a（可用后台外壳）已完成，A1 通路 + A2 全部 7 页 + A3 的 user 页已落地，总体 ≈50%**。
+> 登录 → 动态菜单 → 运行时路由注入 → 后台外壳 → 多页签 → CRUD 全链路已跑通；
+> 业务页覆盖 **12/14**（后端菜单下发的 14 个 `component` 中，仅剩 `system/role` 与 `system/notice`）。
+>
+> - **进度评估与后续排期**见 [`../docs/frontend/06-React迁移-总计划与进度.md`](../docs/frontend/06-React迁移-总计划与进度.md)（§9 = A1、§10 = A2/A3 实施记录）
+> - 逐文件迁移分类与 ①–⑥-a 实施记录见 [`../docs/frontend/05-React迁移-逐文件清单.md`](../docs/frontend/05-React迁移-逐文件清单.md)
 
 ## 技术栈
 

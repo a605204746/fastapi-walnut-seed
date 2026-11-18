@@ -11,6 +11,8 @@
 - [权限与动态路由](./frontend/02-权限与动态路由.md)
 - [接口加解密](./frontend/03-接口加解密.md)
 - [国际化](./frontend/04-国际化.md)
+- [React 迁移逐文件清单](./frontend/05-React迁移-逐文件清单.md)
+- [React 迁移总计划与进度](./frontend/06-React迁移-总计划与进度.md)
 
 ### Python 后端
 
