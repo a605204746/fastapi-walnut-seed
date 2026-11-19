@@ -1,0 +1,82 @@
+name: React frontend
+on:
+  pull_request:
+    paths: ['walnut-frontend-react/**', '.github/workflows/frontend-react-ci.yml', 'docker/react/**']
+  push:
+    paths: ['walnut-frontend-react/**', '.github/workflows/frontend-react-ci.yml', 'docker/react/**']
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: walnut-frontend-react
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: walnut-frontend-react/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: walnut-frontend-react/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm --filter @walnut-seed/e2e-visual exec playwright install --with-deps chromium
+      - name: Browser acceptance
+        run: |
+          pnpm dev > /tmp/react-vite.log 2>&1 &
+          for attempt in $(seq 1 60); do curl -fsS http://localhost:8020/auth/login > /dev/null && break; sleep 1; done
+          pnpm --filter @walnut-seed/e2e-visual exec playwright test specs/migration.spec.ts specs/layout.spec.ts specs/session.spec.ts
+      - name: Production preview acceptance
+        run: |
+          pnpm --filter @walnut-seed/web-react exec vite preview --host 127.0.0.1 --port 18020 > /tmp/react-preview.log 2>&1 &
+          for attempt in $(seq 1 60); do curl -fsS http://127.0.0.1:18020/auth/login > /dev/null && break; sleep 1; done
+          PRODUCTION_BASE=http://127.0.0.1:18020 pnpm --filter @walnut-seed/e2e-visual exec playwright test specs/production.spec.ts --output=artifacts/production-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: react-browser-results
+          path: |
+            walnut-frontend-react/e2e/visual/artifacts/test-results
+            walnut-frontend-react/e2e/visual/artifacts/production-results
+            walnut-frontend-react/e2e/visual/report
+
+  visual:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: walnut-frontend-react
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: walnut-frontend-react/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir ../walnut-frontend install --frozen-lockfile
+      - run: pnpm --filter @walnut-seed/e2e-visual exec playwright install chromium
+      - name: Compare Vue and React on the same browser and OS
+        shell: pwsh
+        run: |
+          Start-Process -WindowStyle Hidden -FilePath cmd.exe -ArgumentList '/c pnpm dev' -WorkingDirectory (Get-Location).Path
+          Start-Process -WindowStyle Hidden -FilePath cmd.exe -ArgumentList '/c pnpm --filter @walnut-seed/web-admin dev' -WorkingDirectory (Resolve-Path ../walnut-frontend).Path
+          foreach ($port in @(8010,8020)) {
+            foreach ($attempt in 1..60) {
+              try { Invoke-WebRequest "http://localhost:$port/auth/login" -UseBasicParsing | Out-Null; break } catch { Start-Sleep -Seconds 1 }
+            }
+          }
+          pnpm --filter @walnut-seed/e2e-visual capture:golden
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          pnpm --filter @walnut-seed/e2e-visual capture:react
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          pnpm --filter @walnut-seed/e2e-visual compare
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vue-react-pixel-comparison
+          path: walnut-frontend-react/e2e/visual/artifacts
