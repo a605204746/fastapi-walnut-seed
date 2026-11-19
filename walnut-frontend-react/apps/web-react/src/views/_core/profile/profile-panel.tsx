@@ -3,10 +3,10 @@ import type { DescriptionsProps } from 'antd';
 import type { UserProfile } from '@/api/system/profile/model';
 
 import { usePreferences } from '@vben/preferences';
-import { Card, Descriptions, Tag, Tooltip, Upload } from 'antd';
+import { Card, Descriptions, Tag, Tooltip } from 'antd';
 
+import { CropperAvatar } from '@/components/cropper';
 import { userUpdateAvatar } from '@/api/system/profile';
-import { getMessageApi } from '@/services/message';
 
 export interface ProfilePanelProps {
   onUploadFinish?: () => void;
@@ -14,14 +14,7 @@ export interface ProfilePanelProps {
 }
 
 /**
- * 个人资料卡片（对应 Vue 侧 views/_core/profile/profile-panel.vue）。
- *
- * 与 Vue 版的差异：
- * - 头像 Vue 用 `CropperAvatar`（裁剪 + 上传，768 行）；React 侧裁剪组件属
- *   D 类待迁项（`react-cropper`），本轮先用 antd `Upload` 直传原图，
- *   **没有裁剪交互**，接口调用与刷新链路（userUpdateAvatar → 重载 profile →
- *   刷新全局 userInfo）与 Vue 完全一致。裁剪 UI 列入 B/C 阶段。
- * - 「今日诗词」仍是外链 SVG（jinrishici），暗色下换白色字体，与 Vue 一致。
+ * 个人资料卡片；头像通过 CropperAvatar 裁剪为 PNG，再上传并刷新资料。
  */
 export function ProfilePanel({ onUploadFinish, profile }: ProfilePanelProps) {
   const { isDark, preferences } = usePreferences();
@@ -56,37 +49,13 @@ export function ProfilePanel({ onUploadFinish, profile }: ProfilePanelProps) {
       ]
     : [];
 
-  async function handleUpload(file: File) {
-    try {
-      await userUpdateAvatar({ file, filename: file.name, name: file.name });
-      getMessageApi()?.message.success('头像更新成功');
-      onUploadFinish?.();
-    } catch (error) {
-      console.error(error);
-    }
-  }
-
   return (
     <Card className="h-full lg:w-1/3" loading={!profile}>
       {profile ? (
         <div className="flex flex-col items-center gap-[24px]">
           <div className="flex flex-col items-center gap-[20px]">
             <Tooltip title="点击上传头像">
-              <Upload
-                accept="image/*"
-                beforeUpload={(file) => {
-                  void handleUpload(file);
-                  // 阻止 antd 自动上传，走自定义逻辑
-                  return false;
-                }}
-                showUploadList={false}
-              >
-                {/* eslint-disable-next-line jsx-a11y/alt-text */}
-                <img
-                  className="size-[120px] cursor-pointer rounded-full object-cover"
-                  src={avatar}
-                />
-              </Upload>
+              <CropperAvatar src={avatar} upload={file => userUpdateAvatar({ file, filename: file.name, name: file.name })} onSaved={onUploadFinish} />
             </Tooltip>
             <div className="flex flex-col items-center gap-[8px]">
               <span className="text-foreground text-xl font-bold">
