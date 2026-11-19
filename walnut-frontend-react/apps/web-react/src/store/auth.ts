@@ -10,6 +10,7 @@ import { create } from 'zustand';
 
 import { getMessageApi } from '@/services/message';
 import { useDictStore } from './dict';
+import { useTenantStore } from './tenant';
 
 interface AuthState {
   loginLoading: boolean;
@@ -86,6 +87,7 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       console.error(error);
     } finally {
       resetAllStores();
+      useTenantStore.getState().setSelected(undefined);
       useAccessStore.getState().setLoginExpired(false);
       if (redirect) {
         const current = window.location.pathname + window.location.search;
