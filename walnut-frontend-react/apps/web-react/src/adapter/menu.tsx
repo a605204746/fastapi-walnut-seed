@@ -3,6 +3,9 @@ import type { MenuProps } from 'antd';
 
 import { useMemo } from 'react';
 
+import { usePreferences } from '@vben/preferences';
+import { cn } from '@vben-core/shared/utils';
+
 import { VbenIcon } from '@vben-core/shadcn-ui';
 import { Menu } from 'antd';
 
@@ -64,13 +67,15 @@ export interface VbenMenuProps extends Omit<MenuProps, 'items' | 'onSelect'> {
  * 未移植：`badge` / `badgeType` / `badgeVariants` 徽标（当前后端菜单无此数据），
  * 以及 `activeIcon`（选中态换图标）。
  */
-export function VbenMenu({ menus, onMenuSelect, ...rest }: VbenMenuProps) {
+export function VbenMenu({ className, menus, onMenuSelect, ...rest }: VbenMenuProps) {
+  const { preferences } = usePreferences();
   const items = useMemo(() => toAntdMenuItems(menus), [menus]);
   const index = useMemo(() => buildMenuIndex(menus), [menus]);
 
   return (
     <Menu
       {...rest}
+      className={cn('vben-menu', preferences.navigation.styleType === 'rounded' && 'vben-menu-rounded', className)}
       items={items}
       onSelect={({ key }) => {
         const menu = index.get(key);
