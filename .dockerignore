@@ -1,0 +1,10 @@
+.git
+**/node_modules
+**/dist
+**/artifacts
+**/report
+docker/volumes
+walnut-backend-java
+walnut-backend-python
+walnut-backend-go
+walnut-frontend
