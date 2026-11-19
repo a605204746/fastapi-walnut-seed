@@ -1,23 +1,25 @@
-/**
- * 对应 Vue 侧 `views/system/user/authRole.vue` —— **占位页，无实际业务意义**。
- *
- * 存在理由：后端 `sys_menu.component` 里有一行 `system/user/authRole`
- * （菜单「分配角色」，路径 `user-auth/role/:userId`，`hidden: true`），
- * `generateRoutesByBackend` 会按 `/system/user/authRole.tsx` 精确查 pageMap，
- * 查不到就退化成 `NotFoundComponent` 并在控制台报「未找到对应组件」。
- * Vue 侧同样是为此保留该文件（见迁移清单 §12 的「不可删」警告）。
- *
- * ⚠️ 文件必须有 `export default`：`createLazyPageMap` 用 `React.lazy` 装载
- * `import.meta.glob('../views/**\/*.tsx')`，缺 default export 只会在渲染时炸，
- * 类型检查发现不了（清单 §16.4③）。
- */
-export function UserAuthRole() {
-  return (
-    <div>
-      ele版本会使用这个文件 只是为了不报错`未找到对应组件`才新建的这个文件
-      无实际意义
-    </div>
-  );
+import { useEffect, useState } from 'react';
+import { Button, Card, Descriptions, Space, Spin, Table } from 'antd';
+import { useNavigate, useParams } from 'react-router';
+import type { Role } from '@/api/system/role/model';
+import { getUserAuthRole, userAuthRoleUpdate } from '@/api/system/user';
+import { Access } from '@/components/access/Access';
+import { Page } from '@/components/page/Page';
+export default function UserAuthRole() {
+  const { userId = '' } = useParams();
+  const [data, setData] = useState<{ user: any; roles: Role[] }>();
+  const [selected, setSelected] = useState<React.Key[]>([]);
+  const [saving, setSaving] = useState(false);
+  const navigate = useNavigate();
+  useEffect(() => {
+    let cancelled = false;
+    void getUserAuthRole(userId).then((result: any) => { if (!cancelled) { setData(result); setSelected((result.roles ?? []).filter((role: Role) => role.flag).map((role: Role) => role.id)); } });
+    return () => { cancelled = true; };
+  }, [userId]);
+  async function save() { setSaving(true); try { await userAuthRoleUpdate(userId, selected.map(Number)); navigate('/system/user'); } finally { setSaving(false); } }
+  return <Page><Card title="分配角色"><Spin spinning={!data}>
+    <Descriptions className="mb-5" items={[{ key: 'user', label: '用户账号', children: data?.user.userName }, { key: 'name', label: '用户昵称', children: data?.user.nickName }]} />
+    <Table rowKey="id" dataSource={data?.roles ?? []} pagination={false} rowSelection={{ selectedRowKeys: selected, onChange: setSelected }} columns={[{ title: '角色名称', dataIndex: 'roleName' }, { title: '权限字符', dataIndex: 'roleKey' }, { title: '排序', dataIndex: 'roleSort' }]} />
+    <Space className="mt-5"><Access code={['system:user:edit']}><Button type="primary" loading={saving} onClick={() => void save()}>保存</Button></Access><Button onClick={() => navigate('/system/user')}>返回</Button></Space>
+  </Spin></Card></Page>;
 }
-
-export default UserAuthRole;
