@@ -2,10 +2,10 @@
  * 运行时配置读取。
  *
  * 对应 Vue 侧 packages/effects/hooks/src/use-app-config.ts。
- * 阶段 ① 只读 import.meta.env；生产环境的 window._VBEN_ADMIN_PRO_APP_CONF_
- * 注入由 internal/vite-config 的 extra-app-config 插件负责，留待阶段 ②。
+ * 开发读取 import.meta.env；生产优先读取 extra-app-config 插件注入的运行时配置。
  */
-const env = import.meta.env;
+const runtime = typeof window === 'undefined' ? {} : (window as unknown as { _VBEN_ADMIN_PRO_APP_CONF_?: Record<string, string> })._VBEN_ADMIN_PRO_APP_CONF_ ?? {};
+const env = { ...import.meta.env, ...(import.meta.env.PROD ? runtime : {}) };
 
 function toBoolean(value: string | undefined): boolean {
   return value === 'true';
