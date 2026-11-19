@@ -23,14 +23,24 @@
     "preview": "pnpm -F @walnut-seed/web-react run preview",
     "typecheck": "pnpm -r --parallel run typecheck",
     "test:unit": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "lint": "eslint apps packages internal e2e --quiet",
+    "check": "pnpm lint && pnpm typecheck && pnpm test:unit && pnpm build"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@types/node": "catalog:",
     "@vben/tsconfig": "workspace:*",
     "@vitejs/plugin-react": "catalog:",
+    "eslint": "^9.39.4",
+    "eslint-plugin-jsdoc": "^62.9.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^16.5.0",
     "happy-dom": "catalog:",
+    "prettier": "^3.10.1",
+    "turbo": "^2.11.13",
     "typescript": "catalog:",
+    "typescript-eslint": "^8.73.0",
     "vite": "catalog:",
     "vitest": "catalog:"
   },
