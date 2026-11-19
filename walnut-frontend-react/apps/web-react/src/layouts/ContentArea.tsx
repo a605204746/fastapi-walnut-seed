@@ -1,0 +1,69 @@
+import type { CSSProperties } from 'react';
+
+import { useEffect, useState } from 'react';
+
+import { usePreferences } from '@vben/preferences';
+import { VbenIconButton } from '@vben-core/shadcn-ui';
+import { Layout, Watermark } from 'antd';
+import { Minimize2 } from 'lucide-react';
+import { Outlet, useLocation } from 'react-router';
+
+import { useUiStore } from '@/store/ui';
+
+import { RouteFeedback } from './widgets/route-feedback';
+
+/** Measure the mounted content node, including when a layout switch replaces it. */
+export function ContentArea() {
+  const { isDark, preferences } = usePreferences();
+  const location = useLocation();
+  const refreshCounter = useUiStore((state) => state.refreshCounter);
+  const maximized = useUiStore((state) => state.maximized);
+  const toggleMaximized = useUiStore((state) => state.toggleMaximized);
+  const [element, setElement] = useState<HTMLElement | null>(null);
+  const [height, setHeight] = useState(0);
+
+  useEffect(() => {
+    if (!element) return;
+    const update = () => setHeight(element.clientHeight);
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    update();
+    return () => observer.disconnect();
+  }, [element]);
+
+  return (
+    <Layout.Content
+      className="relative overflow-hidden"
+      ref={setElement}
+      style={{ '--vben-content-height': `${height}px`, minHeight: 0 } as CSSProperties}
+    >
+      <Watermark
+        content={preferences.app.watermark
+          ? preferences.app.watermarkContent || preferences.app.name
+          : undefined}
+        font={{ color: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)', fontSize: 16 }}
+        gap={[100, 100]}
+        rotate={-22}
+        style={{ height: '100%' }}
+      >
+        <div
+          className={`h-full overflow-y-auto ${preferences.transition.enable
+            ? `page-transition page-transition--${preferences.transition.name}` : ''}`}
+          key={`${refreshCounter}-${location.pathname}`}
+        >
+          <Outlet />
+        </div>
+      </Watermark>
+      {maximized ? (
+        <VbenIconButton
+          aria-label="restore-layout"
+          class="bg-header absolute right-4 top-2 z-10 shadow-sm"
+          onClick={toggleMaximized}
+        >
+          <Minimize2 className="size-4" />
+        </VbenIconButton>
+      ) : null}
+      <RouteFeedback />
+    </Layout.Content>
+  );
+}
