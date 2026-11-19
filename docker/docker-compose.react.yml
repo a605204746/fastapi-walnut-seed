@@ -1,0 +1,9 @@
+# Overlay for docker-compose.go.demo.yml. Build the React app and retain the existing API proxy.
+services:
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/react/Dockerfile
+    image: walnut-seed-frontend-react
+    volumes: !override
+      - ./config/nginx.conf:/etc/nginx/nginx.conf.template:ro
