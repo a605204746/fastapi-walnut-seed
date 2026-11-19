@@ -20,7 +20,10 @@ import { useUiStore } from '@/store/ui';
 
 import { UserDropdown } from './BasicLayout';
 import { ContentArea } from './ContentArea';
+import { TenantToggle } from './widgets/tenant-toggle';
+import { HeaderTools, SearchButton } from './widgets/header-tools';
 import { useShellTheme } from './use-shell-theme';
+import { useHeaderScroll } from './use-header-scroll';
 import { FullscreenToggle, LanguageToggle, ThemeToggle } from './widgets';
 import { PreferencesButton } from './widgets/preferences';
 
@@ -38,6 +41,7 @@ function firstLeaf(menu: MenuRecordRaw): MenuRecordRaw {
  * sidebar-mixed-nav / full-content 六种；默认 sidebar-nav 由 BasicLayout 原渲染承担。
  */
 export function MultiLayout() {
+  const headerOffset = useHeaderScroll();
   const { isDark, layout, preferences, preferencesButtonPosition } = usePreferences();
   const navigate = useNavigate();
   const location = useLocation();
@@ -57,11 +61,11 @@ export function MultiLayout() {
       return (menu.children ?? []).some(contains);
     };
     return accessMenus.find(contains) ?? accessMenus[0];
-  }, [accessMenus, activePath]);
+  }, [accessMenus, activePath, preferences.navigation.accordion]);
 
   const isMixed = layout === 'mixed-nav' || layout === 'header-mixed-nav';
   const isDoubleCol = layout === 'sidebar-mixed-nav' || layout === 'header-mixed-nav';
-  const sideMenus = isMixed || isDoubleCol ? (activeRoot?.children ?? []) : accessMenus;
+  const sideMenus = (isMixed && preferences.navigation.split) || isDoubleCol ? (activeRoot?.children ?? []) : accessMenus;
   const horizontalMenus = isMixed
     ? accessMenus.map((root) => ({ ...root, children: undefined }))
     : accessMenus;
@@ -69,10 +73,11 @@ export function MultiLayout() {
   useEffect(() => {
     const parents = findMenuByPath(accessMenus, activePath)?.parents ?? [];
     if (parents.length === 0) return;
+    if (preferences.navigation.accordion) { setOpenKeys(parents); return; }
     setOpenKeys((prev) =>
       parents.every((key) => prev.includes(key)) ? prev : [...new Set([...prev, ...parents])],
     );
-  }, [accessMenus, activePath]);
+  }, [accessMenus, activePath, preferences.navigation.accordion]);
 
   function handleMenuSelect(menu: MenuRecordRaw) {
     if (isHttpUrl(menu.path)) {
@@ -107,21 +112,22 @@ export function MultiLayout() {
     ['mixed-nav', 'sidebar-mixed-nav', 'header-mixed-nav', 'header-sidebar-nav'].includes(layout);
 
   const logo = (compact = false) => (
-    <div className="flex-center h-12 shrink-0 gap-2 overflow-hidden px-3">
+    <div className="flex h-[50px] shrink-0 items-center gap-2 overflow-hidden px-3">
       <img alt="logo" className="size-8 shrink-0" src={preferences.logo.source} />
       {compact ? null : (
-        <span className="text-foreground truncate text-base font-semibold">{preferences.app.name}</span>
+        <span className="text-foreground truncate text-lg font-semibold">{preferences.app.name}</span>
       )}
     </div>
   );
 
   const rightWidgets = (
     <div className="flex shrink-0 items-center">
-      {preferences.app.enablePreferences && preferencesButtonPosition.header ? <PreferencesButton /> : null}
+      <TenantToggle />{preferences.widget.globalSearch ? <SearchButton /> : null}
+              {preferences.app.enablePreferences && preferencesButtonPosition.header ? <PreferencesButton /> : null}
       {preferences.widget.themeToggle ? <ThemeToggle /> : null}
       {preferences.widget.languageToggle ? <LanguageToggle /> : null}
       {preferences.widget.fullscreen ? <FullscreenToggle /> : null}
-      <UserDropdown />
+      <HeaderTools /><UserDropdown />
     </div>
   );
 
@@ -148,7 +154,7 @@ export function MultiLayout() {
         title: (
           <span className={isLast ? 'flex items-center gap-1' : 'text-primary flex cursor-pointer items-center gap-1'}>
             {showIcon && item.icon ? <VbenIcon className="size-3.5" icon={item.icon as string} /> : null}
-            {item.title}
+            {$t(item.title)}
           </span>
         ),
       });
@@ -178,7 +184,7 @@ export function MultiLayout() {
       }}
       onMenuSelect={isMixed ? undefined : handleMenuSelect}
       selectedKeys={[isMixed ? (activeRoot?.path ?? '') : activePath]}
-      style={{ background: 'transparent', borderBottom: 'none', flex: 1, minWidth: 0 }}
+      style={{ background: 'transparent', borderBottom: 'none', flex: 'auto', minWidth: 0, justifyContent: preferences.header.menuAlign === 'center' ? 'center' : preferences.header.menuAlign === 'end' ? 'flex-end' : 'flex-start' }}
     />
   );
 
@@ -204,7 +210,7 @@ export function MultiLayout() {
       </div>
       <div className="flex min-h-0 flex-1 flex-col" style={{ width: preferences.sidebar.width }}>
         <div className="flex-center h-12 shrink-0 px-3">
-          <span className="text-foreground truncate text-base font-semibold">{activeRoot?.name ?? preferences.app.name}</span>
+          <span className="text-foreground truncate text-lg font-semibold">{activeRoot?.name ?? preferences.app.name}</span>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">{inlineMenu(sideMenus)}</div>
       </div>
@@ -244,13 +250,16 @@ export function MultiLayout() {
       <Header
         className={`${preferences.theme.semiDarkHeader && semiDark ? 'dark ' : ''}bg-header border-border flex items-center justify-between gap-2 border-b px-3`}
         style={{
+              display: 'flex',
               height: preferences.header.height,
+              marginTop: headerOffset,
+              transition: preferences.header.mode === 'static' ? 'none' : 'margin-top 180ms ease',
               // antd 6 scopes Layout tokens to .ant-layout, not a standalone Header.
               background: 'hsl(var(--header))',
               color: 'hsl(var(--foreground))',
             }}
       >
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2" style={{ flex: '1 1 0%', minWidth: 0, display: 'flex' }}>
           {withLogo && preferences.logo.enable ? logo() : null}
           {withMenu ? horizontalMenu : null}
           {!withMenu && breadcrumbItems.length > 0 ? <Breadcrumb items={breadcrumbItems} /> : null}

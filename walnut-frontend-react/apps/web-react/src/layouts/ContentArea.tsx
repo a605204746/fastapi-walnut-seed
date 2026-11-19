@@ -6,17 +6,15 @@ import { usePreferences } from '@vben/preferences';
 import { VbenIconButton } from '@vben-core/shadcn-ui';
 import { Layout, Watermark } from 'antd';
 import { Minimize2 } from 'lucide-react';
-import { Outlet, useLocation } from 'react-router';
 
 import { useUiStore } from '@/store/ui';
 
 import { RouteFeedback } from './widgets/route-feedback';
+import { RouteCache } from './RouteCache';
 
 /** Measure the mounted content node, including when a layout switch replaces it. */
 export function ContentArea() {
   const { isDark, preferences } = usePreferences();
-  const location = useLocation();
-  const refreshCounter = useUiStore((state) => state.refreshCounter);
   const maximized = useUiStore((state) => state.maximized);
   const toggleMaximized = useUiStore((state) => state.toggleMaximized);
   const [element, setElement] = useState<HTMLElement | null>(null);
@@ -49,9 +47,8 @@ export function ContentArea() {
         <div
           className={`h-full overflow-y-auto ${preferences.transition.enable
             ? `page-transition page-transition--${preferences.transition.name}` : ''}`}
-          key={`${refreshCounter}-${location.pathname}`}
         >
-          <Outlet />
+          <RouteCache />
         </div>
       </Watermark>
       {maximized ? (
