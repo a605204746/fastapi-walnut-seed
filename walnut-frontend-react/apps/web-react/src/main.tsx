@@ -13,6 +13,7 @@ import { setupComponents } from './adapter/component';
 import { setupDrawer } from './adapter/drawer';
 import { initSetupVbenForm } from './adapter/form';
 import { App } from './App';
+import { initAppStores } from './store/setup';
 import { appConfig } from './lib/config';
 import { loadAppMessages } from './locales';
 import { overridesPreferences } from './preferences';
@@ -27,6 +28,7 @@ async function bootstrap() {
   });
 
   initStores({ namespace: appConfig.namespace });
+  initAppStores(appConfig.namespace);
 
   await initPreferences({
     namespace: appConfig.namespace,
