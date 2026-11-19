@@ -1,3 +1,4 @@
+import { JsonPreview } from '@/components/json-preview';
 import type { ReactNode } from 'react';
 
 import type { DictOption } from '@/store/dict';
@@ -15,7 +16,7 @@ import { getDictOptions } from '@/store/dict';
  *
  * 与 Vue 版的差异：
  * - `class={...}` → `className={...}`（JSX 属性名）。
- * - 图标：Vue 用 UnoCSS 的 `icon-[logos--chrome]` 类名，React 侧统一走
+ * - 图标：Vue 用 UnoCSS 的 `Iconify(logos--chrome)` 类名，React 侧统一走
  *   `VbenIcon` + Iconify 名（`logos:chrome`）。两套 tailwind 配置都没有装
  *   iconify 的 class 插件，照抄类名会渲染成空 span。
  * - `renderJsonPreview`：Vue 依赖 `common-ui` 的 `JsonPreview`（内部是
@@ -142,11 +143,7 @@ export function renderJsonPreview(json: any): ReactNode {
   if (text === null) {
     return <span>{String(json)}</span>;
   }
-  return (
-    <pre className="bg-accent m-0 rounded p-2 text-xs whitespace-pre-wrap">
-      {text}
-    </pre>
-  );
+  return <JsonPreview value={JSON.parse(text)} />;
 }
 
 /** Iconify 图标（对应 Vue 侧 renderIcon） */
