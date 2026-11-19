@@ -226,7 +226,7 @@ export function VbenTabs() {
       className={`vben-tabs vben-tabs--${preferences.tabbar.styleType} bg-header border-border flex shrink-0 items-center border-b`}
       onWheel={handleWheel}
       ref={navRef}
-      style={{ '--tabbar-height': `${preferences.tabbar.height}px` } as never}
+      style={{ '--tabbar-height': `${preferences.tabbar.height}px`, height: preferences.tabbar.height } as never}
     >
       <div className="min-w-0 flex-1">
       <Tabs
@@ -321,7 +321,7 @@ export function VbenTabs() {
           </Dropdown>
         ) : null}
         {preferences.tabbar.showMaximize ? (
-          <VbenIconButton onClick={toggleMaximized}>
+          <VbenIconButton aria-label="maximize-content" onClick={toggleMaximized}>
             {maximized ? (
               <Minimize2 className="size-4" />
             ) : (
