@@ -68,10 +68,7 @@ const CONTRACT_COMPONENTS = [
  *
  * 按计划：A2 阶段清掉 8 个纯 CRUD 页，A3 阶段清掉 user/role/notice 3 个。
  */
-const PENDING_COMPONENTS = [
-  'system/role/index', // A3（依赖 #/components/tree）
-  'system/notice/index', // A3（依赖 #/components/tiptap）
-];
+const PENDING_COMPONENTS: string[] = [];
 
 /** 哨兵组件：路由解析失败时 generateRoutesByBackend 会落到它身上 */
 function NotFoundComponent() {
@@ -112,20 +109,7 @@ describe('pageMap 覆盖后端菜单契约', () => {
     // A1 交付：config（阶段⑤）+ 三个被后端菜单直接引用的占位/转发页
     // A2 进度：post（样板页）、logininfor、operlog、dept（树形）、dict（三层嵌套）、client、menu
     // A3 进度：user（含 4 个子弹窗 + ApiSwitch + DeptTree）
-    expect(implemented).toEqual([
-      'system/client/index',
-      'system/config/index',
-      'system/dept/index',
-      'system/dict/data',
-      'system/dict/index',
-      'system/menu/index',
-      'system/post/index',
-      'system/role/authUser',
-      'system/user/authRole',
-      'system/user/index',
-      'monitor/logininfor/index',
-      'monitor/operlog/index',
-    ]);
+    expect(implemented).toEqual(CONTRACT_COMPONENTS);
   });
 
   it('走真实解析链路，退化成 404 的路由数 == 未落地的 component 数', async () => {
