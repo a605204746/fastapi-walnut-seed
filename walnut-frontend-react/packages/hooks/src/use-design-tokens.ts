@@ -88,6 +88,8 @@ export function useAntdComponentTokens() {
       Layout: {
         bodyBg: readColor('--background-deep'),
         headerBg: readColor('--header'),
+        headerPadding: '0 12px',
+        headerLineHeight: 'normal',
         siderBg: readColor('--sidebar'),
         triggerBg: readColor('--sidebar-deep'),
         triggerColor: readColor('--foreground'),
