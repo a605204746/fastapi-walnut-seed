@@ -1,3 +1,7 @@
+import { ApiSelect, ApiTreeSelect, ApiCascader } from '@/components/api-component';
+import { FileUpload, ImageUpload } from '@/components/upload';
+import { IconPicker } from '@/components/icon-picker';
+const RichTextarea = lazy(() => import('@/components/tiptap').then(module => ({ default: module.Tiptap })));
 import type { ComponentType } from 'react';
 
 import { lazy, Suspense } from 'react';
@@ -12,7 +16,7 @@ import { SecretInput } from '@/components/global/secret-input';
  *
  * Vue 侧共 31 个组件名，本文件注册其中 **24 个**（antd 6 原生可直接映射的全部），
  * 外加 React 侧独有的 `SecretInput`（Vue 是用表单插槽注入的，见下）。
- * 剩余 7 个依赖尚未迁移的富组件，留到迁移计划 A3 阶段（见
+ * 富组件注册项覆盖异步选项、图标、上传和富文本（见
  * `docs/frontend/06-React迁移-总计划与进度.md`）：
  *
  * - `ApiSelect` / `ApiTreeSelect` / `ApiCascader` ← `common-ui/api-component`
@@ -33,6 +37,7 @@ import { SecretInput } from '@/components/global/secret-input';
  * 供 schema 的 `component` 字段做类型收窄用。
  */
 export type StrictComponentType =
+  | 'ApiSelect' | 'ApiTreeSelect' | 'ApiCascader' | 'FileUpload' | 'ImageUpload' | 'IconPicker' | 'RichTextarea'
   | 'AutoComplete'
   | 'Cascader'
   | 'Checkbox'
@@ -163,6 +168,7 @@ function DefaultButton(props: Record<string, any>) {
 
 export function setupComponents() {
   setComponentMap({
+    ApiSelect, ApiTreeSelect, ApiCascader, FileUpload, ImageUpload, IconPicker, RichTextarea: (props: any) => <Suspense fallback={null}><RichTextarea {...props} /></Suspense>,
     AutoComplete: withDefaultPlaceholder(AutoComplete, 'input'),
     Cascader: withDefaultPlaceholder(Cascader, 'select'),
     Checkbox,
@@ -196,6 +202,7 @@ export function setupComponents() {
 
 /** 已注册的组件名清单，供单测断言注册表完整性 */
 export const REGISTERED_COMPONENT_NAMES: StrictComponentType[] = [
+  'ApiSelect', 'ApiTreeSelect', 'ApiCascader', 'FileUpload', 'ImageUpload', 'IconPicker', 'RichTextarea',
   'AutoComplete',
   'Cascader',
   'Checkbox',

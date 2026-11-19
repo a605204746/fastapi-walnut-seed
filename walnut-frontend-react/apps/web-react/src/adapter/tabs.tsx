@@ -9,7 +9,7 @@ import { usePreferences } from '@vben/preferences';
 import { getTabKey, useTabbarStore } from '@vben/stores';
 import { VbenIcon, VbenIconButton } from '@vben-core/shadcn-ui';
 import { Dropdown, Tabs } from 'antd';
-import { Ellipsis, Maximize2, Minimize2, RotateCw } from 'lucide-react';
+import { Ellipsis, Maximize2, Minimize2, RotateCw, Pin } from 'lucide-react';
 import { useLocation, useMatches, useNavigate } from 'react-router';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -47,19 +47,12 @@ function useCurrentTab(): TabDefinition {
 
 function tabTitle(tab: TabDefinition): string {
   const { meta, name } = tab;
-  return (meta?.newTabTitle as string) || meta?.title || name || tab.path;
+  return (meta?.newTabTitle as string) || (meta?.title ? $t(meta.title) : '') || name || tab.path;
 }
 
 /**
- * 多页签栏（对应 Vue 侧 `@vben-core/tabs-ui` + `layouts/src/basic/tabbar/`）。
- *
- * ⚠️ 与 Vue 版的刻意差异：Vue 侧 tabs-ui 是自绘的 chrome/card 弧形页签（927 行），
- * React 侧按阶段 ⑥ 的决策先用 antd `Tabs`，自绘样式与拖拽排序留到 ⑥-b。
- * 与 `adapter/menu.tsx` 同理放在 app 的 adapter/ 层，不进 `@core`（UI 库无关层）。
- *
- * ⑥-a 未接的右键菜单项：`reload` 与 `maximize` —— 两者都依赖 `<Activity>` 页签缓存
- * （reload 要先把页面从缓存里剔掉再重挂），store 的 `refresh()` 已就位但没有消费者，
- * 挂上去会是个点了没反应的菜单项。
+ * 多页签栏：支持缓存刷新、固定、拖拽、滚轮、中键关闭和右键菜单。
+ * store 管理打开顺序及访问历史，RouteCache 管理页面实例的生命周期。
  */
 export function VbenTabs() {
   const navigate = useNavigate();
@@ -160,6 +153,8 @@ export function VbenTabs() {
           ? $t('preferences.tabbar.contextMenu.unpin')
           : $t('preferences.tabbar.contextMenu.pin'),
       },
+      { key: 'reload', label: $t('preferences.tabbar.contextMenu.reload') },
+      { key: 'maximize', label: $t('preferences.tabbar.contextMenu.maximize') },
       { type: 'divider' },
       {
         key: 'open-in-new-window',
@@ -187,6 +182,12 @@ export function VbenTabs() {
 
   function handleContextClick(key: string, tab: TabDefinition) {
     switch (key) {
+      case 'reload': {
+        if (getTabKey(tab) === activeKey) refresh();
+        else void useTabbarStore.getState().refreshByName(tab.name ?? tab.path);
+        break;
+      }
+      case 'maximize': { navigate(getTabKey(tab)); toggleMaximized(); break; }
       case 'affix': {
         toggleTabPin(tab);
         break;
@@ -263,7 +264,7 @@ export function VbenTabs() {
                   {preferences.tabbar.showIcon && tab.meta?.icon ? (
                     <VbenIcon className="size-3.5" icon={tab.meta.icon} />
                   ) : null}
-                  <span>{tabTitle(tab)}</span>
+                  <span>{tabTitle(tab)}</span>{affix ? <Pin className="size-3" /> : null}
                 </span>
               </Dropdown>
             ),
