@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 import type {
   MenuRecordRaw,
@@ -13,7 +13,7 @@ import { useAccessStore, useUserStore } from '@vben/stores';
 import { findMenuByPath, setObjToUrlParams } from '@vben/utils';
 import { isHttpUrl } from '@vben-core/shared/utils';
 import { VbenIcon, VbenIconButton } from '@vben-core/shadcn-ui';
-import { Avatar, Breadcrumb, Button, ConfigProvider, Dropdown, Layout, Watermark, theme as antdTheme } from 'antd';
+import { Avatar, Breadcrumb, ConfigProvider, Dropdown, Layout } from 'antd';
 import {
   ChevronsLeft,
   ChevronsRight,
@@ -22,7 +22,7 @@ import {
   Settings,
   UserRound,
 } from 'lucide-react';
-import { Outlet, useLocation, useMatches, useNavigate } from 'react-router';
+import { useLocation, useMatches, useNavigate } from 'react-router';
 
 import { VbenMenu } from '@/adapter/menu';
 import { VbenTabs } from '@/adapter/tabs';
@@ -32,13 +32,14 @@ import { mergeMatchMeta } from '@/router/route-tree';
 import { useAuthStore } from '@/store/auth';
 import { useUiStore } from '@/store/ui';
 
+import { ContentArea } from './ContentArea';
 import { MultiLayout } from './MultiLayout';
+import { useShellTheme } from './use-shell-theme';
 import { FullscreenToggle, LanguageToggle, ThemeToggle } from './widgets';
 import { openPreferences, PreferencesButton } from './widgets/preferences';
-import { RouteFeedback } from './widgets/route-feedback';
 import { EpExpand, EpFold } from './widgets/sidebar-toggle-icons';
 
-const { Content, Header, Sider } = Layout;
+const { Header, Sider } = Layout;
 
 /**
  * 用户下拉（对应 Vue 侧 widgets/user-dropdown.vue，304 行）。
@@ -105,11 +106,8 @@ export function UserDropdown() {
 /**
  * 后台外壳（对应 Vue 侧 packages/effects/layouts/src/basic/layout.vue）。
  *
- * ⚠️ ⑥-a 的范围是「可用外壳」：antd `Layout` 的侧边栏 + 顶栏 + 内容区，
- * 单一 `sidebar-nav` 布局形态。6 种布局模式、偏好设置抽屉、多页签、全局搜索、
- * 锁屏、`<Activity>` 页签缓存都在 ⑥-b（见清单 §15.5）。
- *
- * 折叠按钮暂放顶栏左侧（antd 惯例）；vben 是贴在侧边栏右缘的悬浮按钮，⑥-b 对齐。
+ * 默认侧边导航；其它六种布局委托 MultiLayout，内容测量统一由 ContentArea 承担。
+ * 全局偏好副作用只在这一层注册一次，避免多布局重复监听快捷键。
  */
 export function BasicLayout() {
   const { layout, preferences, preferencesButtonPosition } = usePreferences();
@@ -118,29 +116,12 @@ export function BasicLayout() {
   const matches = useMatches();
   const accessMenus = useAccessStore((state) => state.accessMenus);
 
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [contentHeight, setContentHeight] = useState(0);
   const [openKeys, setOpenKeys] = useState<string[]>([]);
-  /** 内容区重挂载计数（顶栏刷新 / 页签刷新共用，见 store/ui.ts） */
-  const refreshCounter = useUiStore((state) => state.refreshCounter);
   const refresh = useUiStore((state) => state.refresh);
   const maximized = useUiStore((state) => state.maximized);
 
   // 文档级偏好消费端：动态标题 / 灰度色弱 / 全局快捷键
   usePreferenceEffects();
-
-  // Page 的 autoContentHeight 依赖 --vben-content-height，由内容区实测后写入并继承下去
-  useEffect(() => {
-    const element = contentRef.current;
-    if (!element) {
-      return;
-    }
-    const update = () => setContentHeight(element.clientHeight);
-    const observer = new ResizeObserver(update);
-    observer.observe(element);
-    update();
-    return () => observer.disconnect();
-  }, []);
 
   const meta = useMemo(() => mergeMatchMeta(matches), [matches]);
 
@@ -196,20 +177,7 @@ export function BasicLayout() {
   // 半暗侧边栏 / 顶栏：浅色主题下局部套暗色算法（Vue 侧 semiDarkSidebar / semiDarkHeader）
   const semiDarkSidebar = preferences.theme.semiDarkSidebar && !isDark;
   const semiDarkHeader = preferences.theme.semiDarkHeader && !isDark;
-  const semiDarkTheme = {
-    algorithm: antdTheme.darkAlgorithm,
-    components: {
-      Layout: { siderBg: 'hsl(222.34 10.43% 12.27%)' },
-      Menu: {
-        darkItemBg: 'transparent',
-        darkItemSelectedBg: 'hsl(var(--primary))',
-        darkItemSelectedColor: '#fff',
-        darkSubMenuItemBg: 'transparent',
-        itemBg: 'transparent',
-        subMenuItemBg: 'transparent',
-      },
-    },
-  };
+  const semiDarkTheme = useShellTheme();
 
   function toggleCollapsed() {
     updatePreferences({ sidebar: { collapsed: !collapsed } });
@@ -302,7 +270,7 @@ export function BasicLayout() {
             盖掉 ConfigProvider 里 siderBg: var(--sidebar)，暗色主题下侧边栏会变成白的。
             底色统一由 useAntdComponentTokens 的 Layout.siderBg 提供。 */}
         <Sider
-          className="bg-sidebar border-border border-r"
+          className={`${semiDarkSidebar ? 'dark ' : ''}bg-sidebar border-border border-r`}
           collapsed={effectiveCollapsed}
           collapsedWidth={preferences.sidebar.collapseWidth}
           collapsible
@@ -337,11 +305,7 @@ export function BasicLayout() {
               </div>
             ) : null}
             <div
-              className={`flex-1 overflow-x-hidden overflow-y-auto ${
-                preferences.navigation.styleType === 'rounded'
-                  ? 'vben-menu-rounded'
-                  : ''
-              }`}
+              className="flex-1 overflow-x-hidden overflow-y-auto"
             >
               <VbenMenu
                 inlineCollapsed={effectiveCollapsed}
@@ -383,8 +347,13 @@ export function BasicLayout() {
         {showHeader ? (
           <ConfigProvider theme={semiDarkHeader ? semiDarkTheme : undefined}>
           <Header
-            className="bg-header border-border flex items-center justify-between gap-2 border-b px-3"
-            style={{ height: preferences.header.height }}
+            className={`${semiDarkHeader ? 'dark ' : ''}bg-header border-border flex items-center justify-between gap-2 border-b px-3`}
+            style={{
+              height: preferences.header.height,
+              // antd 6 scopes Layout tokens to .ant-layout, not a standalone Header.
+              background: 'hsl(var(--header))',
+              color: 'hsl(var(--foreground))',
+            }}
           >
             <div className="flex min-w-0 flex-1 items-center gap-2">
               {/*
@@ -438,37 +407,7 @@ export function BasicLayout() {
 
         {showTabbar ? <VbenTabs /> : null}
 
-        <Content
-          className="relative overflow-hidden"
-          ref={contentRef}
-          style={
-            { '--vben-content-height': `${contentHeight}px` } as CSSProperties
-          }
-        >
-          {/* 水印（app.watermark / watermarkContent），对应 Vue 侧 app.vue 的 Watermark */}
-          <Watermark
-            content={
-              preferences.app.watermark
-                ? preferences.app.watermarkContent || preferences.app.name
-                : undefined
-            }
-            font={{ color: 'rgba(0,0,0,0.15)', fontSize: 16 }}
-            gap={[100, 100]}
-            rotate={-22}
-          >
-            <div
-              className={`h-full overflow-y-auto ${
-                preferences.transition.enable
-                  ? `page-transition page-transition--${preferences.transition.name}`
-                  : ''
-              }`}
-              key={`${refreshCounter}-${location.pathname}`}
-            >
-              <Outlet />
-            </div>
-          </Watermark>
-          <RouteFeedback />
-        </Content>
+        <ContentArea />
 
         {/* 底栏 + 版权（footer.enable / fixed / copyright.enable） */}
         {preferences.footer.enable ? (
