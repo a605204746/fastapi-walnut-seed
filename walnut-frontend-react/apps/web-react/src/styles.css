@@ -79,10 +79,10 @@ body {
 .vben-menu-rounded .ant-menu-submenu-title {
   margin-inline: 8px;
   width: calc(100% - 16px);
-  border-radius: calc(var(--radius) * 1rem);
+  border-radius: var(--radius);
 }
 
-/* 页签风格（preferences.tabbar.styleType）。chrome 弧形属 B3 自绘，这里先做卡片/_plain/brisk 区分 */
+/* plain / brisk 页签风格；chrome 的弧形与主题色在 adapter/tabs.css 中统一维护。 */
 .vben-tabs--plain .ant-tabs-tab {
   background: transparent !important;
   border: none !important;
@@ -95,9 +95,6 @@ body {
 }
 .vben-tabs--brisk .ant-tabs-tab-active {
   border-bottom-color: hsl(var(--primary)) !important;
-}
-.vben-tabs--chrome .ant-tabs-tab {
-  border-radius: calc(var(--radius) * 1rem) calc(var(--radius) * 1rem) 0 0 !important;
 }
 
 /* 侧边栏拖拽调宽条（preferences.sidebar.draggable），对应 Vue layout-ui 右缘拖拽 */
@@ -118,7 +115,7 @@ body {
 .vben-breadcrumb-background {
   background: hsl(var(--accent));
   padding: 4px 8px;
-  border-radius: calc(var(--radius) * 1rem);
+  border-radius: var(--radius);
 }
 
 /* 页面切换顶部进度条（preferences.transition.progress） */
