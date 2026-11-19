@@ -20,7 +20,7 @@ const routes: AppRouteObject[] = [
       hideInMenu: true,
       order: -1,
       requireHomeRedirect: true,
-      title: $t('ui.widgets.profile'),
+      title: 'ui.widgets.profile',
     },
     path: '/profile',
   },
