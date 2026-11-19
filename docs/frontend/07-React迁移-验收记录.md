@@ -26,7 +26,7 @@ D1 已排除的无调用 Vue 原语不逐文件复制；D4 只保留 Tiptap，`R
 
 - `pnpm check`：lint、全部 workspace 类型检查、36 个单测文件 / 424 个用例、生产构建通过。
 - `playwright test specs/migration.spec.ts specs/layout.spec.ts specs/session.spec.ts --workers=2`：13/13 通过。包含 17 个页面入口、角色菜单祖先与数据范围请求体、公告 HTML 编辑/回显、页签缓存/刷新、搜索、七布局重载、深浅/半暗、最大化恢复、会话失效弹窗、锁屏与 390px 移动抽屉。
-- `PRODUCTION_BASE=http://127.0.0.1:18020 ... playwright test specs/production.spec.ts`：1/1 通过。实际生产包登录、localStorage 密文、刷新恢复、富文本/图表延迟加载和页面无运行时错误。
+- `PRODUCTION_BASE=... REACT_BASE=... playwright test specs/production.spec.ts specs/migration.spec.ts --workers=1`：6/6 通过，17 个页面入口也已在生产包逐一验收。实际生产包登录、localStorage 密文、刷新恢复、富文本/图表延迟加载和页面无运行时错误。
 - `capture:golden`、`capture:react`、`compare`：5 个双端样式目标通过；参数页、整页外壳门限已收紧为原计划目标。
 
 | 对比目标 | 差异像素占比 | 门限 |
