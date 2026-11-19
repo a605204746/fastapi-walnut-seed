@@ -34,15 +34,15 @@ import { storeNamespace } from '../namespace';
  *
  * **② 不移植 KeepAlive 的 VNode 缓存。** Vue 版的 `cachedRoutes` /
  * `addCachedRoute` / `removeCachedRoute` / `getCachedRoutes` 存的是 Vue `VNode`，
- * React 没有对应物，留给阶段 ⑥-b 的 `<Activity>` + LRU 方案。
+ * React 侧由布局层 `RouteCache` 使用 `<Activity>` 管理有界缓存。
  * `cachedTabs` / `excludeCachedTabs` / `updateCacheTabs()` 是纯字符串集合
- * （由 `meta.keepAlive` 推导），照常移植，将来 `<Activity>` 直接消费。
+ * （由 `meta.keepAlive` 推导），供 `RouteCache` 消费。
  *
  * **持久化**：与 Vue 侧一致地**无条件**把 `tabs` / `visitHistory` 写进 sessionStorage。
  * `preferences.tabbar.persist` 在 Vue 侧同样不控制 pinia 插件（插件是无条件挂载的），
  * 真正生效的位置是 `layouts/src/basic/tabbar/tabbar.vue`：挂载时若为 `false` 就调
  * `closeOtherTabs(route)`，把刚水合回来的页签丢掉。React 侧保持同一语义——本 store
- * 不引入任何 persist 开关，由阶段 ⑥-a 的 tabbar 外壳组件在挂载时读
+ * 不引入任何 persist 开关，由 tabbar 外壳组件在挂载时读
  * `preferences.tabbar.persist` 并调用 `closeOtherTabs(currentTab)`。
  */
 
@@ -594,6 +594,7 @@ export const useTabbarStore = create<TabbarStore>()(
       },
     }),
     {
+      skipHydration: true,
       name: `${storeNamespace.prefix}-core-tabbar`,
       storage: createJSONStorage(() => sessionStorage),
       // 与 Vue 侧 persist.pick 一致：tabs 不进 localStorage，只进 sessionStorage

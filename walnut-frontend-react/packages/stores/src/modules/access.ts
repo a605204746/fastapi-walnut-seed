@@ -99,7 +99,7 @@ export const useAccessStore = create<AccessStore>()(
         set({ isLockScreen: false, lockScreenPassword: undefined }),
     }),
     {
-      name: `${storeNamespace.prefix}-core-access`,
+      skipHydration: true, name: `${storeNamespace.prefix}-core-access`,
       // 与 Vue 侧 persist.pick 一致：只持久化这几个字段
       partialize: (state) => ({
         accessCodes: state.accessCodes,
