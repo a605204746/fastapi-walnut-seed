@@ -3,6 +3,7 @@ on:
   pull_request:
     paths: ['walnut-frontend-react/**', '.github/workflows/frontend-react-ci.yml', 'docker/react/**']
   push:
+    branches: [main]
     paths: ['walnut-frontend-react/**', '.github/workflows/frontend-react-ci.yml', 'docker/react/**']
 permissions:
   contents: read
@@ -34,7 +35,7 @@ jobs:
         run: |
           pnpm --filter @walnut-seed/web-react exec vite preview --host 127.0.0.1 --port 18020 > /tmp/react-preview.log 2>&1 &
           for attempt in $(seq 1 60); do curl -fsS http://127.0.0.1:18020/auth/login > /dev/null && break; sleep 1; done
-          PRODUCTION_BASE=http://127.0.0.1:18020 pnpm --filter @walnut-seed/e2e-visual exec playwright test specs/production.spec.ts --output=artifacts/production-results
+          PRODUCTION_BASE=http://127.0.0.1:18020 REACT_BASE=http://127.0.0.1:18020 pnpm --filter @walnut-seed/e2e-visual exec playwright test specs/production.spec.ts specs/migration.spec.ts --workers=2 --output=artifacts/production-results
       - uses: actions/upload-artifact@v4
         if: always()
         with:
