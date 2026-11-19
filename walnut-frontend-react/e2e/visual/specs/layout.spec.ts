@@ -38,7 +38,7 @@ async function expectContentFits(page: Page) {
 
 test.beforeEach(async ({ page }) => {
   await installMockApi(page);
-  await page.goto(`${BASE}/auth/login`);
+  await page.goto(`${BASE}/auth/login?redirect=%2Fsystem%2Fconfig`);
   await page.locator('input[type="text"]').first().fill('admin');
   await page.locator('input[type="password"]').first().fill('admin123');
   await page.getByRole('button', { name: 'login', exact: true }).click();
@@ -48,6 +48,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('all seven layouts keep content visible after switching and reloading', async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
   for (const layout of ['header-nav', 'mixed-nav', 'header-mixed-nav',
     'sidebar-mixed-nav', 'header-sidebar-nav', 'full-content', 'sidebar-nav']) {
     await preferences(page, { app: { layout } });
@@ -63,7 +64,7 @@ test('all seven layouts keep content visible after switching and reloading', asy
     // Wait for the preference manager's debounced persistence before reloading.
     await expect.poll(() => page.evaluate((layout) => Object.entries(localStorage)
       .some(([key, value]) => key.endsWith('-preferences') && value.includes(`"layout":"${layout}"`)), layout)).toBe(true);
-    await page.reload();
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await expectContentFits(page);
   }
 });

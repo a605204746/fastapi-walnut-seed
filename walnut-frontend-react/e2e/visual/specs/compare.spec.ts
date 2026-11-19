@@ -12,32 +12,16 @@ const VUE_DIR = path.join(ARTIFACTS, 'vue');
 const REACT_DIR = path.join(ARTIFACTS, 'react');
 const DIFF_DIR = path.join(ARTIFACTS, 'diff');
 
-/**
- * 分层阈值（差异像素占比上限）。
- *
- * - 登录页（纯外壳 + SVG + antd 表单）：严格 0.3%，实测 light 0.277% / dark 0.021%，
- *   证明方案 C 全自绘复刻在外壳层达到像素级一致。
- * - config 页：初值 1.5%（Spec §6）。实测 5.245%，残余全部来自 vxe-table 与 antd Table
- *   的原生差异（垂直节奏 / 分页「总数在左+页码在右」布局 / 分页字形）。
- *   按 Spec §10「阈值为起点、PoC 中按实测校准」，此处校准为 6% 作为回归基线。
- *   ⚠️ 原先记的「PoC 最小布局与 Vue 完整布局的高差」这一项已在阶段 ⑥ 消除：
- *   真实 header(50) + tabbar(38) 补上后，React 侧元素截图从 1024x688 变为 1024x599，
- *   与 Vue golden 的 1024x600 只差 1px。剩下的 5.245% 纯粹是表格自身的渲染差异，
- *   要压到 1.5% 只能靠 antd Table 主题覆盖层（Spec §7.1 风险1 决策 (a)）。
- * - shell / shell-dark：阶段 ⑥-a 新增的整页外壳门禁。
- *   历史：⑥-a 实测 9.316% / 4.719% → 2026-11-15 修掉「浅色主题下顶栏渲染成 antd
- *   默认深蓝黑 #001529」的 bug 后（根因：Tailwind v4 utilities 在 @layer 内、antd
- *   CSS-in-JS 无层，无层打赢有层；改走 ConfigProvider 的 Layout 组件 token）
- *   实测降到 **4.753% / 4.464%**，即那条深色横带曾占 shell 差异的一半。
- *   阈值据此收紧到 5.0% / 4.6% 作为回归基线；剩余差异集中在页签弧形 chrome 与
- *   菜单排版（⑥-b 的 B2/B3），继续自绘后应再下调。
+/** Same-machine Vue golden comparison; thresholds retain the migration plan's targets.
+ * Login <=0.3%, config <=1.5%, complete light/dark shells <2%.
+ * Capture hides transient toast/progress overlays in both apps, without hiding app content.
  */
 const THRESHOLDS: Record<string, number> = {
-  'config': 0.06,
+  'config': 0.015,
   'login-dark': 0.003,
   'login-light': 0.003,
-  'shell': 0.05,
-  'shell-dark': 0.046,
+  'shell': 0.02,
+  'shell-dark': 0.02,
 };
 
 const NAMES = Object.keys(THRESHOLDS);

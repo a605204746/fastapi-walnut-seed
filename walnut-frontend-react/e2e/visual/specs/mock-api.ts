@@ -131,11 +131,13 @@ function json(route: any, data: unknown) {
 export async function installMockApi(page: Page) {
   // ⚠️ 不能用 glob '**/api/**'：Vite dev 的源码模块路径 /src/api/*.ts 也含 '/api/'，
   // 会被误拦截返回 JSON 导致模块加载失败。只匹配 pathname 以 /api/ 开头的真实接口请求。
-  await page.route((url) => url.pathname.startsWith('/api/'), async (route) => {
+  await page.route((url) => /^\/(?:prod-api|api)\//.test(url.pathname), async (route) => {
     const request = route.request();
     const url = new URL(request.url());
-    const path = url.pathname.replace(/^\/api/, '');
+    const path = url.pathname.replace(/^\/(?:prod-api|api)/, '');
     const method = request.method().toUpperCase();
+
+    if (path === '/resource/sse') return route.fulfill({ contentType: 'text/event-stream', body: ': connected\n\n' });
 
     if (method === 'POST' && path === '/auth/login') {
       return json(

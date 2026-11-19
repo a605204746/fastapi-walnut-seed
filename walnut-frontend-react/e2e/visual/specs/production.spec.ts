@@ -1,0 +1,35 @@
+import { expect, test } from '@playwright/test';
+import { installFullApi } from './full-api';
+
+test('production build encrypts login persistence and loads editors/charts only when needed', async ({ page }) => {
+  test.skip(!process.env.PRODUCTION_BASE, 'Run against vite preview with PRODUCTION_BASE.');
+  const base = process.env.PRODUCTION_BASE!;
+  await installFullApi(page);
+  const assets: string[] = [];
+  const errors: string[] = [];
+  page.on('request', (request) => assets.push(request.url()));
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto(`${base}/auth/login?redirect=%2Fsystem%2Fconfig`);
+  await expect(page.getByRole('button', { name: 'login', exact: true })).toBeVisible();
+  expect(assets.filter((url) => /\/(?:charts|rich-editor|avatar-cropper)-/.test(url))).toEqual([]);
+  await page.locator('input[type=text]').first().fill('admin');
+  await page.locator('input[type=password]').first().fill('admin123');
+  await page.getByRole('button', { name: 'login', exact: true }).click();
+  await page.waitForURL('**/system/config');
+  await expect(page.locator('main')).toContainText('参数列表');
+  const persisted = await page.evaluate(() => Object.entries(localStorage).find(([key]) => key.endsWith('-core-access'))?.[1]);
+  expect(persisted).toBeTruthy();
+  expect(persisted).not.toContain('mock-access-token');
+  expect(() => JSON.parse(persisted!)).toThrow();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.locator('main')).toContainText('参数列表');
+  await expect(page).toHaveURL(/\/system\/config$/);
+  await page.goto(`${base}/system/notice`);
+  await page.getByRole('button', { name: /编\s*辑/ }).first().click();
+  await expect(page.getByRole('textbox', { name: '公告内容编辑器' })).toContainText('兼容内容');
+  expect(assets.some((url) => /\/rich-editor-/.test(url))).toBe(true);
+  await page.goto(`${base}/analytics`);
+  await expect(page.locator('canvas').first()).toBeVisible();
+  expect(assets.some((url) => /\/charts-/.test(url))).toBe(true);
+  expect(errors).toEqual([]);
+});
