@@ -7,6 +7,8 @@ import { createBrowserRouter, Navigate } from 'react-router';
 import { AuthLayout } from '@/layouts/AuthLayout';
 import { RootLayout } from '@/layouts/RootLayout';
 import { LoginPage } from '@/views/_core/authentication/login';
+import { RegisterPage, ForgetPasswordPage, CodeLoginPage, QrcodeLoginPage } from '@/views/_core/authentication/extra-pages';
+const SocialCallback = lazy(() => import('@/views/_core/social-callback/index'));
 
 import { bindRouter, ROOT_ROUTE_ID } from './guard';
 
@@ -32,8 +34,9 @@ function HomeRedirect() {
  * 先经过 `RootLayout` 的鉴权与 bootstrap。
  */
 export const router = createBrowserRouter([
+  { path: '/social-callback', element: <Suspense fallback={<div /> }><SocialCallback /></Suspense> },
   {
-    children: [{ element: <LoginPage />, path: 'login' }],
+    children: [{ element: <LoginPage />, path: 'login' }, { element: <RegisterPage />, path: 'register' }, { element: <ForgetPasswordPage />, path: 'forget-password' }, { element: <CodeLoginPage />, path: 'code-login' }, { element: <QrcodeLoginPage />, path: 'qrcode-login' }],
     element: <AuthLayout />,
     id: 'Auth',
     path: '/auth',
