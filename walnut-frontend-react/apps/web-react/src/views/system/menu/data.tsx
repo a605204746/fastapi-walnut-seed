@@ -16,7 +16,7 @@ import { renderDict } from '@/utils/render';
  * （对应 Vue 侧 views/system/menu/data.tsx，400 行）。
  *
  * 与 Vue 版的三处差异：
- * 1. **图标类名 → Iconify 名**。Vue 用 UnoCSS 的 `icon-[material-symbols--menu]`
+ * 1. **图标类名 → Iconify 名**。Vue 用 UnoCSS 的 `Iconify(material-symbols--menu)`
  *    类名（`<span class="...">`），React 侧两套 tailwind 配置都没装 iconify class
  *    插件，照抄会渲染成空 span，统一改为 `<VbenIcon icon="material-symbols:menu" />`。
  * 2. **zod → validator**。`path` / `component` 两个字段的校验规则随 `isFrame`
@@ -196,25 +196,7 @@ export const drawerSchema: FormSchemaGetter = () => [
     fieldName: 'menuType',
     label: '菜单类型',
   },
-  {
-    component: 'Input',
-    dependencies: {
-      // 类型不为按钮时显示
-      show: (values) => values.menuType !== 'F',
-      triggerFields: ['menuType'],
-    },
-    fieldName: 'icon',
-    help: '点击搜索图标跳转到iconify & 粘贴',
-    label: '菜单图标',
-    renderComponentContent: (model) => ({
-      addonAfter: () => (
-        <a href="https://icon-sets.iconify.design/" rel="noreferrer" target="_blank">
-          搜索图标
-        </a>
-      ),
-      addonBefore: () => <VbenIcon icon={model.icon} />,
-    }),
-  },
+  { component: 'IconPicker', fieldName: 'icon', label: '菜单图标', dependencies: { show: values => values.menuType !== 'F', triggerFields: ['menuType'] } },
   {
     component: 'Input',
     fieldName: 'menuName',
