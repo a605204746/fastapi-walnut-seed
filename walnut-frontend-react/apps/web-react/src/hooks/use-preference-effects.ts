@@ -6,6 +6,7 @@ import { useMatches } from 'react-router';
 import { mergeMatchMeta } from '@/router/route-tree';
 import { useAuthStore } from '@/store/auth';
 import { useUiStore } from '@/store/ui';
+import { $t } from '@/locales';
 
 /**
  * 文档级偏好消费端（对应 Vue 侧散落在 app.vue / use-preferences / widgets 里的副作用）。
@@ -16,8 +17,7 @@ import { useUiStore } from '@/store/ui';
  * - `shortcutKeys.globalLogout`：Alt+Q 退出登录
  * - `shortcutKeys.globalEscape`：Esc 退出内容最大化
  *
- * 未接（依赖尚未迁移的组件）：globalSearch(Ctrl K) / globalLockScreen(Alt L) /
- * timezone / enableCheckUpdates —— 对应 widget 属 B1，接了也是空操作。
+ * 搜索、锁屏、时区与更新检查由 RootLayout 中的 ShellServices 统一管理。
  */
 export function usePreferenceEffects() {
   const { preferences } = usePreferences();
@@ -32,7 +32,7 @@ export function usePreferenceEffects() {
   // 动态标题
   useEffect(() => {
     if (!app.dynamicTitle) return;
-    const title = (meta?.title as string) || '';
+    const title = meta?.title ? $t(meta.title as string) : '';
     document.title = title ? `${title} - ${app.name}` : app.name;
   }, [app.dynamicTitle, app.name, meta?.title]);
 
