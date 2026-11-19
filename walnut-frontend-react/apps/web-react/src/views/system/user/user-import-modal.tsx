@@ -25,7 +25,7 @@ export interface UserImportModalProps {
  *
  * 与 Vue 版的差异：
  * - `Upload.Dragger` 的 `v-model:file-list` → 受控 `fileList` + `onChange`。
- * - `icon-[vscode-icons--file-type-excel]` 类名图标 → 无对应 antd 图标，
+ * - `Iconify(vscode-icons--file-type-excel)` 类名图标 → 无对应 antd 图标，
  *   改为文字「下载模板」（两套 tailwind 配置都没装 iconify class 插件）。
  * - `window.modal.success/error` → `getMessageApi()?.modal`，未初始化时回退 antd 静态方法。
  * - 导入结果 `msg` 是后端拼好的 HTML（后端已做 XSS 处理），沿用 `innerHTML`。

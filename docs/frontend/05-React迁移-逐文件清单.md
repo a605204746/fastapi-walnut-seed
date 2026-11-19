@@ -1,5 +1,9 @@
 # Vue → React 迁移逐文件清单
 
+> **最新状态（2026-11-19）：现有 Vue 功能迁移实施覆盖 100%，后端菜单组件 14/14。** 角色/公告、仪表盘、共享控件、七种布局与外壳交互均已补齐，工程与样式门禁通过。最新范围、实测结果和联调边界见 [07-React迁移-验收记录](./07-React迁移-验收记录.md)。
+>
+> 下文是 2026-11-05 至 2026-11-19 的历史计划/阶段记录；其中约 50%、12/14、剩余人日等数字属于当时快照，不代表当前状态。
+
 > 生成日期：2026-11-05 · 源：`walnut-frontend/`（Vben 5.7 fork，Vue 3.5）
 > 目标栈（方案 B）：Vite 8 + React 19 + React Router 7 + antd 6 + @ant-design/pro-components + Zustand + TanStack Query + Tailwind 4
 > 目标目录：`walnut-frontend-react/`（与三个后端对称，两套前端并存）

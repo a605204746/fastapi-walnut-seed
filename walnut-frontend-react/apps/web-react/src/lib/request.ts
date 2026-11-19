@@ -67,6 +67,11 @@ let isLoggingOut = false;
  * PoC 用 window.location 跳转，完整 router 联动在阶段 ④ 接入。
  */
 function handleUnauthorized() {
+  if (useAccessStore.getState().loginExpired) return;
+  if (getPreferences().app.loginExpiredMode === 'modal' && useAccessStore.getState().isAccessChecked) {
+    useAccessStore.getState().setLoginExpired(true);
+    return;
+  }
   if (isLoggingOut) return;
   isLoggingOut = true;
   resetAllStores();

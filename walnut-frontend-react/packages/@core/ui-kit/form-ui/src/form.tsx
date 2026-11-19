@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type { ReactNode } from 'react';
 
 import type { FormApi } from './form-api';
@@ -50,6 +51,7 @@ export function FormRenderer({
   formApi,
   onSubmit,
 }: FormRendererProps) {
+  const formId = useId();
   const { errors, values } = useStore(formApi.getStore());
   const options = formApi.latestOptions;
   const {
@@ -144,6 +146,8 @@ export function FormRenderer({
 
     const finalProps: Record<string, any> = {
       ...computedProps,
+      id: computedProps.id ?? `${formId}-${field.fieldName}`,
+      'aria-invalid': !!error,
       [valuePropName]: value,
       disabled: isDisabled || computedProps.disabled,
       onChange: handleChange,
@@ -173,6 +177,7 @@ export function FormRenderer({
       >
         {hideLabel ? null : (
           <label
+            htmlFor={finalProps.id}
             className={cn(
               LABEL_BASE,
               'flex leading-6 items-center',

@@ -25,6 +25,19 @@ GitHub: https://github.com/a605204746/walnut-seed
 
 ![WalnutSeed 登录页](./docs/img/img.png)
 
+## React 前端
+
+`walnut-frontend-react/` 提供 React 19 + antd 6 管理应用，与 Vue 版共用接口契约。现有前端功能迁移实施覆盖 100%（菜单组件 14/14），包括角色权限、公告富文本、双仪表盘、七种布局与主题。范围及实测验证见 [迁移验收记录](./docs/frontend/07-React迁移-验收记录.md)。
+
+```sh
+cd walnut-frontend-react
+pnpm install
+pnpm dev       # http://localhost:8020，API → localhost:8011
+pnpm check     # lint / typecheck / unit / build
+```
+
+Vue 与 React 可以并存；React 镜像与可选 Compose overlay 的用法见验收记录。前端 fixture 验收已通过，真实后端与 Docker 集成尚需部署环境联调。
+
 ## 特性
 
 内置基础设施，直接支撑真实的管理类业务：

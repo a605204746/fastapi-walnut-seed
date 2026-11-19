@@ -1,0 +1,104 @@
+.vben-grid-query {
+  padding-bottom: 40px;
+}
+.vben-grid-query form > div > div:last-child {
+  min-width: 0;
+}
+.vben-grid-query .ant-select {
+  width: 100%;
+}
+.vben-grid-toolbar {
+  min-height: 38px;
+  padding-bottom: 0;
+}
+.vben-grid-table {
+  border-bottom: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  overflow: auto;
+}
+.vben-grid .ant-table {
+  color: hsl(var(--foreground));
+}
+.vben-grid .ant-table-thead > tr > th {
+  height: 44px;
+  padding: 0 8px;
+  font-weight: 700;
+  background: hsl(0 0% 98%);
+}
+.dark .vben-grid .ant-table-thead > tr > th {
+  background: hsl(var(--accent) / 0.5);
+}
+.vben-grid .ant-table-tbody > tr > td {
+  height: 44px;
+  padding: 0 8px;
+}
+.vben-grid .ant-table-container {
+  border: 0;
+}
+.vben-grid .ant-table-tbody > tr > td,
+.vben-grid .ant-table-thead > tr > th {
+  border-color: hsl(var(--border));
+}
+.vben-grid .ant-table-tbody > tr.ant-table-row-selected > td {
+  background: hsl(var(--accent));
+}
+.vben-grid .ant-table-tbody > tr > td.ant-table-cell-row-hover {
+  background: hsl(var(--accent-hover));
+}
+.vben-grid .ant-table-cell-fix-end {
+  box-shadow: none;
+}
+.vben-grid .ant-table-cell .ant-btn-link {
+  padding-inline: 4px;
+}
+.vben-grid-pagination {
+  min-height: 44px;
+  padding: 8px 4px 0;
+  font-size: 13px;
+}
+.vben-grid-pagination .ant-btn {
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 4px;
+}
+.vben-grid-pagination .ant-select {
+  height: 28px;
+}
+@media (max-width: 640px) {
+  .vben-grid-toolbar {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .vben-grid-toolbar > div:last-child {
+    flex-wrap: wrap;
+  }
+  .vben-grid-table table {
+    min-width: 760px;
+  }
+  .vben-grid-pagination {
+    flex-wrap: wrap;
+  }
+}
+
+.vben-grid-query form {
+  column-gap: 8px;
+}
+
+.vben-grid-query > .mt-2 {
+  margin-top: 6px;
+}
+.vben-grid-query > .mt-2 > button:first-child {
+  margin-right: 4px;
+}
+.vben-grid-query .ant-btn-link {
+  padding-inline: 0;
+  gap: 0;
+}
+.vben-grid-pagination {
+  column-gap: 5px;
+}
+
+.vben-grid-toolbar { padding-right: 4px; }
+.vben-grid-toolbar > div:last-child > .ant-space { margin-right: 4px; }

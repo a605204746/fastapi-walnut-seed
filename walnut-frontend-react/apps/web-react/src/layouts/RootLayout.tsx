@@ -10,6 +10,8 @@ import { Navigate, useLocation } from 'react-router';
 import { $t } from '@/locales';
 import { ensureAccessRoutes } from '@/router/guard';
 
+import { LoginExpiredModal } from './widgets/login-expired';
+import { ShellServices } from './widgets/header-tools';
 import { BasicLayout } from './BasicLayout';
 import { PreferencesDrawer, PreferencesFixedButton } from './widgets/preferences';
 
@@ -22,6 +24,7 @@ import { PreferencesDrawer, PreferencesFixedButton } from './widgets/preferences
  * 未登录时重定向到登录页、已登录时先把动态路由 patch 进 Root 再渲染 Outlet。
  */
 export function RootLayout() {
+  const locked = useAccessStore(s => s.isLockScreen);
   const accessToken = useAccessStore((state) => state.accessToken);
   const isAccessChecked = useAccessStore((state) => state.isAccessChecked);
   const { preferences, preferencesButtonPosition } = usePreferences();
@@ -82,11 +85,13 @@ export function RootLayout() {
   // 偏好抽屉挂在布局之上：切换布局（BasicLayout↔MultiLayout）时不卸载，保持打开状态
   return (
     <>
-      <BasicLayout />
+      <div inert={locked}><BasicLayout />
       {preferences.app.enablePreferences && preferencesButtonPosition.fixed ? (
         <PreferencesFixedButton />
       ) : null}
-      <PreferencesDrawer />
+      <PreferencesDrawer /></div>
+      <ShellServices />
+      <LoginExpiredModal />
     </>
   );
 }

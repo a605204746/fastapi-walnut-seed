@@ -17,6 +17,7 @@
     "@vben-core/preferences": "workspace:*",
     "@vben-core/shared": "workspace:*",
     "@vben-core/typings": "workspace:*",
+    "secure-ls": "^2.0.0",
     "zustand": "catalog:"
   },
   "devDependencies": {

@@ -1,6 +1,6 @@
 import type { DataRouter } from 'react-router';
 
-import { useAccessStore, useUserStore } from '@vben/stores';
+import { useAccessStore, useUserStore, useTabbarStore } from '@vben/stores';
 
 import { useAuthStore } from '@/store/auth';
 
@@ -47,6 +47,8 @@ async function loadAccessRoutes() {
 
   accessStore.setAccessMenus(accessibleMenus);
   accessStore.setAccessRoutes(accessibleRoutes);
+  function affixed(routes: typeof accessibleRoutes): typeof accessibleRoutes { return routes.flatMap(route => [...(route.meta?.affixTab ? [route] : []), ...affixed(route.children ?? [])]); }
+  useTabbarStore.getState().setAffixTabs(affixed(accessibleRoutes));
 
   router.patchRoutes(
     ROOT_ROUTE_ID,

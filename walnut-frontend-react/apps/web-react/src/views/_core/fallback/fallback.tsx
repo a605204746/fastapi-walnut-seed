@@ -16,10 +16,7 @@ interface FallbackProps {
 }
 
 /**
- * 兜底页容器（对应 Vue 侧 `packages/effects/common-ui/src/ui/fallback/fallback.vue`）。
- *
- * 与 Vue 版的差异：Vue 侧每个状态配一张手绘 SVG 插画（清单 §6.2 的 894 行 B 类文件），
- * 这里先用 antd `Result` 自带图形；插画 SVG → JSX 的机械转换留到阶段 ⑥-b。
+ * 兜底页容器，复用 Vue 端原始 SVG 插画及主题令牌。
  */
 export function Fallback({
   description,
@@ -44,6 +41,7 @@ export function Fallback({
             </Button>
           ) : undefined
         }
+        icon={<img className="mx-auto h-64 max-w-full" src={`/fallback/icon-${status}.svg`} alt="" />}
         status={status}
         subTitle={description}
         title={title}

@@ -166,7 +166,7 @@ export class FormApi {
 
   async getValues(): Promise<Record<string, any>> {
     const { fieldMappingTime } = this.latestOptions;
-    let values = cloneDeep(this.store.state.values);
+    const values = cloneDeep(this.store.state.values);
 
     if (fieldMappingTime && fieldMappingTime.length > 0) {
       for (const [field, [startKey, endKey], [startFmt, endFmt]] of

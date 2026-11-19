@@ -1,30 +1,33 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 import type { MenuRecordRaw, RouteHandle, RouteMeta } from '@vben-core/typings';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { usePreferences } from '@vben/preferences';
 import { useAccessStore } from '@vben/stores';
 import { findMenuByPath, setObjToUrlParams } from '@vben/utils';
 import { isHttpUrl } from '@vben-core/shared/utils';
 import { VbenIcon } from '@vben-core/shadcn-ui';
-import { Breadcrumb, ConfigProvider, Layout, Menu, Watermark, theme as antdTheme } from 'antd';
-import { Outlet, useLocation, useMatches, useNavigate } from 'react-router';
+import { Breadcrumb, ConfigProvider, Layout, Menu } from 'antd';
+import { useLocation, useMatches, useNavigate } from 'react-router';
 
 import { VbenMenu } from '@/adapter/menu';
 import { VbenTabs } from '@/adapter/tabs';
-import { usePreferenceEffects } from '@/hooks/use-preference-effects';
 import { $t } from '@/locales';
 import { mergeMatchMeta } from '@/router/route-tree';
 import { useUiStore } from '@/store/ui';
 
 import { UserDropdown } from './BasicLayout';
+import { ContentArea } from './ContentArea';
+import { TenantToggle } from './widgets/tenant-toggle';
+import { HeaderTools, SearchButton } from './widgets/header-tools';
+import { useShellTheme } from './use-shell-theme';
+import { useHeaderScroll } from './use-header-scroll';
 import { FullscreenToggle, LanguageToggle, ThemeToggle } from './widgets';
 import { PreferencesButton } from './widgets/preferences';
-import { RouteFeedback } from './widgets/route-feedback';
 
-const { Content, Header, Sider } = Layout;
+const { Header, Sider } = Layout;
 
 /** 第一个叶子菜单（混合导航点顶层时跳转到其首个子页） */
 function firstLeaf(menu: MenuRecordRaw): MenuRecordRaw {
@@ -38,28 +41,15 @@ function firstLeaf(menu: MenuRecordRaw): MenuRecordRaw {
  * sidebar-mixed-nav / full-content 六种；默认 sidebar-nav 由 BasicLayout 原渲染承担。
  */
 export function MultiLayout() {
+  const headerOffset = useHeaderScroll();
   const { isDark, layout, preferences, preferencesButtonPosition } = usePreferences();
   const navigate = useNavigate();
   const location = useLocation();
   const matches = useMatches();
   const accessMenus = useAccessStore((state) => state.accessMenus);
   const maximized = useUiStore((state) => state.maximized);
-  const refreshCounter = useUiStore((state) => state.refreshCounter);
-  usePreferenceEffects();
 
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [contentHeight, setContentHeight] = useState(0);
   const [openKeys, setOpenKeys] = useState<string[]>([]);
-
-  useEffect(() => {
-    const element = contentRef.current;
-    if (!element) return;
-    const update = () => setContentHeight(element.clientHeight);
-    const observer = new ResizeObserver(update);
-    observer.observe(element);
-    update();
-    return () => observer.disconnect();
-  }, []);
 
   const meta = useMemo(() => mergeMatchMeta(matches), [matches]);
   const activePath = (meta?.activePath as string) || location.pathname;
@@ -71,11 +61,11 @@ export function MultiLayout() {
       return (menu.children ?? []).some(contains);
     };
     return accessMenus.find(contains) ?? accessMenus[0];
-  }, [accessMenus, activePath]);
+  }, [accessMenus, activePath, preferences.navigation.accordion]);
 
   const isMixed = layout === 'mixed-nav' || layout === 'header-mixed-nav';
   const isDoubleCol = layout === 'sidebar-mixed-nav' || layout === 'header-mixed-nav';
-  const sideMenus = isMixed || isDoubleCol ? (activeRoot?.children ?? []) : accessMenus;
+  const sideMenus = (isMixed && preferences.navigation.split) || isDoubleCol ? (activeRoot?.children ?? []) : accessMenus;
   const horizontalMenus = isMixed
     ? accessMenus.map((root) => ({ ...root, children: undefined }))
     : accessMenus;
@@ -83,17 +73,18 @@ export function MultiLayout() {
   useEffect(() => {
     const parents = findMenuByPath(accessMenus, activePath)?.parents ?? [];
     if (parents.length === 0) return;
+    if (preferences.navigation.accordion) { setOpenKeys(parents); return; }
     setOpenKeys((prev) =>
       parents.every((key) => prev.includes(key)) ? prev : [...new Set([...prev, ...parents])],
     );
-  }, [accessMenus, activePath]);
+  }, [accessMenus, activePath, preferences.navigation.accordion]);
 
   function handleMenuSelect(menu: MenuRecordRaw) {
     if (isHttpUrl(menu.path)) {
       window.open(menu.path, '_blank');
       return;
     }
-    const target = isMixed && menu.children?.length ? firstLeaf(menu) : menu;
+    const target = (isMixed || isDoubleCol) && menu.children?.length ? firstLeaf(menu) : menu;
     const { query } = target;
     navigate(
       query && Object.keys(query).length > 0 ? setObjToUrlParams(target.path, query) : target.path,
@@ -110,44 +101,33 @@ export function MultiLayout() {
   }
 
   const semiDark = !isDark;
-  const semiDarkTheme = {
-    algorithm: antdTheme.darkAlgorithm,
-    components: {
-      Layout: { siderBg: 'hsl(222.34 10.43% 12.27%)' },
-      Menu: {
-        darkItemBg: 'transparent',
-        darkItemSelectedBg: 'hsl(var(--primary))',
-        darkItemSelectedColor: '#fff',
-        darkSubMenuItemBg: 'transparent',
-        itemBg: 'transparent',
-        subMenuItemBg: 'transparent',
-      },
-    },
-  };
+  const semiDarkTheme = useShellTheme();
 
-  const showHeader = preferences.header.enable && !maximized;
-  const showTabbar = preferences.tabbar.enable && !maximized;
+  const showHeader = preferences.header.enable && !preferences.header.hidden && !maximized;
+  const showTabbar = preferences.tabbar.enable && !maximized && layout !== 'full-content';
   const showSider =
     preferences.sidebar.enable &&
+    !preferences.sidebar.hidden &&
     !maximized &&
     ['mixed-nav', 'sidebar-mixed-nav', 'header-mixed-nav', 'header-sidebar-nav'].includes(layout);
 
   const logo = (compact = false) => (
-    <div className="flex-center h-12 shrink-0 gap-2 overflow-hidden px-3">
+    <div className="flex h-[50px] shrink-0 items-center gap-2 overflow-hidden px-3">
       <img alt="logo" className="size-8 shrink-0" src={preferences.logo.source} />
       {compact ? null : (
-        <span className="text-foreground truncate text-base font-semibold">{preferences.app.name}</span>
+        <span className="text-foreground truncate text-lg font-semibold">{preferences.app.name}</span>
       )}
     </div>
   );
 
   const rightWidgets = (
     <div className="flex shrink-0 items-center">
-      {preferences.app.enablePreferences && preferencesButtonPosition.header ? <PreferencesButton /> : null}
+      <TenantToggle />{preferences.widget.globalSearch ? <SearchButton /> : null}
+              {preferences.app.enablePreferences && preferencesButtonPosition.header ? <PreferencesButton /> : null}
       {preferences.widget.themeToggle ? <ThemeToggle /> : null}
       {preferences.widget.languageToggle ? <LanguageToggle /> : null}
       {preferences.widget.fullscreen ? <FullscreenToggle /> : null}
-      <UserDropdown />
+      <HeaderTools /><UserDropdown />
     </div>
   );
 
@@ -174,7 +154,7 @@ export function MultiLayout() {
         title: (
           <span className={isLast ? 'flex items-center gap-1' : 'text-primary flex cursor-pointer items-center gap-1'}>
             {showIcon && item.icon ? <VbenIcon className="size-3.5" icon={item.icon as string} /> : null}
-            {item.title}
+            {$t(item.title)}
           </span>
         ),
       });
@@ -198,14 +178,18 @@ export function MultiLayout() {
     <VbenMenu
       mode="horizontal"
       menus={horizontalMenus}
-      onMenuSelect={handleMenuSelect}
+      onClick={({ key }) => {
+        const root = accessMenus.find((menu) => menu.path === key);
+        if (isMixed && root) handleMenuSelect(root);
+      }}
+      onMenuSelect={isMixed ? undefined : handleMenuSelect}
       selectedKeys={[isMixed ? (activeRoot?.path ?? '') : activePath]}
-      style={{ background: 'transparent', borderBottom: 'none', flex: 1, minWidth: 0 }}
+      style={{ background: 'transparent', borderBottom: 'none', flex: 'auto', minWidth: 0, justifyContent: preferences.header.menuAlign === 'center' ? 'center' : preferences.header.menuAlign === 'end' ? 'flex-end' : 'flex-start' }}
     />
   );
 
   const doubleColSider = (
-    <div className="bg-sidebar border-border flex h-full shrink-0 border-r">
+    <div className={`${preferences.theme.semiDarkSidebar && semiDark ? 'dark ' : ''}bg-sidebar border-border flex h-full shrink-0 border-r`}>
       <div className="border-border flex flex-col items-center border-r" style={{ width: preferences.sidebar.mixedWidth }}>
         {preferences.logo.enable && layout === 'sidebar-mixed-nav' ? logo(true) : null}
         <Menu
@@ -226,7 +210,7 @@ export function MultiLayout() {
       </div>
       <div className="flex min-h-0 flex-1 flex-col" style={{ width: preferences.sidebar.width }}>
         <div className="flex-center h-12 shrink-0 px-3">
-          <span className="text-foreground truncate text-base font-semibold">{activeRoot?.name ?? preferences.app.name}</span>
+          <span className="text-foreground truncate text-lg font-semibold">{activeRoot?.name ?? preferences.app.name}</span>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">{inlineMenu(sideMenus)}</div>
       </div>
@@ -235,7 +219,7 @@ export function MultiLayout() {
 
   const singleSider = (
     <Sider
-      className="bg-sidebar border-border border-r"
+      className={`${preferences.theme.semiDarkSidebar && semiDark ? 'dark ' : ''}bg-sidebar border-border border-r`}
       collapsible
       trigger={null}
       width={preferences.sidebar.width}
@@ -246,26 +230,9 @@ export function MultiLayout() {
     </Sider>
   );
 
-  const content = (
-    <Content className="relative overflow-hidden" ref={contentRef} style={{ '--vben-content-height': `${contentHeight}px` } as CSSProperties}>
-      <Watermark
-        content={preferences.app.watermark ? preferences.app.watermarkContent || preferences.app.name : undefined}
-        font={{ color: 'rgba(0,0,0,0.15)', fontSize: 16 }}
-        gap={[100, 100]}
-        rotate={-22}
-      >
-        <div
-          className={`h-full overflow-y-auto ${preferences.transition.enable ? `page-transition page-transition--${preferences.transition.name}` : ''}`}
-          key={`${refreshCounter}-${location.pathname}`}
-        >
-          <Outlet />
-        </div>
-      </Watermark>
-      <RouteFeedback />
-    </Content>
-  );
+  const content = <ContentArea />;
 
-  const footer = preferences.footer.enable ? (
+  const footer = preferences.footer.enable && layout !== 'full-content' ? (
     <footer
       className={`bg-header border-border text-muted-foreground flex-center shrink-0 border-t text-xs ${preferences.footer.fixed ? 'absolute bottom-0 left-0 right-0 z-10' : ''}`}
       style={{ height: preferences.footer.height }}
@@ -281,10 +248,18 @@ export function MultiLayout() {
   const headerBar = (withMenu: boolean, withLogo: boolean) => (
     <ConfigProvider theme={preferences.theme.semiDarkHeader && semiDark ? semiDarkTheme : undefined}>
       <Header
-        className="bg-header border-border flex items-center justify-between gap-2 border-b px-3"
-        style={{ height: preferences.header.height }}
+        className={`${preferences.theme.semiDarkHeader && semiDark ? 'dark ' : ''}bg-header border-border flex items-center justify-between gap-2 border-b px-3`}
+        style={{
+              display: 'flex',
+              height: preferences.header.height,
+              marginTop: headerOffset,
+              transition: preferences.header.mode === 'static' ? 'none' : 'margin-top 180ms ease',
+              // antd 6 scopes Layout tokens to .ant-layout, not a standalone Header.
+              background: 'hsl(var(--header))',
+              color: 'hsl(var(--foreground))',
+            }}
       >
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2" style={{ flex: '1 1 0%', minWidth: 0, display: 'flex' }}>
           {withLogo && preferences.logo.enable ? logo() : null}
           {withMenu ? horizontalMenu : null}
           {!withMenu && breadcrumbItems.length > 0 ? <Breadcrumb items={breadcrumbItems} /> : null}
@@ -311,10 +286,10 @@ export function MultiLayout() {
     );
   } else if (layout === 'sidebar-mixed-nav') {
     shell = (
-      <Layout className="h-screen overflow-hidden">
-        <ConfigProvider theme={preferences.theme.semiDarkSidebar && semiDark ? semiDarkTheme : undefined}>
+      <Layout className="h-screen overflow-hidden" hasSider={showSider}>
+        {showSider ? <ConfigProvider theme={preferences.theme.semiDarkSidebar && semiDark ? semiDarkTheme : undefined}>
           {doubleColSider}
-        </ConfigProvider>
+        </ConfigProvider> : null}
         <Layout className="bg-background-deep min-h-0">
           {showHeader ? headerBar(false, false) : null}
           {bodyColumn}
@@ -327,7 +302,7 @@ export function MultiLayout() {
     shell = (
       <Layout className="h-screen overflow-hidden">
         {showHeader ? headerBar(withMenu, true) : null}
-        <Layout className="min-h-0">
+        <Layout className="min-h-0" hasSider={showSider}>
           {showSider ? (
             <ConfigProvider theme={preferences.theme.semiDarkSidebar && semiDark ? semiDarkTheme : undefined}>
               {isDoubleCol ? doubleColSider : singleSider}

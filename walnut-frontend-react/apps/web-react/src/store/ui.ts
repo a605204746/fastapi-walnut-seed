@@ -5,6 +5,7 @@ interface UiState {
   maximized: boolean;
   /** 内容区重挂载计数：顶栏刷新 / 页签右键刷新共用（Vue 侧靠 Activity 缓存剔除实现） */
   refreshCounter: number;
+  revisionByPath: Record<string, number>;
   refresh: () => void;
   toggleMaximized: () => void;
 }
@@ -19,7 +20,11 @@ interface UiState {
  */
 export const useUiStore = create<UiState>((set) => ({
   maximized: false,
-  refresh: () => set((state) => ({ refreshCounter: state.refreshCounter + 1 })),
+  revisionByPath: {},
+  refresh: () => set((state) => {
+    const path = window.location.pathname + window.location.search;
+    return { refreshCounter: state.refreshCounter + 1, revisionByPath: { ...state.revisionByPath, [path]: (state.revisionByPath[path] ?? 0) + 1 } };
+  }),
   refreshCounter: 0,
   toggleMaximized: () => set((state) => ({ maximized: !state.maximized })),
 }));

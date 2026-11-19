@@ -1,3 +1,6 @@
+import { createJSONStorage } from 'zustand/middleware';
+import { initStoreStorage, getStoreStorage } from './storage';
+import { useTimezoneStore } from './modules/timezone';
 import { useAccessStore } from './modules/access';
 import { useTabbarStore } from './modules/tabbar';
 import { useUserStore } from './modules/user';
@@ -11,20 +14,24 @@ export interface InitStoreOptions {
 /**
  * @zh_CN 初始化 stores（对应 Vue 侧 packages/stores/src/setup.ts 的 initStores）。
  *
- * PoC 阶段使用明文 localStorage 持久化；生产环境的 secure-ls（AES + 压缩）
- * storage adapter 在阶段 ③ 补齐（密钥 VITE_APP_STORE_SECURE_KEY 不变）。
+ * 开发环境使用 localStorage；生产环境与 Vue 一样使用 secure-ls AES + 压缩。
+ * namespace 在任何持久化数据水合前设置，避免跨应用读取。
  */
 export function initStores(options: InitStoreOptions) {
   storeNamespace.prefix = options.namespace;
+  initStoreStorage(options.namespace);
   // access → localStorage、tabbar → sessionStorage，均与 Vue 侧一致（user 无 persist）
   useAccessStore.persist.setOptions({
-    name: `${options.namespace}-core-access`,
+    name: `${options.namespace}-core-access`, storage: createJSONStorage(getStoreStorage),
   });
   void useAccessStore.persist.rehydrate();
   useTabbarStore.persist.setOptions({
-    name: `${options.namespace}-core-tabbar`,
+    name: `${options.namespace}-core-tabbar`, storage: createJSONStorage(() => sessionStorage),
   });
   void useTabbarStore.persist.rehydrate();
+  useTimezoneStore.persist.setOptions({ name: `${options.namespace}-core-timezone`, storage: createJSONStorage(getStoreStorage) });
+  void useTimezoneStore.persist.rehydrate();
+  void useTimezoneStore.getState().initTimezone().catch(console.error);
 }
 
 /** 重置所有 store（登出时调用），对应 Vue 侧 resetAllStores */

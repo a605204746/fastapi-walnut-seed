@@ -2,12 +2,10 @@
 
 WalnutSeed 的 **React 版前端**，与 `walnut-frontend`（Vue 3 / Vben 5）并存，共用同一套后端接口契约。
 
-> 当前进度：**迁移阶段 ①–⑤、⑥-a（可用后台外壳）已完成，A1 通路 + A2 全部 7 页 + A3 的 user 页已落地，总体 ≈50%**。
-> 登录 → 动态菜单 → 运行时路由注入 → 后台外壳 → 多页签 → CRUD 全链路已跑通；
-> 业务页覆盖 **12/14**（后端菜单下发的 14 个 `component` 中，仅剩 `system/role` 与 `system/notice`）。
+> **2026-11-19：现有 Vue 前端功能迁移完成（100% 实施覆盖）**。后端菜单契约组件 **14/14**，不再有迁移占位页；角色、公告、双仪表盘、隐藏授权页及原有管理页均已接通。
+> 七种布局、主题/半暗、页签缓存/刷新、搜索、锁屏、通知、租户切换、会话失效弹窗、头像裁剪和富文本已实现。
 >
-> - **进度评估与后续排期**见 [`../docs/frontend/06-React迁移-总计划与进度.md`](../docs/frontend/06-React迁移-总计划与进度.md)（§9 = A1、§10 = A2/A3 实施记录）
-> - 逐文件迁移分类与 ①–⑥-a 实施记录见 [`../docs/frontend/05-React迁移-逐文件清单.md`](../docs/frontend/05-React迁移-逐文件清单.md)
+> 验收与部署说明见 [迁移验收记录](../docs/frontend/07-React迁移-验收记录.md)。这里的 100% 指现有前端功能的实施覆盖；注册/找回密码/二维码保留 Vue 示例性质，真实后端与 Docker 集成仍需部署环境联调。
 
 ## 技术栈
 
@@ -29,7 +27,7 @@ WalnutSeed 的 **React 版前端**，与 `walnut-frontend`（Vue 3 / Vben 5）�
 
 ```
 walnut-frontend-react/
-  apps/web-react/          # 主应用（当前为阶段 ①② 验证骨架）
+  apps/web-react/          # React 管理应用
     src/__fixtures__/      # 从运行中后端抓取的真实契约样本
   packages/
     @core/shared/          # ← @vben-core/shared       纯 TS，原样搬运
@@ -54,20 +52,21 @@ walnut-frontend-react/
 ```bash
 cd walnut-frontend-react
 pnpm install            # postinstall 会自动 tsdown 构建 internal/*
-pnpm test:unit          # vitest，263 个用例
+pnpm check              # lint → typecheck → unit → production build
+pnpm test:unit          # vitest，424 个用例
 pnpm typecheck          # tsc --noEmit
 pnpm dev                # http://localhost:8020
 pnpm build
 ```
 
 开发端口为 **8020**（`VITE_PORT`），避开 Vue 版容器的 8010。
-API 经 Vite 代理 `/api` → `http://localhost:8011`（Go 后端）。
+API 经 Vite 代理 `/api` → `http://localhost:8011`（三后端任选其一）。
 
 > ⚠️ `dev` 脚本必须带 `--mode development`。`internal/vite-config` 的 `getConfFiles()`
 > 是靠正则匹配 `npm_lifecycle_script` 里的 `--mode xxx` 来判断环境的，
 > 漏写就会静默加载 `.env.production`（表现为端口掉回 5173）。
 
-## 阶段 ① 验证了什么
+## 历史实施记录：阶段 ①
 
 `pnpm dev` 打开 http://localhost:8020 是一个自检面板，覆盖：
 

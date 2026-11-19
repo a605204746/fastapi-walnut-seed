@@ -47,7 +47,7 @@ import { getMessageApi } from '@/services/message';
  *
  * 与 Vue 的对齐原则：
  * - 每个控件要么真实接到消费端，要么禁用 + tip 说明原因（不允许「点了没反应」）。
- * - 依赖外壳 1:1（B1/B3/B5）尚未迁移组件的开关，统一禁用 + `preferences.pendingTip`。
+ * - 互相依赖的开关仅在其父功能关闭时禁用。
  * - 「有改动」判定 / 复制内容均使用与默认值的 diff（`usePreferences().diffPreference`），
  *   与 Vue 的 `mergedDiffPreference` 语义一致。
  */
@@ -579,7 +579,6 @@ export function PreferencesDrawer() {
   }, [diffPreference, diffCustomPreference]);
   const hasDiff = Boolean(mergedDiff);
 
-  const pendingTip = $t('preferences.pendingTip');
 
   async function handleCopy() {
     await navigator.clipboard.writeText(JSON.stringify(mergedDiff, null, 2));
@@ -765,7 +764,7 @@ export function PreferencesDrawer() {
               {(['Default', 'Disabled', 'Happy', 'Inset', 'Shake'] as const).map((v) => (
                 <ToggleGroupItem
                   class="h-7 rounded-sm px-2 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
-                  disabled={v !== 'Default' && v !== 'Disabled'}
+
                   key={v}
                   value={v}
                 >
@@ -821,7 +820,7 @@ export function PreferencesDrawer() {
             <SwitchItem checked={sidebar.collapsed} disabled={sidebarDisabled} label={$t('preferences.sidebar.collapsed')} onChange={(c) => updatePreferences({ sidebar: { collapsed: c } })} />
             <SwitchItem checked={sidebar.expandOnHover} disabled={sidebarDisabled || !sidebar.collapsed} label={$t('preferences.sidebar.expandOnHover')} onChange={(c) => updatePreferences({ sidebar: { expandOnHover: c } })} tip={$t('preferences.sidebar.expandOnHoverTip')} />
             <SwitchItem checked={sidebar.collapsedShowTitle} disabled={sidebarDisabled || !sidebar.collapsed} label={$t('preferences.sidebar.collapsedShowTitle')} onChange={(c) => updatePreferences({ sidebar: { collapsedShowTitle: c } })} />
-            <SwitchItem checked={sidebar.autoActivateChild} disabled label={$t('preferences.sidebar.autoActivateChild')} onChange={(c) => updatePreferences({ sidebar: { autoActivateChild: c } })} tip={pendingTip} />
+            <SwitchItem checked={sidebar.autoActivateChild} label={$t('preferences.sidebar.autoActivateChild')} onChange={(c) => updatePreferences({ sidebar: { autoActivateChild: c } })} />
             <CheckboxItem
               disabled={sidebarDisabled}
               items={[
@@ -838,7 +837,6 @@ export function PreferencesDrawer() {
           <Block title={$t('preferences.header.title')}>
             <SwitchItem checked={header.enable} label={$t('preferences.header.visible')} onChange={(c) => updatePreferences({ header: { enable: c } })} />
             <SelectItem
-              disabled
               label={$t('preferences.header.mode')}
               onChange={(v) => updatePreferences({ header: { mode: v as any } })}
               options={[
@@ -847,11 +845,9 @@ export function PreferencesDrawer() {
                 { label: $t('preferences.header.modeAuto'), value: 'auto' },
                 { label: $t('preferences.header.modeAutoScroll'), value: 'auto-scroll' },
               ]}
-              tip={pendingTip}
               value={header.mode}
             />
             <ToggleItem
-              disabled
               items={[
                 { label: $t('preferences.header.menuAlignStart'), value: 'start' },
                 { label: $t('preferences.header.menuAlignCenter'), value: 'center' },
@@ -859,7 +855,6 @@ export function PreferencesDrawer() {
               ]}
               label={$t('preferences.header.menuAlign')}
               onChange={(v) => updatePreferences({ header: { menuAlign: v as any } })}
-              tip={pendingTip}
               value={header.menuAlign}
             />
           </Block>
@@ -874,7 +869,7 @@ export function PreferencesDrawer() {
               onChange={(v) => updatePreferences({ navigation: { styleType: v as any } })}
               value={navigation.styleType}
             />
-            <SwitchItem checked={navigation.split} disabled label={$t('preferences.navigationMenu.split')} onChange={(c) => updatePreferences({ navigation: { split: c } })} tip={pendingTip} />
+            <SwitchItem checked={navigation.split} label={$t('preferences.navigationMenu.split')} onChange={(c) => updatePreferences({ navigation: { split: c } })} />
             <SwitchItem checked={navigation.accordion} label={$t('preferences.navigationMenu.accordion')} onChange={(c) => updatePreferences({ navigation: { accordion: c } })} />
           </Block>
 
@@ -898,7 +893,7 @@ export function PreferencesDrawer() {
           <Block title={$t('preferences.tabbar.title')}>
             <SwitchItem checked={tabbar.enable} label={$t('preferences.tabbar.enable')} onChange={(c) => updatePreferences({ tabbar: { enable: c } })} />
             <SwitchItem checked={tabbar.persist} disabled={tabbarDisabled} label={$t('preferences.tabbar.persist')} onChange={(c) => updatePreferences({ tabbar: { persist: c } })} />
-            <SwitchItem checked={tabbar.visitHistory} disabled label={$t('preferences.tabbar.visitHistory')} onChange={(c) => updatePreferences({ tabbar: { visitHistory: c } })} tip={pendingTip} />
+            <SwitchItem checked={tabbar.visitHistory} label={$t('preferences.tabbar.visitHistory')} onChange={(c) => updatePreferences({ tabbar: { visitHistory: c } })} />
             <NumberItem disabled={tabbarDisabled} label={$t('preferences.tabbar.maxCount')} max={30} min={0} onChange={(v) => updatePreferences({ tabbar: { maxCount: v } })} step={5} tip={$t('preferences.tabbar.maxCountTip')} value={tabbar.maxCount} />
             <SwitchItem checked={tabbar.draggable} disabled={tabbarDisabled} label={$t('preferences.tabbar.draggable')} onChange={(c) => updatePreferences({ tabbar: { draggable: c } })} />
             <SwitchItem checked={tabbar.wheelable} disabled={tabbarDisabled} label={$t('preferences.tabbar.wheelable')} onChange={(c) => updatePreferences({ tabbar: { wheelable: c } })} tip={$t('preferences.tabbar.wheelableTip')} />
@@ -917,15 +912,15 @@ export function PreferencesDrawer() {
           </Block>
 
           <Block title={$t('preferences.widget.title')}>
-            <SwitchItem checked={widget.globalSearch} disabled label={$t('preferences.widget.globalSearch')} onChange={(c) => updatePreferences({ widget: { globalSearch: c } })} tip={pendingTip} />
+            <SwitchItem checked={widget.globalSearch} label={$t('preferences.widget.globalSearch')} onChange={(c) => updatePreferences({ widget: { globalSearch: c } })} />
             <SwitchItem checked={widget.themeToggle} label={$t('preferences.widget.themeToggle')} onChange={(c) => updatePreferences({ widget: { themeToggle: c } })} />
             <SwitchItem checked={widget.languageToggle} label={$t('preferences.widget.languageToggle')} onChange={(c) => updatePreferences({ widget: { languageToggle: c } })} />
             <SwitchItem checked={widget.fullscreen} label={$t('preferences.widget.fullscreen')} onChange={(c) => updatePreferences({ widget: { fullscreen: c } })} />
-            <SwitchItem checked={widget.notification} disabled label={$t('preferences.widget.notification')} onChange={(c) => updatePreferences({ widget: { notification: c } })} tip={pendingTip} />
-            <SwitchItem checked={widget.lockScreen} disabled label={$t('preferences.widget.lockScreen')} onChange={(c) => updatePreferences({ widget: { lockScreen: c } })} tip={pendingTip} />
+            <SwitchItem checked={widget.notification} label={$t('preferences.widget.notification')} onChange={(c) => updatePreferences({ widget: { notification: c } })} />
+            <SwitchItem checked={widget.lockScreen} label={$t('preferences.widget.lockScreen')} onChange={(c) => updatePreferences({ widget: { lockScreen: c } })} />
             <SwitchItem checked={widget.sidebarToggle} label={$t('preferences.widget.sidebarToggle')} onChange={(c) => updatePreferences({ widget: { sidebarToggle: c } })} />
             <SwitchItem checked={widget.refresh} label={$t('preferences.widget.refresh')} onChange={(c) => updatePreferences({ widget: { refresh: c } })} />
-            <SwitchItem checked={widget.timezone} disabled label={$t('preferences.widget.timezone')} onChange={(c) => updatePreferences({ widget: { timezone: c } })} tip={pendingTip} />
+            <SwitchItem checked={widget.timezone} label={$t('preferences.widget.timezone')} onChange={(c) => updatePreferences({ widget: { timezone: c } })} />
             <SelectItem
               label={$t('preferences.position.title')}
               onChange={(v) => updatePreferences({ app: { preferencesButtonPosition: v as any } })}
@@ -960,9 +955,9 @@ export function PreferencesDrawer() {
       {tab === 'shortcutKey' ? (
         <Block title={$t('preferences.shortcutKeys.global')}>
           <SwitchItem checked={shortcutKeys.enable} label={$t('preferences.shortcutKeys.title')} onChange={(c) => updatePreferences({ shortcutKeys: { enable: c } })} />
-          <SwitchItem checked={shortcutKeys.globalSearch} disabled label={$t('preferences.shortcutKeys.search')} onChange={(c) => updatePreferences({ shortcutKeys: { globalSearch: c } })} shortcut={<>{IS_WINDOWS ? 'Ctrl' : '⌘'} <kbd>K</kbd></>} tip={pendingTip} />
+          <SwitchItem checked={shortcutKeys.globalSearch} label={$t('preferences.shortcutKeys.search')} onChange={(c) => updatePreferences({ shortcutKeys: { globalSearch: c } })} shortcut={<>{IS_WINDOWS ? 'Ctrl' : '⌘'} <kbd>K</kbd></>} />
           <SwitchItem checked={shortcutKeys.globalLogout} disabled={!shortcutKeys.enable} label={$t('preferences.shortcutKeys.logout')} onChange={(c) => updatePreferences({ shortcutKeys: { globalLogout: c } })} shortcut={<>{IS_WINDOWS ? 'Alt' : '⌥'} Q</>} />
-          <SwitchItem checked={shortcutKeys.globalLockScreen} disabled label={$t('ui.widgets.lockScreen.title')} onChange={(c) => updatePreferences({ shortcutKeys: { globalLockScreen: c } })} shortcut={<>{IS_WINDOWS ? 'Alt' : '⌥'} L</>} tip={pendingTip} />
+          <SwitchItem checked={shortcutKeys.globalLockScreen} label={$t('ui.widgets.lockScreen.title')} onChange={(c) => updatePreferences({ shortcutKeys: { globalLockScreen: c } })} shortcut={<>{IS_WINDOWS ? 'Alt' : '⌥'} L</>} />
           <SwitchItem checked={shortcutKeys.globalEscape} disabled={!shortcutKeys.enable} label={$t('preferences.shortcutKeys.escape')} onChange={(c) => updatePreferences({ shortcutKeys: { globalEscape: c } })} shortcut={<>Esc</>} />
         </Block>
       ) : null}
@@ -981,11 +976,9 @@ export function PreferencesDrawer() {
               value={app.locale}
             />
             <SelectItem
-              disabled
               label={$t('preferences.timezone')}
               onChange={(v) => updatePreferences({ app: { timezone: v } })}
               options={DEFAULT_TIME_ZONE_OPTIONS.map((i) => ({ label: i.label, value: i.timezone }))}
-              tip={pendingTip}
               value={app.timezone}
             />
             <SwitchItem checked={app.dynamicTitle} label={$t('preferences.dynamicTitle')} onChange={(c) => updatePreferences({ app: { dynamicTitle: c } })} />
@@ -1000,7 +993,7 @@ export function PreferencesDrawer() {
             {app.watermark ? (
               <InputItem label={$t('preferences.watermarkContent')} onChange={(v) => updatePreferences({ app: { watermarkContent: v } })} value={app.watermarkContent} />
             ) : null}
-            <SwitchItem checked={app.enableCheckUpdates} disabled label={$t('preferences.checkUpdates')} onChange={(c) => updatePreferences({ app: { enableCheckUpdates: c } })} tip={pendingTip} />
+            <SwitchItem checked={app.enableCheckUpdates} label={$t('preferences.checkUpdates')} onChange={(c) => updatePreferences({ app: { enableCheckUpdates: c } })} />
             <SwitchItem checked={app.enableCopyPreferences} label={$t('preferences.enableCopyPreferences')} onChange={(c) => updatePreferences({ app: { enableCopyPreferences: c } })} />
           </Block>
 

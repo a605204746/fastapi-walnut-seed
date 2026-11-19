@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
 import type {
   MenuRecordRaw,
@@ -13,32 +13,40 @@ import { useAccessStore, useUserStore } from '@vben/stores';
 import { findMenuByPath, setObjToUrlParams } from '@vben/utils';
 import { isHttpUrl } from '@vben-core/shared/utils';
 import { VbenIcon, VbenIconButton } from '@vben-core/shadcn-ui';
-import { Avatar, Breadcrumb, Button, ConfigProvider, Dropdown, Layout, Watermark, theme as antdTheme } from 'antd';
+import { Avatar, Badge, Breadcrumb, ConfigProvider, Dropdown, Drawer, Layout } from 'antd';
 import {
   ChevronsLeft,
   ChevronsRight,
   LogOut,
   RotateCw,
+  Pin,
+  PinOff,
   Settings,
   UserRound,
 } from 'lucide-react';
-import { Outlet, useLocation, useMatches, useNavigate } from 'react-router';
+import { useLocation, useMatches, useNavigate } from 'react-router';
 
 import { VbenMenu } from '@/adapter/menu';
 import { VbenTabs } from '@/adapter/tabs';
+import { useIsMobile } from '@/hooks/use-is-mobile';
 import { usePreferenceEffects } from '@/hooks/use-preference-effects';
 import { $t } from '@/locales';
 import { mergeMatchMeta } from '@/router/route-tree';
 import { useAuthStore } from '@/store/auth';
 import { useUiStore } from '@/store/ui';
+import { useTenantStore } from '@/store/tenant';
 
+import { ContentArea } from './ContentArea';
+import { TenantToggle } from './widgets/tenant-toggle';
+import { HeaderTools, SearchButton } from './widgets/header-tools';
 import { MultiLayout } from './MultiLayout';
+import { useShellTheme } from './use-shell-theme';
+import { useHeaderScroll } from './use-header-scroll';
 import { FullscreenToggle, LanguageToggle, ThemeToggle } from './widgets';
 import { openPreferences, PreferencesButton } from './widgets/preferences';
-import { RouteFeedback } from './widgets/route-feedback';
 import { EpExpand, EpFold } from './widgets/sidebar-toggle-icons';
 
-const { Content, Header, Sider } = Layout;
+const { Header, Sider } = Layout;
 
 /**
  * 用户下拉（对应 Vue 侧 widgets/user-dropdown.vue，304 行）。
@@ -52,6 +60,7 @@ export function UserDropdown() {
   const navigate = useNavigate();
   const { preferences, preferencesButtonPosition } = usePreferences();
 
+  const tenantSelected = useTenantStore(s => s.selected);
   const items: any[] = [
     {
       icon: <UserRound className="size-4" />,
@@ -59,6 +68,8 @@ export function UserDropdown() {
       label: $t('ui.widgets.profile'),
     },
   ];
+  if (tenantSelected) items.splice(0,1);
+  items.push({ key: 'about', label: '关于项目' });
   if (preferences.app.enablePreferences && preferencesButtonPosition.userDropdown) {
     items.push({
       icon: <Settings className="size-4" />,
@@ -81,7 +92,7 @@ export function UserDropdown() {
       menu={{
         items,
         onClick: ({ key }) => {
-          if (key === 'logout') {
+          if (key === 'about') { navigate('/about'); } else if (key === 'logout') {
             void logout();
           } else if (key === 'profile') {
             navigate('/profile');
@@ -92,12 +103,9 @@ export function UserDropdown() {
       }}
       trigger={['click']}
     >
-      <div className="hover:bg-accent flex-center cursor-pointer gap-2 rounded-md px-2 py-1">
-        <Avatar size={24} src={userInfo?.avatar || undefined}>
-          {(userInfo?.realName ?? 'U').charAt(0)}
-        </Avatar>
-        <span className="text-foreground text-sm">{userInfo?.realName}</span>
-      </div>
+      <button type="button" aria-label="user-menu" className="mx-1 rounded-full p-1 hover:bg-accent">
+        <Badge dot color="#52c41a" offset={[-2,28]}><Avatar size={32} src={userInfo?.avatar || preferences.app.defaultAvatar}>{(userInfo?.realName ?? 'U').charAt(0)}</Avatar></Badge>
+      </button>
     </Dropdown>
   );
 }
@@ -105,42 +113,25 @@ export function UserDropdown() {
 /**
  * 后台外壳（对应 Vue 侧 packages/effects/layouts/src/basic/layout.vue）。
  *
- * ⚠️ ⑥-a 的范围是「可用外壳」：antd `Layout` 的侧边栏 + 顶栏 + 内容区，
- * 单一 `sidebar-nav` 布局形态。6 种布局模式、偏好设置抽屉、多页签、全局搜索、
- * 锁屏、`<Activity>` 页签缓存都在 ⑥-b（见清单 §15.5）。
- *
- * 折叠按钮暂放顶栏左侧（antd 惯例）；vben 是贴在侧边栏右缘的悬浮按钮，⑥-b 对齐。
+ * 默认侧边导航；其它六种布局委托 MultiLayout，内容测量统一由 ContentArea 承担。
+ * 全局偏好副作用只在这一层注册一次，避免多布局重复监听快捷键。
  */
 export function BasicLayout() {
+  const mobile = useIsMobile();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const headerOffset = useHeaderScroll();
   const { layout, preferences, preferencesButtonPosition } = usePreferences();
   const navigate = useNavigate();
   const location = useLocation();
   const matches = useMatches();
   const accessMenus = useAccessStore((state) => state.accessMenus);
 
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [contentHeight, setContentHeight] = useState(0);
   const [openKeys, setOpenKeys] = useState<string[]>([]);
-  /** 内容区重挂载计数（顶栏刷新 / 页签刷新共用，见 store/ui.ts） */
-  const refreshCounter = useUiStore((state) => state.refreshCounter);
   const refresh = useUiStore((state) => state.refresh);
   const maximized = useUiStore((state) => state.maximized);
 
   // 文档级偏好消费端：动态标题 / 灰度色弱 / 全局快捷键
   usePreferenceEffects();
-
-  // Page 的 autoContentHeight 依赖 --vben-content-height，由内容区实测后写入并继承下去
-  useEffect(() => {
-    const element = contentRef.current;
-    if (!element) {
-      return;
-    }
-    const update = () => setContentHeight(element.clientHeight);
-    const observer = new ResizeObserver(update);
-    observer.observe(element);
-    update();
-    return () => observer.disconnect();
-  }, []);
 
   const meta = useMemo(() => mergeMatchMeta(matches), [matches]);
 
@@ -153,12 +144,13 @@ export function BasicLayout() {
     if (parents.length === 0) {
       return;
     }
+    if (preferences.navigation.accordion) { setOpenKeys(parents); return; }
     setOpenKeys((prev) =>
       parents.every((key) => prev.includes(key))
         ? prev
         : [...new Set([...prev, ...parents])],
     );
-  }, [accessMenus, activePath]);
+  }, [accessMenus, activePath, preferences.navigation.accordion]);
 
   const collapsed = preferences.sidebar.collapsed;
   // 悬停展开（sidebar.expandOnHover）：折叠时鼠标移入临时展开，不写回偏好
@@ -187,29 +179,16 @@ export function BasicLayout() {
   }
   // 最大化时隐藏侧边栏 / 顶栏 / 页签（对应 Vue 侧 tabbar maximize）
   const showSidebar =
-    preferences.sidebar.enable && !preferences.sidebar.hidden && !maximized;
+    preferences.sidebar.enable && !preferences.sidebar.hidden && !maximized && !mobile;
   const showHeader =
-    preferences.header.enable && !preferences.header.hidden && !maximized;
-  const showTabbar = preferences.tabbar.enable && !maximized;
+    preferences.header.enable && !preferences.header.hidden && !maximized && layout !== 'full-content';
+  const showTabbar = preferences.tabbar.enable && !maximized && layout !== 'full-content';
 
   const { isDark } = usePreferences();
   // 半暗侧边栏 / 顶栏：浅色主题下局部套暗色算法（Vue 侧 semiDarkSidebar / semiDarkHeader）
   const semiDarkSidebar = preferences.theme.semiDarkSidebar && !isDark;
   const semiDarkHeader = preferences.theme.semiDarkHeader && !isDark;
-  const semiDarkTheme = {
-    algorithm: antdTheme.darkAlgorithm,
-    components: {
-      Layout: { siderBg: 'hsl(222.34 10.43% 12.27%)' },
-      Menu: {
-        darkItemBg: 'transparent',
-        darkItemSelectedBg: 'hsl(var(--primary))',
-        darkItemSelectedColor: '#fff',
-        darkSubMenuItemBg: 'transparent',
-        itemBg: 'transparent',
-        subMenuItemBg: 'transparent',
-      },
-    },
-  };
+  const semiDarkTheme = useShellTheme();
 
   function toggleCollapsed() {
     updatePreferences({ sidebar: { collapsed: !collapsed } });
@@ -281,7 +260,7 @@ export function BasicLayout() {
             {showIcon && item.icon ? (
               <VbenIcon className="size-3.5" icon={item.icon as string} />
             ) : null}
-            {item.title}
+            {$t(item.title)}
           </span>
         ),
       });
@@ -290,19 +269,22 @@ export function BasicLayout() {
   }, [matches, preferences.breadcrumb, preferences.app.defaultHomePath, navigate]);
 
   // 非默认侧边导航布局走 MultiLayout（功能版多布局）；默认形态保持原渲染以守住像素门禁
-  if (layout !== 'sidebar-nav') {
+  if (layout !== 'sidebar-nav' && !mobile) {
     return <MultiLayout />;
   }
 
   return (
     <Layout className="h-screen overflow-hidden">
+      {mobile && <Drawer title={preferences.app.name} open={mobileOpen} width={280} onClose={() => setMobileOpen(false)} styles={{ body: { padding: 0 } }}>
+        <VbenMenu menus={accessMenus} mode="inline" selectedKeys={[activePath]} openKeys={openKeys} onOpenChange={handleOpenChange} onMenuSelect={menu => { handleMenuSelect(menu); setMobileOpen(false); }} />
+      </Drawer>}
       {showSidebar ? (
         <ConfigProvider theme={semiDarkSidebar ? semiDarkTheme : undefined}>
         {/* ⚠️ 不要写 theme="light"：它会让 antd 用实例级 token 强制白底，
             盖掉 ConfigProvider 里 siderBg: var(--sidebar)，暗色主题下侧边栏会变成白的。
             底色统一由 useAntdComponentTokens 的 Layout.siderBg 提供。 */}
         <Sider
-          className="bg-sidebar border-border border-r"
+          className={`${semiDarkSidebar ? 'dark ' : ''}bg-sidebar border-border border-r`}
           collapsed={effectiveCollapsed}
           collapsedWidth={preferences.sidebar.collapseWidth}
           collapsible
@@ -323,25 +305,21 @@ export function BasicLayout() {
           ) : null}
           <div className="flex h-full flex-col">
             {preferences.logo.enable ? (
-              <div className="flex-center h-12 shrink-0 gap-2 overflow-hidden px-3">
+              <div className="flex h-[50px] shrink-0 items-center gap-2 overflow-hidden px-3">
                 <img
                   alt="logo"
                   className="size-8 shrink-0"
                   src={preferences.logo.source}
                 />
                 {effectiveCollapsed && !preferences.sidebar.collapsedShowTitle ? null : (
-                  <span className="text-foreground truncate text-base font-semibold">
+                  <span className="text-foreground truncate text-lg font-semibold">
                     {preferences.app.name}
                   </span>
                 )}
               </div>
             ) : null}
             <div
-              className={`flex-1 overflow-x-hidden overflow-y-auto ${
-                preferences.navigation.styleType === 'rounded'
-                  ? 'vben-menu-rounded'
-                  : ''
-              }`}
+              className="flex-1 overflow-x-hidden overflow-y-auto"
             >
               <VbenMenu
                 inlineCollapsed={effectiveCollapsed}
@@ -358,9 +336,9 @@ export function BasicLayout() {
               侧边栏底栏（对应 Vue 侧 layout.vue 的 extra 区）：
               左 = 折叠按钮（sidebar.collapsedButton），右 = 偏好设置固定入口（sidebar.fixedButton）。
             */}
-            <div className="border-border flex h-9 shrink-0 items-center justify-between border-t px-1.5">
+            <div className="flex h-9 shrink-0 items-center justify-between px-3">
               {preferences.widget.sidebarToggle && preferences.sidebar.collapsedButton ? (
-                <VbenIconButton onClick={toggleCollapsed}>
+                <VbenIconButton onClick={() => mobile ? setMobileOpen(true) : toggleCollapsed()}>
                   {effectiveCollapsed ? (
                     <ChevronsRight className="size-4" />
                   ) : (
@@ -370,9 +348,7 @@ export function BasicLayout() {
               ) : (
                 <span />
               )}
-              {preferences.app.enablePreferences && preferences.sidebar.fixedButton ? (
-                <PreferencesButton />
-              ) : null}
+              {preferences.sidebar.fixedButton ? <VbenIconButton aria-label="pin-sidebar" class="h-6 w-6 rounded-sm bg-accent" onClick={() => updatePreferences({ sidebar: { expandOnHover: !preferences.sidebar.expandOnHover } })}>{preferences.sidebar.expandOnHover ? <Pin className="size-3.5" /> : <PinOff className="size-3.5" />}</VbenIconButton> : null}
             </div>
           </div>
         </Sider>
@@ -383,8 +359,15 @@ export function BasicLayout() {
         {showHeader ? (
           <ConfigProvider theme={semiDarkHeader ? semiDarkTheme : undefined}>
           <Header
-            className="bg-header border-border flex items-center justify-between gap-2 border-b px-3"
-            style={{ height: preferences.header.height }}
+            className={`${semiDarkHeader ? 'dark ' : ''}bg-header border-border flex items-center justify-between gap-2 border-b px-3`}
+            style={{
+              height: preferences.header.height,
+              marginTop: headerOffset,
+              transition: preferences.header.mode === 'static' ? 'none' : 'margin-top 180ms ease',
+              // antd 6 scopes Layout tokens to .ant-layout, not a standalone Header.
+              background: 'hsl(var(--header))',
+              color: 'hsl(var(--foreground))',
+            }}
           >
             <div className="flex min-w-0 flex-1 items-center gap-2">
               {/*
@@ -392,11 +375,11 @@ export function BasicLayout() {
                 `VbenIconButton`（无边框图标按钮）+ Iconify `ep:fold` / `ep:expand`。
                 此前用 antd `Button type="text"` + lucide 箭头，字形和按钮盒子都不对。
               */}
-              {showSidebar && preferences.widget.sidebarToggle ? (
+              {(showSidebar || mobile) && preferences.widget.sidebarToggle ? (
                 <VbenIconButton
                   aria-label="toggle-sidebar"
                   class="my-0 mr-1 rounded-md"
-                  onClick={toggleCollapsed}
+                  onClick={() => mobile ? setMobileOpen(true) : toggleCollapsed()}
                 >
                   {collapsed ? <EpExpand /> : <EpFold />}
                 </VbenIconButton>
@@ -410,7 +393,7 @@ export function BasicLayout() {
                   <RotateCw className="size-4" />
                 </VbenIconButton>
               ) : null}
-              {breadcrumbItems.length > 0 ? (
+              {!mobile && breadcrumbItems.length > 0 ? (
                 <span
                   className={
                     preferences.breadcrumb.styleType === 'background'
@@ -424,13 +407,14 @@ export function BasicLayout() {
             </div>
             <div className="flex shrink-0 items-center">
               {/* 顺序对齐 Vue 侧 header.vue 的 rightSlots */}
+              <TenantToggle />{preferences.widget.globalSearch ? <SearchButton /> : null}
               {preferences.app.enablePreferences && preferencesButtonPosition.header ? (
                 <PreferencesButton />
               ) : null}
-              {preferences.widget.themeToggle ? <ThemeToggle /> : null}
-              {preferences.widget.languageToggle ? <LanguageToggle /> : null}
-              {preferences.widget.fullscreen ? <FullscreenToggle /> : null}
-              <UserDropdown />
+              {!mobile && preferences.widget.themeToggle ? <ThemeToggle /> : null}
+              {!mobile && preferences.widget.languageToggle ? <LanguageToggle /> : null}
+              {!mobile && preferences.widget.fullscreen ? <FullscreenToggle /> : null}
+              <HeaderTools /><UserDropdown />
             </div>
           </Header>
           </ConfigProvider>
@@ -438,37 +422,7 @@ export function BasicLayout() {
 
         {showTabbar ? <VbenTabs /> : null}
 
-        <Content
-          className="relative overflow-hidden"
-          ref={contentRef}
-          style={
-            { '--vben-content-height': `${contentHeight}px` } as CSSProperties
-          }
-        >
-          {/* 水印（app.watermark / watermarkContent），对应 Vue 侧 app.vue 的 Watermark */}
-          <Watermark
-            content={
-              preferences.app.watermark
-                ? preferences.app.watermarkContent || preferences.app.name
-                : undefined
-            }
-            font={{ color: 'rgba(0,0,0,0.15)', fontSize: 16 }}
-            gap={[100, 100]}
-            rotate={-22}
-          >
-            <div
-              className={`h-full overflow-y-auto ${
-                preferences.transition.enable
-                  ? `page-transition page-transition--${preferences.transition.name}`
-                  : ''
-              }`}
-              key={`${refreshCounter}-${location.pathname}`}
-            >
-              <Outlet />
-            </div>
-          </Watermark>
-          <RouteFeedback />
-        </Content>
+        <ContentArea />
 
         {/* 底栏 + 版权（footer.enable / fixed / copyright.enable） */}
         {preferences.footer.enable ? (

@@ -75,14 +75,14 @@ body {
 .page-transition--fade-down { animation: vben-fade-down 0.25s ease both; }
 
 /* 导航菜单圆角风格（preferences.navigation.styleType = rounded） */
-.vben-menu-rounded .ant-menu-item,
-.vben-menu-rounded .ant-menu-submenu-title {
+.vben-menu-rounded.ant-menu-inline .ant-menu-item,
+.vben-menu-rounded.ant-menu-inline .ant-menu-submenu-title {
   margin-inline: 8px;
   width: calc(100% - 16px);
-  border-radius: calc(var(--radius) * 1rem);
+  border-radius: var(--radius);
 }
 
-/* 页签风格（preferences.tabbar.styleType）。chrome 弧形属 B3 自绘，这里先做卡片/_plain/brisk 区分 */
+/* plain / brisk 页签风格；chrome 的弧形与主题色在 adapter/tabs.css 中统一维护。 */
 .vben-tabs--plain .ant-tabs-tab {
   background: transparent !important;
   border: none !important;
@@ -95,9 +95,6 @@ body {
 }
 .vben-tabs--brisk .ant-tabs-tab-active {
   border-bottom-color: hsl(var(--primary)) !important;
-}
-.vben-tabs--chrome .ant-tabs-tab {
-  border-radius: calc(var(--radius) * 1rem) calc(var(--radius) * 1rem) 0 0 !important;
 }
 
 /* 侧边栏拖拽调宽条（preferences.sidebar.draggable），对应 Vue layout-ui 右缘拖拽 */
@@ -118,7 +115,7 @@ body {
 .vben-breadcrumb-background {
   background: hsl(var(--accent));
   padding: 4px 8px;
-  border-radius: calc(var(--radius) * 1rem);
+  border-radius: var(--radius);
 }
 
 /* 页面切换顶部进度条（preferences.transition.progress） */
@@ -143,3 +140,18 @@ body {
 .fade-slide-slow { animation: vben-fade-slide 1.5s ease infinite; }
 .fade-up-slow { animation: vben-fade-up 1.5s ease infinite; }
 .fade-down-slow { animation: vben-fade-down 1.5s ease infinite; }
+
+.vben-menu.ant-menu-inline .ant-menu-item, .vben-menu.ant-menu-inline .ant-menu-submenu-title { height: 42px; line-height: 42px; }
+.vben-menu.ant-menu-inline > .ant-menu-submenu > .ant-menu-submenu-title { padding-inline-start: 8px !important; }
+.vben-menu.ant-menu-inline .ant-menu-sub .ant-menu-item { padding-inline-start: 32px !important; }
+.vben-menu.ant-menu-inline .ant-menu-item-selected { background: hsl(var(--primary) / .15); }
+.vben-menu .ant-menu-item-icon { min-width: 16px; width: 16px; height: 16px; }
+.vben-menu-collapsed-title.ant-menu-inline-collapsed > .ant-menu-item, .vben-menu-collapsed-title.ant-menu-inline-collapsed > .ant-menu-submenu > .ant-menu-submenu-title { height: 58px; padding-inline: 4px; text-align: center; }
+.vben-menu-collapsed-title.ant-menu-inline-collapsed .ant-menu-title-content { display: block; opacity: 1; height: 20px; line-height: 20px; margin: 0; font-size: 11px; }
+
+.ant-drawer-content-wrapper { max-width: 100vw; }
+@media (max-width: 767px) { .vben-grid-toolbar .ant-space { flex-wrap: wrap; } }
+
+.screen-locked .ant-drawer, .screen-locked .ant-modal-root, .screen-locked .ant-popover { visibility: hidden; pointer-events: none; }
+
+.vben-menu.ant-menu-inline .ant-menu-sub .ant-menu-sub .ant-menu-item { padding-inline-start: 48px !important; }

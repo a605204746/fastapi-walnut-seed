@@ -10,6 +10,7 @@ import 'dayjs/locale/zh-cn';
 import { RouterProvider } from 'react-router';
 
 import { router } from './router';
+import { useButtonEffects } from './hooks/use-button-effects';
 import { ErrorBoundary } from './components/error-boundary';
 import { initMessageApi, type MessageApiLike } from './services/message';
 
@@ -31,6 +32,7 @@ function MessageBridge() {
  * 保证自绘组件（Tailwind/shadcn）与 antd 组件同色。
  */
 export function App() {
+  useButtonEffects();
   const { isDark, preferences } = usePreferences();
   const token = useAntdDesignTokens();
   // Layout / Menu 的组件级 token：修掉「浅色主题下顶栏是 antd 默认深蓝黑」的问题，

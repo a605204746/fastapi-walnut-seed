@@ -22,7 +22,7 @@ export interface SecretInputProps {
  *   form-ui 没有字段级插槽机制；注册成控件是等价且更简单的做法。
  * - `defineExpose({ refreshSecret })` 未移植：Vue 侧注释说明它只是「万一要在
  *   每次新增时打开 Drawer 刷新」的备用口，实际调用点为零。
- * - `icon-[charm--refresh]` 类名图标 → antd `ReloadOutlined`（两套 tailwind
+ * - `Iconify(charm--refresh)` 类名图标 → antd `ReloadOutlined`（两套 tailwind
  *   配置都没装 iconify class 插件，类名会渲染成空）。
  * - Vue 的 scoped scss（去掉 addon 内边距、按钮左侧直角）改用 `Space.Compact`
  *   的原生贴合效果，视觉差异列入 B 阶段像素补齐。

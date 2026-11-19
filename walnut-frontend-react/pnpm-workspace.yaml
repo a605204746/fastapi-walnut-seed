@@ -104,4 +104,4 @@ catalog:
   cross-env: ^10.1.0
 
 allowBuilds:
-  '@parcel/watcher': set this to true or false
+  '@parcel/watcher': false

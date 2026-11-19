@@ -9,6 +9,7 @@ import type { TenantResp } from '@/api/core/auth';
 
 import { DEFAULT_TENANT_ID } from '@vben/constants';
 import { $t } from '@vben/locales';
+import { useUserStore } from '@vben/stores';
 import { getPreferences } from '@vben/preferences';
 import { Input, Select } from 'antd';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -26,7 +27,8 @@ import { OAuthLogin } from './OAuthLogin';
  * 登录页（对应 Vue 侧 apps/web-antd/src/views/_core/authentication/login.vue）。
  * formSchema 使用 antd 控件（Select/Input/Input.Password）+ 自定义 InputCaptcha。
  */
-export function LoginPage() {
+export function LoginPage({ embedded = false, onSuccess }: { embedded?: boolean; onSuccess?: () => void } = {}) {
+  const currentUsername = useUserStore(s => s.userInfo?.username);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const loginRef = useRef<AuthenticationLoginHandle>(null);
@@ -115,7 +117,7 @@ export function LoginPage() {
           placeholder: $t('authentication.usernameTip'),
           size: 'large',
         },
-        defaultValue: 'admin',
+        defaultValue: embedded ? currentUsername : 'admin',
         fieldName: 'username',
         label: $t('authentication.username'),
         modelPropName: 'value',
@@ -127,7 +129,7 @@ export function LoginPage() {
           placeholder: $t('authentication.passwordTip'),
           size: 'large',
         },
-        defaultValue: 'admin123',
+        defaultValue: embedded ? '' : 'admin123',
         fieldName: 'password',
         label: $t('authentication.password'),
         modelPropName: 'value',
@@ -157,7 +159,7 @@ export function LoginPage() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tenantInfo, captchaInfo, captchaLoading],
+    [tenantInfo, captchaInfo, captchaLoading, embedded, currentUsername],
   );
 
   async function handleAccountLogin(values: Record<string, any>) {
@@ -174,6 +176,7 @@ export function LoginPage() {
         param.uuid = captchaInfo.uuid;
       }
       const { userInfo } = await authLogin(param as any);
+      if (embedded) { onSuccess?.(); return; }
       const redirect = searchParams.get('redirect');
       // 落地优先级与 Vue 侧 guard.ts 一致：redirect > userInfo.homePath > defaultHomePath
       const homePath =
@@ -195,7 +198,11 @@ export function LoginPage() {
       loading={loginLoading}
       onSubmit={handleAccountLogin}
       ref={loginRef}
-      showThirdPartyLogin
+      showThirdPartyLogin={!embedded}
+      showRememberMe={!embedded}
+      showForgetPassword={!embedded}
+      showCodeLogin={!embedded}
+      showQrcodeLogin={!embedded}
       submitDisabled={captchaLoading || tenantLoading}
       thirdPartyLogin={<OAuthLogin />}
     />

@@ -1,3 +1,4 @@
 # Linux 容器内执行的脚本强制 LF（避免 Windows autocrlf 检出 CRLF 导致 #!/bin/sh 失效）
 *.sh text eol=lf
 * linguist-language=Python
+*.snap text eol=lf

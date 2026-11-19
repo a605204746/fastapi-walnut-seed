@@ -80,17 +80,17 @@ async function switchToDark(page: Page) {
 }
 
 async function login(page: Page) {
-  await page.goto(`${BASE}/auth/login`);
+  await page.goto(`${BASE}/auth/login?redirect=%2Fsystem%2Fconfig`);
   await page.waitForSelector('button[aria-label="login"]', { timeout: 30_000 });
   await page.locator('input[type="text"]').first().fill(CREDENTIALS.username);
   await page.locator('input[type="password"]').first().fill(CREDENTIALS.password);
   await page.locator('button[aria-label="login"]').first().click();
-  await page.waitForLoadState('domcontentloaded');
+  await page.waitForURL('**/system/config');
 }
 
 /** 冻结动画/过渡的 CSS，保证截图逐帧可复现（在每次导航前注入） */
 const FREEZE_CSS =
-  '*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}';
+  '*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}.ant-message,.ant-notification,#nprogress,.vben-progress-bar{display:none!important}';
 
 test.describe(`capture:${SIDE}`, () => {
   test.beforeEach(async ({ page }) => {

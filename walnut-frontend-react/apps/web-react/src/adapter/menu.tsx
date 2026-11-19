@@ -3,8 +3,12 @@ import type { MenuProps } from 'antd';
 
 import { useMemo } from 'react';
 
+import { usePreferences } from '@vben/preferences';
+import { cn } from '@vben-core/shared/utils';
+
 import { VbenIcon } from '@vben-core/shadcn-ui';
 import { Menu } from 'antd';
+import { $t } from '@/locales';
 
 type AntdMenuItem = NonNullable<MenuProps['items']>[number];
 
@@ -16,17 +20,19 @@ type AntdMenuItem = NonNullable<MenuProps['items']>[number];
  * `path` 是绝对路径，直接当 key；外链菜单的 path 就是 http(s) URL 本身
  * （`generateMenus` 里 `link || path`），由调用方判断后开新窗口。
  */
-function toAntdMenuItems(menus: MenuRecordRaw[]): AntdMenuItem[] {
+function toAntdMenuItems(menus: MenuRecordRaw[], selected: string[] = [], autoActivate?: (menu: MenuRecordRaw) => void): AntdMenuItem[] {
   return menus.map((menu) => {
-    const icon = menu.icon ? <VbenIcon icon={menu.icon} /> : undefined;
+    const iconName = selected.includes(menu.path) && menu.activeIcon ? menu.activeIcon : menu.icon || (menu.children?.length ? 'lucide:menu' : undefined);
+    const icon = iconName ? <VbenIcon icon={iconName} /> : undefined;
+    const label = <span className="flex items-center gap-2"><span className="truncate">{$t(menu.name)}</span>{menu.badgeType === 'dot' ? <span className="ml-auto size-2 rounded-full bg-primary" /> : menu.badge ? <span className={`ml-auto rounded px-1 text-xs text-primary-foreground ${menu.badgeVariants === 'destructive' ? 'bg-destructive' : 'bg-primary'}`}>{menu.badge}</span> : null}</span>;
     const children = menu.children?.length
-      ? toAntdMenuItems(menu.children)
+      ? toAntdMenuItems(menu.children, selected, autoActivate)
       : undefined;
 
     if (children && children.length > 0) {
-      return { children, icon, key: menu.path, label: menu.name };
+      return { children, icon, key: menu.path, label, title: $t(menu.name), disabled: menu.disabled, onTitleClick: () => autoActivate?.(menu) };
     }
-    return { icon, key: menu.path, label: menu.name };
+    return { icon, key: menu.path, label, title: $t(menu.name), disabled: menu.disabled };
   });
 }
 
@@ -54,23 +60,19 @@ export interface VbenMenuProps extends Omit<MenuProps, 'items' | 'onSelect'> {
 }
 
 /**
- * 侧边/顶部菜单（对应 Vue 侧 `@vben-core/menu-ui`，清单 §5.5 的 2,243 行）。
- *
- * ⚠️ 与 Vue 版的刻意差异：Vue 侧是自绘菜单（含手风琴、动画、混合导航的三套形态），
- * React 侧按阶段 ⑥ 的决策**先用 antd `Menu`**，把 6 种布局模式与自绘样式留到 ⑥-b。
- * 因此本组件放在 app 的 `adapter/` 层而非 `@core/ui-kit/`——`@core` 在 vben 的
- * 分层里是 UI 库无关层，塞 antd 进去会破坏该约束（与 `adapter/grid.tsx` 同理）。
- *
- * 未移植：`badge` / `badgeType` / `badgeVariants` 徽标（当前后端菜单无此数据），
- * 以及 `activeIcon`（选中态换图标）。
+ * 菜单适配层：支持各布局、节点禁用、手风琴、徽标、激活图标和目录自动跳转。
+ * 视觉令牌与外壳共用，渲染时解析国际化标题。
  */
-export function VbenMenu({ menus, onMenuSelect, ...rest }: VbenMenuProps) {
-  const items = useMemo(() => toAntdMenuItems(menus), [menus]);
+export function VbenMenu({ className, menus, onMenuSelect, ...rest }: VbenMenuProps) {
+  const { preferences } = usePreferences();
+  function activate(menu: MenuRecordRaw) { let target = menu; while (target.children?.length) target = target.children[0]!; onMenuSelect?.(target); }
+  const items = toAntdMenuItems(menus, rest.selectedKeys, preferences.sidebar.autoActivateChild ? activate : undefined);
   const index = useMemo(() => buildMenuIndex(menus), [menus]);
 
   return (
     <Menu
       {...rest}
+      className={cn('vben-menu', preferences.sidebar.collapsedShowTitle && 'vben-menu-collapsed-title', preferences.navigation.styleType === 'rounded' && 'vben-menu-rounded', className)}
       items={items}
       onSelect={({ key }) => {
         const menu = index.get(key);

@@ -1,15 +1,18 @@
+import { ChevronDown, ChevronUp } from 'lucide-react';
+import { GridPagination } from './pagination';
+import './grid.css';
 import type { ComponentType, ReactNode } from 'react';
 
 import type { FormProps, FormSchema } from '@vben-core/form-ui';
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { $t } from '@vben/locales';
 import { listToTree } from '@vben/utils';
 import { useVbenForm } from '@vben-core/form-ui';
 import { Store, useStore } from '@vben-core/shared/store';
 import { cn } from '@vben-core/shared/utils';
-import { Button, Empty, Table } from 'antd';
+import { Button, Checkbox, Empty, Popover, Table } from 'antd';
 import type { TableProps } from 'antd';
 import {
   FullscreenOutlined,
@@ -360,6 +363,7 @@ export function useGrid(
         // 不补这个默认值会导致所有表格与 Vue 端肉眼可见地不一致。
         align: col.align ?? 'center',
         dataIndex: col.field,
+        ellipsis: col.field !== 'action',
         fixed: col.fixed,
         key: col.field,
         // ⚠️ `minWidth` 不透传：antd 的 ColumnType 没有这个属性（vxe 专有）。
@@ -375,7 +379,7 @@ export function useGrid(
         // `sortable: true` + 远程排序：交给 antd 渲染排序箭头，实际排序由后端完成
         sorter: col.sortable ? true : undefined,
         title: col.title,
-        width: col.width === 'auto' ? undefined : col.width,
+        width: col.width === 'auto' ? (col.field === 'action' ? 114 : undefined) : col.width,
       }));
   }, [gridOptions.columns]);
 
@@ -480,8 +484,18 @@ function GridView({
     total,
   } = useStore(store);
 
+  const [tableElement, setTableElement] = useState<HTMLDivElement | null>(null);
+  const [tableWidth, setTableWidth] = useState(0);
+  useEffect(() => {
+    if (!tableElement) return;
+    const resize = () => setTableWidth(tableElement.clientWidth);
+    const observer = new ResizeObserver(resize); observer.observe(tableElement); resize();
+    return () => observer.disconnect();
+  }, [tableElement]);
+  const [hiddenColumns, setHiddenColumns] = useState<string[]>([]);
+  const [maximized, setMaximized] = useState(false);
   // 解析列里用具名字符串引用的 slot（如 action）
-  const resolvedColumns = (antdColumns ?? []).map((col: any) => {
+  const resolvedColumns = (antdColumns ?? []).filter((col: any) => !hiddenColumns.includes(String(col.key))).map((col: any) => {
     const raw = columns.find(
       (c) => c.field === (col.dataIndex as string) && c.type !== 'checkbox',
     );
@@ -491,6 +505,20 @@ function GridView({
       return { ...col, render: (_: any, row: any) => renderer({ row }) };
     }
     return col;
+  });
+
+  // Vxe distributes remaining pixels to flexible columns using integer boundaries.
+  // Avoid fractional cell centers that blur text and drift relative to the Vue baseline.
+  const fixedWidth = resolvedColumns.reduce((sum: number, column: any) => sum + (Number(column.width) || 0), hasCheckbox ? Number(columns.find(c => c.type === 'checkbox')?.width ?? 60) : 0);
+  const flexible = resolvedColumns.filter((column: any) => !column.width).length;
+  const availableWidth = tableWidth < 640 ? Math.max(760,tableWidth) : tableWidth;
+  let flexibleIndex = 0;
+  const sizedColumns = resolvedColumns.map((column: any) => {
+    if (column.width || !availableWidth || !flexible) return column;
+    const remaining = Math.max(0, availableWidth-fixedWidth);
+    const width = Math.floor((flexibleIndex+1)*remaining/flexible)-Math.floor(flexibleIndex*remaining/flexible);
+    flexibleIndex++;
+    return { ...column, width };
   });
 
   const rowSelection: TableProps<any>['rowSelection'] = hasCheckbox
@@ -506,6 +534,7 @@ function GridView({
             selectedRows: rows as any[],
           }));
         },
+        columnWidth: columns.find(column => column.type === 'checkbox')?.width ?? 60,
         preserveSelectedRowKeys: reserve,
         selectedRowKeys: selectedKeys,
       }
@@ -595,10 +624,10 @@ function GridView({
   }
 
   return (
-    <div className={cn('h-full rounded-md bg-card', className)}>
+    <div className={cn('h-full rounded-md bg-card vben-grid', className)} style={maximized ? { position: 'fixed', inset: 0, zIndex: 1100 } : undefined}>
       <div className="flex h-full flex-col p-2">
         {formApi ? (
-          <div className="relative rounded-sm py-3 pb-8" hidden={!showSearchForm}>
+          <div className="vben-grid-query relative rounded-sm py-3 pb-8" hidden={!showSearchForm}>
             <Form />
             <div className="mt-2 flex justify-end gap-2">
               <Button
@@ -628,7 +657,7 @@ function GridView({
                 }
                 type="link"
               >
-                {showSearchForm ? '收起' : '展开'}
+                {showSearchForm ? '收起' : '展开'}{showSearchForm ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
               </Button>
             </div>
             <div className="bg-background-deep absolute -left-2 bottom-1 z-100 h-2 w-[calc(100%+1rem)] overflow-hidden md:bottom-2 md:h-3"></div>
@@ -636,9 +665,10 @@ function GridView({
         ) : null}
 
         {tableTitle || toolbarTools ? (
-          <div className="mb-2 flex items-center justify-between">
+          <div className="vben-grid-toolbar mb-2 flex items-center justify-between">
             <div className="flex-center gap-1 text-[1rem] font-bold">
               {tableTitle}
+              {!showSearchForm && <Button type="link" size="small" onClick={() => store.setState(prev => ({ ...prev, showSearchForm: true }))}>展开搜索</Button>}
               {tableTitleHelp ? (
                 <span className="text-muted-foreground text-xs font-normal">
                   {tableTitleHelp}
@@ -655,19 +685,19 @@ function GridView({
                 onClick={() => runQuery(current, pageSize)}
                 shape="circle"
               />
-              <Button icon={<FullscreenOutlined />} shape="circle" />
-              <Button icon={<SettingOutlined />} shape="circle" />
+              <Button aria-label="maximize-table" icon={<FullscreenOutlined />} shape="circle" onClick={() => setMaximized(!maximized)} />
+              <Popover trigger="click" placement="bottomRight" title="列设置" content={<div className="flex flex-col gap-2">{(antdColumns ?? []).map((column: any) => <Checkbox key={column.key} checked={!hiddenColumns.includes(String(column.key))} onChange={event => setHiddenColumns(event.target.checked ? hiddenColumns.filter(key => key !== String(column.key)) : [...hiddenColumns, String(column.key)])}>{column.title}</Checkbox>)}</div>}><Button aria-label="table-columns" icon={<SettingOutlined />} shape="circle" /></Popover>
             </div>
           </div>
         ) : null}
 
         <div
-          className="min-h-0 flex-1"
+          ref={setTableElement}
+          className="vben-grid-table min-h-0 flex-1"
           style={minHeight === undefined ? undefined : { minHeight }}
         >
           <Table
-            bordered
-            columns={resolvedColumns}
+            columns={sizedColumns}
             dataSource={dataSource}
             expandable={expandable}
             loading={loading}
@@ -679,20 +709,7 @@ function GridView({
                 />
               ),
             }}
-            pagination={
-              pager
-                ? {
-                    current,
-                    pageSize,
-                    pageSizeOptions: [10, 20, 30, 50, 100, 200],
-                    showQuickJumper: true,
-                    showSizeChanger: true,
-                    showTotal: (t) => `共 ${t} 条记录`,
-                    size: 'small',
-                    total,
-                  }
-                : false
-            }
+            pagination={false}
             onChange={handleTableChange}
             onRow={onRow}
             rowClassName={
@@ -702,10 +719,12 @@ function GridView({
             }
             rowKey={keyField}
             rowSelection={rowSelection}
-            scroll={{ x: 'max-content' }}
+            tableLayout="fixed"
+            scroll={{ x: '100%' }}
             size="small"
           />
         </div>
+        {pager && <GridPagination current={current} pageSize={pageSize} total={total} onChange={(page,size) => void runQuery(page,size)} />}
       </div>
     </div>
   );
