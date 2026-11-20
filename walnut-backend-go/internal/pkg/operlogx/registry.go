@@ -1,0 +1,81 @@
+package operlogx
+
+// 路由 → 操作日志元数据注册表，逐条提取自 Python 端 create_app() 的
+// endpoint._log_meta（@log 装饰器）与 route.summary 兜底，含 method 列的
+// 端点限定名。键为 "METHOD gin路由模板"，与 c.FullPath() 对齐。
+// 重新生成：修改 Python @log 后需同步本表（契约的一部分）。
+
+type operlogMeta struct {
+	Title        string
+	BusinessType int
+	Method       string
+}
+
+var operlogRegistry = map[string]operlogMeta{
+	"DELETE /common/file/delete": {Title: "文件删除", BusinessType: 3, Method: "app.api.v1.module_common.file.controller.delete()"},
+	"DELETE /monitor/logininfor/:info_ids": {Title: "登录日志", BusinessType: 3, Method: "app.api.v1.module_system.log.controller.delete_logininfor()"},
+	"DELETE /monitor/logininfor/clean": {Title: "登录日志", BusinessType: 9, Method: "app.api.v1.module_system.log.controller.clean_logininfor()"},
+	"DELETE /monitor/operlog/:oper_ids": {Title: "操作日志", BusinessType: 3, Method: "app.api.v1.module_system.log.controller.delete_oper_log()"},
+	"DELETE /monitor/operlog/clean": {Title: "操作日志", BusinessType: 9, Method: "app.api.v1.module_system.log.controller.clean_oper_log()"},
+	"DELETE /system/client/:ids": {Title: "客户端管理", BusinessType: 3, Method: "app.api.v1.module_system.client.controller.delete_client()"},
+	"DELETE /system/config/:config_ids": {Title: "参数管理", BusinessType: 3, Method: "app.api.v1.module_system.config.controller.delete_config()"},
+	"DELETE /system/config/refreshCache": {Title: "参数管理", BusinessType: 9, Method: "app.api.v1.module_system.config.controller.refresh_config_cache()"},
+	"DELETE /system/dept/:dept_id": {Title: "部门管理", BusinessType: 3, Method: "app.api.v1.module_system.dept.controller.delete_dept()"},
+	"DELETE /system/dict/data/:dict_codes": {Title: "字典数据", BusinessType: 3, Method: "app.api.v1.module_system.dict.controller.delete_dict_data()"},
+	"DELETE /system/dict/type/:dict_ids": {Title: "字典类型", BusinessType: 3, Method: "app.api.v1.module_system.dict.controller.delete_dict_type()"},
+	"DELETE /system/dict/type/refreshCache": {Title: "字典类型", BusinessType: 9, Method: "app.api.v1.module_system.dict.controller.refresh_dict_cache()"},
+	"DELETE /system/menu/:menu_id": {Title: "菜单管理", BusinessType: 3, Method: "app.api.v1.module_system.menu.controller.delete_menu()"},
+	"DELETE /system/menu/cascade/:menu_ids": {Title: "菜单管理", BusinessType: 3, Method: "app.api.v1.module_system.menu.controller.delete_menu_cascade()"},
+	"DELETE /system/notice/:notice_ids": {Title: "通知公告", BusinessType: 3, Method: "app.api.v1.module_system.notice.controller.delete_notice()"},
+	"DELETE /system/post/:post_ids": {Title: "岗位管理", BusinessType: 3, Method: "app.api.v1.module_system.post.controller.delete_post()"},
+	"DELETE /system/role/:role_ids": {Title: "角色管理", BusinessType: 3, Method: "app.api.v1.module_system.role.controller.delete_role()"},
+	"DELETE /system/user/:user_ids": {Title: "用户管理", BusinessType: 3, Method: "app.api.v1.module_system.user.controller.delete_user()"},
+	"POST /auth/login": {Title: "认证", BusinessType: 0, Method: "app.api.v1.module_web.auth.controller.login()"},
+	"POST /auth/logout": {Title: "退出登录", BusinessType: 0, Method: "app.api.v1.module_web.auth.controller.logout()"},
+	"POST /auth/register": {Title: "认证", BusinessType: 1, Method: "app.api.v1.module_web.auth.controller.register()"},
+	"POST /common/file/upload": {Title: "文件上传", BusinessType: 1, Method: "app.api.v1.module_common.file.controller.upload()"},
+	"POST /monitor/logininfor/export": {Title: "登录日志", BusinessType: 5, Method: "app.api.v1.module_system.log.controller.export_logininfor()"},
+	"POST /monitor/operlog/export": {Title: "操作日志", BusinessType: 5, Method: "app.api.v1.module_system.log.controller.export_oper_log()"},
+	"POST /system/client": {Title: "客户端管理", BusinessType: 1, Method: "app.api.v1.module_system.client.controller.add_client()"},
+	"POST /system/client/export": {Title: "客户端管理", BusinessType: 5, Method: "app.api.v1.module_system.client.controller.export_client()"},
+	"POST /system/config": {Title: "参数管理", BusinessType: 1, Method: "app.api.v1.module_system.config.controller.add_config()"},
+	"POST /system/config/export": {Title: "参数管理", BusinessType: 5, Method: "app.api.v1.module_system.config.controller.export_config()"},
+	"POST /system/dept": {Title: "部门管理", BusinessType: 1, Method: "app.api.v1.module_system.dept.controller.add_dept()"},
+	"POST /system/dict/data": {Title: "字典数据", BusinessType: 1, Method: "app.api.v1.module_system.dict.controller.add_dict_data()"},
+	"POST /system/dict/data/export": {Title: "字典数据", BusinessType: 5, Method: "app.api.v1.module_system.dict.controller.export_dict_data()"},
+	"POST /system/dict/type": {Title: "字典类型", BusinessType: 1, Method: "app.api.v1.module_system.dict.controller.add_dict_type()"},
+	"POST /system/dict/type/export": {Title: "字典类型", BusinessType: 5, Method: "app.api.v1.module_system.dict.controller.export_dict_type()"},
+	"POST /system/menu": {Title: "菜单管理", BusinessType: 1, Method: "app.api.v1.module_system.menu.controller.add_menu()"},
+	"POST /system/notice": {Title: "通知公告", BusinessType: 1, Method: "app.api.v1.module_system.notice.controller.add_notice()"},
+	"POST /system/post": {Title: "岗位管理", BusinessType: 1, Method: "app.api.v1.module_system.post.controller.add_post()"},
+	"POST /system/post/export": {Title: "岗位管理", BusinessType: 5, Method: "app.api.v1.module_system.post.controller.export_post()"},
+	"POST /system/role": {Title: "角色管理", BusinessType: 1, Method: "app.api.v1.module_system.role.controller.add_role()"},
+	"POST /system/role/export": {Title: "角色管理", BusinessType: 5, Method: "app.api.v1.module_system.role.controller.export_role()"},
+	"POST /system/user": {Title: "用户管理", BusinessType: 1, Method: "app.api.v1.module_system.user.controller.add_user()"},
+	"POST /system/user/export": {Title: "用户管理", BusinessType: 5, Method: "app.api.v1.module_system.user.controller.export_user()"},
+	"POST /system/user/importData": {Title: "用户管理", BusinessType: 6, Method: "app.api.v1.module_system.user.controller.import_data()"},
+	"POST /system/user/importTemplate": {Title: "获取用户导入模板", BusinessType: 0, Method: "app.api.v1.module_system.user.controller.import_template()"},
+	"POST /system/user/profile/avatar": {Title: "用户头像", BusinessType: 2, Method: "app.api.v1.module_system.user.controller.avatar()"},
+	"PUT /system/client": {Title: "客户端管理", BusinessType: 2, Method: "app.api.v1.module_system.client.controller.update_client()"},
+	"PUT /system/client/changeStatus": {Title: "客户端管理", BusinessType: 2, Method: "app.api.v1.module_system.client.controller.change_client_status()"},
+	"PUT /system/config": {Title: "参数管理", BusinessType: 2, Method: "app.api.v1.module_system.config.controller.update_config()"},
+	"PUT /system/config/updateByKey": {Title: "参数管理", BusinessType: 2, Method: "app.api.v1.module_system.config.controller.update_config_by_key()"},
+	"PUT /system/dept": {Title: "部门管理", BusinessType: 2, Method: "app.api.v1.module_system.dept.controller.update_dept()"},
+	"PUT /system/dict/data": {Title: "字典数据", BusinessType: 2, Method: "app.api.v1.module_system.dict.controller.update_dict_data()"},
+	"PUT /system/dict/type": {Title: "字典类型", BusinessType: 2, Method: "app.api.v1.module_system.dict.controller.update_dict_type()"},
+	"PUT /system/menu": {Title: "菜单管理", BusinessType: 2, Method: "app.api.v1.module_system.menu.controller.update_menu()"},
+	"PUT /system/notice": {Title: "通知公告", BusinessType: 2, Method: "app.api.v1.module_system.notice.controller.update_notice()"},
+	"PUT /system/post": {Title: "岗位管理", BusinessType: 2, Method: "app.api.v1.module_system.post.controller.update_post()"},
+	"PUT /system/role": {Title: "角色管理", BusinessType: 2, Method: "app.api.v1.module_system.role.controller.update_role()"},
+	"PUT /system/role/authUser/cancel": {Title: "角色管理", BusinessType: 4, Method: "app.api.v1.module_system.role.controller.cancel_auth_user()"},
+	"PUT /system/role/authUser/cancelAll": {Title: "角色管理", BusinessType: 4, Method: "app.api.v1.module_system.role.controller.cancel_auth_user_all()"},
+	"PUT /system/role/authUser/selectAll": {Title: "角色管理", BusinessType: 4, Method: "app.api.v1.module_system.role.controller.select_auth_user_all()"},
+	"PUT /system/role/changeStatus": {Title: "角色管理", BusinessType: 2, Method: "app.api.v1.module_system.role.controller.change_status()"},
+	"PUT /system/role/dataScope": {Title: "角色管理", BusinessType: 2, Method: "app.api.v1.module_system.role.controller.data_scope()"},
+	"PUT /system/user": {Title: "用户管理", BusinessType: 2, Method: "app.api.v1.module_system.user.controller.update_user()"},
+	"PUT /system/user/authRole": {Title: "用户管理", BusinessType: 4, Method: "app.api.v1.module_system.user.controller.insert_auth_role()"},
+	"PUT /system/user/changeStatus": {Title: "用户管理", BusinessType: 2, Method: "app.api.v1.module_system.user.controller.change_status()"},
+	"PUT /system/user/profile": {Title: "个人信息", BusinessType: 2, Method: "app.api.v1.module_system.user.controller.update_profile()"},
+	"PUT /system/user/profile/updatePwd": {Title: "个人信息", BusinessType: 2, Method: "app.api.v1.module_system.user.controller.update_pwd()"},
+	"PUT /system/user/resetPwd": {Title: "用户管理", BusinessType: 2, Method: "app.api.v1.module_system.user.controller.reset_pwd()"},
+}

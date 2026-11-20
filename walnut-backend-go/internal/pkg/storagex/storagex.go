@@ -12,6 +12,7 @@ package storagex
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -29,10 +30,15 @@ import (
 )
 
 // UploadResult 上传结果，对应 Python 端 UploadResult dataclass。
+// 字段名与 Python model_dump() 一致（snake_case，无 alias）。
 type UploadResult struct {
 	URL              string `json:"url"`
-	OriginalFilename string `json:"originalFilename"`
+	OriginalFilename string `json:"original_filename"`
 }
+
+// ErrSizeExceeded 上传累计大小超过 MAX_FILE_SIZE 的哨兵错误，
+// 由 handler 映射为 i18n 业务异常（upload.exceed.maxSize）。
+var ErrSizeExceeded = errors.New("upload size exceeded")
 
 // Service 对象存储服务接口。
 type Service interface {
@@ -99,7 +105,7 @@ func (s *S3Service) Upload(ctx context.Context, filename string, data []byte) (*
 	if filename == "" {
 		return nil, errs.BadRequest("上传文件不能为空")
 	}
-	if err := checkAllowedExtension(filename, s.cfg.AllowedExtensions); err != nil {
+	if err := CheckAllowedExtension(filename, s.cfg.AllowedExtensions); err != nil {
 		return nil, err
 	}
 	key := buildKey(filename)
@@ -157,15 +163,20 @@ func (s *S3Service) keyFromURL(fileURL string) string {
 }
 
 func (s *S3Service) getObject(ctx context.Context, key string, withFilename bool) (*ObjectData, error) {
+	// 空 key：Python 端 minio SDK 抛 ValueError（空消息）→ code 400、msg ""。
+	if key == "" {
+		return nil, errs.WithCode(errs.CodeBadRequest, "")
+	}
+
 	obj, err := s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("获取对象失败: %w", err)
+		return nil, mapStorageError(err)
 	}
 	defer obj.Close()
 
 	data, err := io.ReadAll(obj)
 	if err != nil {
-		return nil, fmt.Errorf("读取对象失败: %w", err)
+		return nil, mapStorageError(err)
 	}
 
 	stat, err := obj.Stat()
@@ -182,6 +193,16 @@ func (s *S3Service) getObject(ctx context.Context, key string, withFilename bool
 	return out, nil
 }
 
+// mapStorageError 把 S3 错误映射为契约异常：NoSuchKey → code 404「文件不存在」
+// （对齐 Python _get_object 的 ServiceException(NOT_FOUND)），其余原样透传给
+// 调用方兜底为 500。minio-go 的 GetObject 是惰性的，错误在 Read/Stat 时才浮现。
+func mapStorageError(err error) error {
+	if minio.ToErrorResponse(err).Code == "NoSuchKey" {
+		return errs.WithCode(errs.CodeNotFound, "文件不存在")
+	}
+	return err
+}
+
 func isNoSuchBucket(err error) bool {
 	if err == nil {
 		return false
@@ -192,17 +213,19 @@ func isNoSuchBucket(err error) bool {
 
 // ---- 辅助函数 ----
 
-// buildKey 生成存储键：yyyy/MM/dd/{uuid}.{ext}。
+// buildKey 生成存储键：yyyy/MM/dd/{uuid32}.{ext}。
+// 与 Python _build_key 一致：uuid4().hex 无连字符，扩展名保留原始大小写。
 func buildKey(filename string) string {
-	ext := strings.ToLower(filepath.Ext(filename))
+	ext := filepath.Ext(filename)
 	now := time.Now()
 	return fmt.Sprintf("%d/%02d/%02d/%s%s",
 		now.Year(), now.Month(), now.Day(),
-		uuid.New().String(), ext)
+		strings.ReplaceAll(uuid.New().String(), "-", ""), ext)
 }
 
-// checkAllowedExtension 校验扩展名白名单。
-func checkAllowedExtension(filename string, allowed []string) error {
+// CheckAllowedExtension 校验扩展名白名单（导出供 handler 在读取文件体之前调用，
+// 对齐 Python 先校验扩展名再读大小的顺序）。
+func CheckAllowedExtension(filename string, allowed []string) error {
 	ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(filename)), ".")
 	if ext == "" {
 		return errs.BadRequest("不允许上传的文件扩展名：.<空>")

@@ -332,10 +332,9 @@ func defaults() *Config {
 		MaxFileSize:       10 * 1024 * 1024,
 		MaxRequestSize:    20 * 1024 * 1024,
 		AllowedExtensions: []string{
-			"jpg", "jpeg", "png", "gif", "bmp", "webp", "svg", "ico",
-			"pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
-			"txt", "md", "csv", "json", "xml", "zip", "rar", "7z", "gz", "tar",
-			"mp3", "mp4", "avi", "mov", "wav",
+			"jpg", "jpeg", "png", "gif", "bmp", "webp",
+			"doc", "docx", "xls", "xlsx", "ppt", "pptx",
+			"pdf", "txt", "zip", "rar", "7z",
 		},
 		StaticURL: "/static",
 	}

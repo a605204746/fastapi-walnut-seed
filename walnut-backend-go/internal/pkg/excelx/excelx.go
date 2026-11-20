@@ -130,6 +130,33 @@ func cellValue(v any) any {
 			return ""
 		}
 		return t.Format("2006-01-02 15:04:05")
+	// 指针必须解引用：excelize 对指针按 %v 输出会写成内存地址（0xc000...）。
+	// nil 指针 → 空单元格，对齐 Python None 的写出行为。
+	case *string:
+		if t == nil {
+			return ""
+		}
+		return *t
+	case *int:
+		if t == nil {
+			return ""
+		}
+		return *t
+	case *int64:
+		if t == nil {
+			return ""
+		}
+		return *t
+	case *float64:
+		if t == nil {
+			return ""
+		}
+		return *t
+	case *bool:
+		if t == nil {
+			return ""
+		}
+		return *t
 	default:
 		return v
 	}

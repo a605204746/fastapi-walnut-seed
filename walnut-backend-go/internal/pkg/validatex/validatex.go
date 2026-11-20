@@ -42,8 +42,18 @@ func Format(err error) string {
 
 	// ---- JSON 语法错误 ----
 	// Python 端：exc.errors() 里出现 type == "json_invalid" 时返回固定文案
-	if isJSONSyntaxError(err) {
+	var syntax *json.SyntaxError
+	if errors.As(err, &syntax) || isJSONSyntaxText(err) {
 		return MsgJSONInvalid
+	}
+
+	// ---- 类型不匹配 ----
+	// Python 端这是**字段级校验错误**（如 "Input should be a valid string"），
+	// 不是 json_invalid。encoding/json 只报第一个类型错误，多字段同时错时
+	// Python 会拼接多条——该极端边缘暂不镜像（单字段场景已逐字对齐）。
+	var typeErr *json.UnmarshalTypeError
+	if errors.As(err, &typeErr) {
+		return typeErrorMessage(typeErr)
 	}
 
 	// ---- validator 的字段级错误 ----
@@ -61,26 +71,46 @@ func Format(err error) string {
 	return MsgFallback
 }
 
-// isJSONSyntaxError 判断是否为 JSON 解析/类型错误（而非字段校验错误）。
-//
-// Python 端在 exc.errors() 里出现 type == "json_invalid" 时返回固定文案。
-// Go 侧对应 encoding/json 的两类错误：
-//   - *json.SyntaxError          —— JSON 语法本身不合法
-//   - *json.UnmarshalTypeError   —— 语法合法但类型不匹配（如给 int 字段传字符串）
-//
-// 后者在 Pydantic 里其实是校验错误（消息形如 "Input should be a valid integer"），
-// 但形态与 validator 的字段错误完全不同，且前端提交错类型本质是请求体格式问题，
-// 故统一归入 JSON 格式错误，给用户看同一句文案更有意义。
-func isJSONSyntaxError(err error) bool {
-	var syntax *json.SyntaxError
-	if errors.As(err, &syntax) {
-		return true
+// typeErrorMessage 把 encoding/json 的类型错误翻译成 Pydantic v2 字段消息。
+func typeErrorMessage(te *json.UnmarshalTypeError) string {
+	switch te.Value {
+	case "number":
+		switch te.Type.Kind() {
+		case reflect.String:
+			return "Input should be a valid string"
+		case reflect.Bool:
+			return "Input should be a valid boolean, unable to interpret input"
+		default:
+			return "Input should be a valid integer, got a number with a fractional part"
+		}
+	case "string":
+		switch te.Type.Kind() {
+		case reflect.String:
+			return "Input should be a valid string"
+		case reflect.Bool:
+			return "Input should be a valid boolean, unable to interpret input"
+		case reflect.Float32, reflect.Float64:
+			return "Input should be a valid number, unable to parse string as a number"
+		default:
+			return "Input should be a valid integer, unable to parse string as an integer"
+		}
+	case "bool":
+		if te.Type.Kind() == reflect.String {
+			return "Input should be a valid string"
+		}
+		return "Input should be a valid integer, unable to parse string as an integer"
+	case "array", "object":
+		if te.Type.Kind() == reflect.String {
+			return "Input should be a valid string"
+		}
+		return MsgFallback
+	default:
+		return MsgFallback
 	}
-	var typeErr *json.UnmarshalTypeError
-	if errors.As(err, &typeErr) {
-		return true
-	}
-	// 兜底：gin 有时会把错误包装成纯文本
+}
+
+// isJSONSyntaxText 兜底：gin 有时把 JSON 语法错误包装成纯文本。
+func isJSONSyntaxText(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "invalid character") ||
 		strings.Contains(msg, "unexpected end of JSON input")

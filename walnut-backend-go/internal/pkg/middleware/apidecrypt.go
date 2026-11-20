@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rsa"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -167,31 +168,34 @@ func ApiDecrypt(cfg ApiDecryptConfig) gin.HandlerFunc {
 }
 
 // decryptRequest 解开请求体，返回明文字节。
+// 错误分类对齐 Python middlewares.py：仅 ServiceException（私钥缺失、AES 密钥
+// 空/长度非法）→ 403；RSA 解不开、Base64/AES 填充失败等普通异常 → 400。
 func decryptRequest(c *gin.Context, encryptKey string, priv *rsa.PrivateKey) ([]byte, error) {
 	raw, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		return nil, err
 	}
-	if len(bytes.TrimSpace(raw)) == 0 {
-		// 空 body 无需解密（如 PUT 只带查询参数的场景）
-		return raw, nil
-	}
+	// 空 body 也走解密链：Python decrypt_by_aes("") 抛普通异常 → 400，
+	// 不能静默放行（否则带 encrypt-key 的空 body 请求两端行为不同）。
 
 	// 1) RSA 解出 base64(aesKey)
 	wrapped, err := cryptox.DecryptByRSA(encryptKey, priv)
 	if err != nil {
-		// RSA 解不开通常意味着密钥不配对（前端用了另一对公钥），归为格式类错误
-		return nil, &keyFormatError{err: err}
+		return nil, fmt.Errorf("RSA 解密失败: %w", err)
 	}
 	// 2) Base64 解码得到真正的 AES 密钥字符串
 	aesKey, err := cryptox.DecodeBase64Str(wrapped)
 	if err != nil {
-		return nil, &keyFormatError{err: err}
+		return nil, fmt.Errorf("AES 密钥 Base64 解码失败: %w", err)
 	}
 	// 3) AES 解密 body（body 本身就是 Base64 文本形式的密文）
 	plain, err := cryptox.DecryptByAES(string(raw), aesKey)
 	if err != nil {
-		return nil, &keyFormatError{err: err}
+		var ke *cryptox.AESKeyError
+		if errors.As(err, &ke) {
+			return nil, &keyFormatError{err: err}
+		}
+		return nil, fmt.Errorf("AES 解密失败: %w", err)
 	}
 	return []byte(plain), nil
 }

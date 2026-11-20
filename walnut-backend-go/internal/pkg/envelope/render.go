@@ -33,7 +33,8 @@ func (r jsonRender) Render(w http.ResponseWriter) error {
 func (r jsonRender) WriteContentType(w http.ResponseWriter) {
 	h := w.Header()
 	if val := h["Content-Type"]; len(val) == 0 {
-		h["Content-Type"] = []string{"application/json"}
+		// Python EnvelopeResponse 显式带 charset（response.py），前端拦截器按此识别
+		h["Content-Type"] = []string{"application/json; charset=utf-8"}
 	}
 }
 

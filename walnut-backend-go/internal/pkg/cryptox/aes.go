@@ -28,11 +28,20 @@ var validAESKeyLengths = map[int]struct{}{16: {}, 24: {}, 32: {}}
 // 错误文案与 Python 端 _check_aes_key 逐字一致，保证两端报错信息相同。
 const errAESKeyLength = "AES秘钥长度要求为16位、24位、32位"
 
+// AESKeyError 标记密钥本身的问题（空/长度非法）。Python 端这类问题抛
+// ServiceException → 中间件映射 403；其余解密失败是普通异常 → 400。
+type AESKeyError struct{ Msg string }
+
+func (e *AESKeyError) Error() string { return e.Msg }
+
 // checkAESKey 校验密钥长度。
 func checkAESKey(password string) ([]byte, error) {
 	key := []byte(password)
+	if len(key) == 0 {
+		return nil, &AESKeyError{Msg: "AES需要传入秘钥信息"}
+	}
 	if _, ok := validAESKeyLengths[len(key)]; !ok {
-		return nil, fmt.Errorf("%s（当前 %d）", errAESKeyLength, len(key))
+		return nil, &AESKeyError{Msg: fmt.Sprintf("%s（当前 %d）", errAESKeyLength, len(key))}
 	}
 	return key, nil
 }

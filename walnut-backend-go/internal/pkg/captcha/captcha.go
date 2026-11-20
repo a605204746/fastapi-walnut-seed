@@ -134,13 +134,14 @@ func Generate(mode string, numberLength, charLength int) (*Result, error) {
 	return GenerateMath(numberLength)
 }
 
-// EqualsIgnoreCase 大小写不敏感比对，对应 Python 端 string_util.equals_ignore_case。
+// EqualsIgnoreCase 大小写不敏感比对，对应 Python 端 string_util.equals_ignore_case：
+// a.lower() == b.lower()，**不做 trim**（Python 不 trim，" ab12" 与 "ab12" 不等）。
 //
 // ⚠️ 必须忽略大小写：Python 端就是这么比的，若 Go 改成区分大小写，
 // 用 char 模式时用户输入 "ab12" 而答案是 "AB12" 就会失败——
 // 同一个前端在两个后端上表现不同，属于契约偏差。
 func EqualsIgnoreCase(a, b string) bool {
-	return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b))
+	return strings.EqualFold(a, b)
 }
 
 // 验证码的 uuid 用 idgen.UUID()（crypto/rand 生成的 32 位无横线十六进制串），

@@ -118,7 +118,8 @@ func TestEqualsIgnoreCase(t *testing.T) {
 		want bool
 	}{
 		{"ab12", "AB12", true},
-		{" 5 ", "5", true},
+		// Python equals_ignore_case 不 trim：" 5 " 与 "5" 不等
+		{" 5 ", "5", false},
 		{"5", "6", false},
 		{"", "", true},
 	}

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -22,11 +23,10 @@ import (
 	"walnut-seed-go/internal/pkg/idgen"
 )
 
-// 字段截断上限（与 Python 端 3800 一致，比列宽 4000 保守）。
+// 字段长度上限（与 Python 端 3800 一致）：超限整体替换为固定文案，不是截断。
 const (
 	truncParam  = 3800
 	truncResult = 3800
-	truncError  = 3800
 	truncURL    = 255
 )
 
@@ -117,8 +117,10 @@ func (l *Logger) Send(evt Event) {
 func (l *Logger) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		method := c.Request.Method
-		// 只采集写方法
-		if method != "POST" && method != "PUT" && method != "DELETE" && method != "PATCH" {
+		// 只采集写方法（对齐 OPERATION_RECORD_METHOD）
+		switch method {
+		case "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS":
+		default:
 			c.Next()
 			return
 		}
@@ -149,11 +151,22 @@ func (l *Logger) Middleware() gin.HandlerFunc {
 
 		costMs := time.Since(start).Milliseconds()
 
+		// 标题/业务类型/method 列取注册表（Python @log 装饰器 + summary 兜底），
+		// 未登记路由退回路径/方法推导
+		title := pathToTitle(path)
+		btype := methodToBusinessType(method)
+		methodCol := method + " " + path
+		if meta, ok := operlogRegistry[method+" "+c.FullPath()]; ok {
+			title = meta.Title
+			btype = meta.BusinessType
+			methodCol = meta.Method
+		}
+
 		// 构建事件
 		evt := Event{
-			Title:         pathToTitle(path),
-			BusinessType:  methodToBusinessType(method),
-			Method:        method + " " + path,
+			Title:         title,
+			BusinessType:  btype,
+			Method:        methodCol,
 			RequestMethod: method,
 			OperatorType:  1, // 后台用户
 			OperURL:       truncate(path, truncURL),
@@ -168,18 +181,25 @@ func (l *Logger) Middleware() gin.HandlerFunc {
 			evt.OperName = ac.User.UserName
 		}
 
-		// 请求参数（脱敏 + 截断）
-		evt.OperParam = truncate(buildParam(c, reqBody), truncParam)
-
-		// 响应体（截断）
-		if rw.buf.Len() > 0 {
-			evt.JSONResult = truncate(rw.buf.String(), truncResult)
+		// 请求参数（脱敏；超长整体替换，对齐 Python「请求参数过长」）
+		param := buildParam(c, reqBody)
+		if utf8.RuneCountInString(param) > truncParam {
+			param = "请求参数过长"
 		}
+		evt.OperParam = param
 
-		// 错误信息
-		if len(c.Errors) > 0 {
-			evt.ErrorMsg = truncate(c.Errors.String(), truncError)
+		// 响应体：仅 JSON 响应记录原文，非 JSON（如 Excel 导出）记 "{}"，
+		// 否则二进制截断后写入 utf8mb4 列会触发 Error 1366 整行丢失。
+		result := "{}"
+		if strings.Contains(c.Writer.Header().Get("Content-Type"), "application/json") && rw.buf.Len() > 0 {
+			result = rw.buf.String()
 		}
+		if utf8.RuneCountInString(result) > truncResult {
+			result = "响应结果过长"
+		}
+		evt.JSONResult = result
+
+		// error_msg：Python log_data 不含该字段，恒 NULL，这里不采集
 
 		l.Send(evt)
 	}
@@ -258,20 +278,14 @@ func (rw *responseWriter) WriteString(s string) (int, error) {
 	return rw.ResponseWriter.WriteString(s)
 }
 
-// buildParam 从请求体 / query / form 构建参数快照并脱敏。
+// buildParam 从请求体 / form 构建参数快照并脱敏，对齐 Python router_class：
+// form 类 content-type → form 快照；否则有 body 就尝试 JSON 解析（失败记原文）；
+// 空快照记 "{}"（Python json.dumps({})），JSON 序列化不转义 HTML（ensure_ascii=False 等价）。
 func buildParam(c *gin.Context, body []byte) string {
 	ct := c.ContentType()
 	result := make(map[string]any)
 
-	if len(body) > 0 && strings.HasPrefix(ct, "application/json") {
-		var obj any
-		if err := json.Unmarshal(body, &obj); err == nil {
-			scrubbed := scrub(obj)
-			result["body"] = scrubbed
-		} else {
-			result["body"] = string(body)
-		}
-	} else if strings.HasPrefix(ct, "application/x-www-form-urlencoded") || strings.HasPrefix(ct, "multipart/form-data") {
+	if strings.HasPrefix(ct, "application/x-www-form-urlencoded") || strings.HasPrefix(ct, "multipart/form-data") {
 		form := make(map[string]string)
 		for k, v := range c.Request.PostForm {
 			if _, skip := scrubKeys[k]; !skip && len(v) > 0 {
@@ -280,6 +294,13 @@ func buildParam(c *gin.Context, body []byte) string {
 		}
 		if len(form) > 0 {
 			result["form"] = form
+		}
+	} else if len(body) > 0 {
+		var obj any
+		if err := json.Unmarshal(body, &obj); err == nil {
+			result["body"] = scrub(obj)
+		} else {
+			result["body"] = string(body)
 		}
 	}
 
@@ -291,11 +312,11 @@ func buildParam(c *gin.Context, body []byte) string {
 		result["path_params"] = pp
 	}
 
-	if len(result) == 0 {
-		return ""
-	}
-	out, _ := json.Marshal(result)
-	return string(out)
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(result)
+	return strings.TrimSuffix(buf.String(), "\n")
 }
 
 // scrub 递归移除密码类字段。

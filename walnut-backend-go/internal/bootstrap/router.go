@@ -26,6 +26,7 @@ import (
 	"walnut-seed-go/internal/module/system/social"
 	"walnut-seed-go/internal/module/system/user"
 	"walnut-seed-go/internal/module/web/auth"
+	"walnut-seed-go/internal/pkg/errs"
 	"walnut-seed-go/internal/pkg/idempotentx"
 	"walnut-seed-go/internal/pkg/middleware"
 	"walnut-seed-go/internal/pkg/permguard"
@@ -309,6 +310,9 @@ func (a *App) registerMiddleware(engine *gin.Engine) {
 	// 客户端会收到裸 500 空响应而非信封体
 	engine.Use(a.errHandler.Recovery())
 
+	// 查询串分号兼容（Go net/url 拒绝 ';' 会丢光全部查询参数，Starlette 视其为字面字符）
+	engine.Use(middleware.QuerySemicolonCompat())
+
 	// TODO: HTTPSRedirect（仅 prod 且 HTTPS_REDIRECT=true，需真实 TLS 环境）
 	// TODO: TrustedHost（仅 prod，校验 ALLOWED_HOSTS，需真实 TLS 环境）
 
@@ -498,17 +502,19 @@ func (a *App) mountUploadRoutes(b *Builder) {
 
 // handleUploadServe 处理 /upload/{key} 公开回源请求。
 // 在白名单内（img 标签无法带 token），强制 nosniff + attachment 防存储型 XSS。
+// 错误形状对齐 Python：NoSuchKey → HTTP 200 + code 404 信封（含 data:null）；
+// 空 key → code 400 空消息；其余存储错误 → code 500 通用文案（data 恒 null）。
 func (a *App) handleUploadServe(c *gin.Context) {
 	filePath := strings.TrimPrefix(c.Param("file_path"), "/")
-	if filePath == "" {
-		c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": "文件不存在"})
-		return
-	}
 
 	obj, err := a.storage.Serve(c.Request.Context(), filePath)
 	if err != nil {
+		if se := errs.As(err); se != nil {
+			a.errHandler.Render(c, se)
+			return
+		}
 		a.log.Warn("回源文件失败", slog.String("key", filePath), slog.String("err", err.Error()))
-		c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": "文件不存在"})
+		a.errHandler.Render(c, errs.New(errs.MsgSystemError))
 		return
 	}
 

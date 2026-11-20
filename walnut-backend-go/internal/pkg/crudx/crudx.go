@@ -173,30 +173,31 @@ func bindPage(q Querier, rule pageSizeRule) (Page, error) {
 	// ⚠️ 存在即为「显式传参」，空串也算——Pydantic 对 "" 同样报解析错误，
 	// 不能当成缺省值处理。
 	if raw, ok := q.GetQuery("pageNum"); ok {
-		n, err := strconv.Atoi(strings.TrimSpace(raw))
+		n, valid := parsePyLaxInt(raw)
 		switch {
-		case err != nil:
+		case !valid:
 			msgs = append(msgs, msgInvalidInt)
 		case n < 1:
 			msgs = append(msgs, msgGeOne)
 		default:
-			page.PageNum = n
+			page.PageNum = int(n)
 		}
 	}
 
 	// page_size: int | None = Field(default=..., ge=1[, le=maxSize])
 	// 同上：`?pageSize=` 在 Python 端是校验错误，不是走默认值。
 	if raw, ok := q.GetQuery("pageSize"); ok {
-		n, err := strconv.Atoi(strings.TrimSpace(raw))
+		n, valid := parsePyLaxInt(raw)
 		switch {
-		case err != nil:
+		case !valid:
 			msgs = append(msgs, msgInvalidInt)
 		case n < 1:
 			msgs = append(msgs, msgGeOne)
-		case rule.maxSize > 0 && n > rule.maxSize:
+		case rule.maxSize > 0 && n > int64(rule.maxSize):
 			msgs = append(msgs, "Input should be less than or equal to "+strconv.Itoa(rule.maxSize))
 		default:
-			page.PageSize = &n
+			sz := int(n)
+			page.PageSize = &sz
 		}
 	}
 
@@ -490,8 +491,9 @@ func ParseIDs(raw, label string) ([]int64, error) {
 	items := Str2List(raw)
 	ids := make([]int64, 0, len(items))
 	for _, item := range items {
-		n, err := strconv.ParseInt(item, 10, 64)
-		if err != nil {
+		// Python 裸 int()：接受 "1_0"=10、"+1"，拒绝 "3.0"/"1e2"
+		n, ok := parsePyStrictInt(item)
+		if !ok {
 			return nil, errs.BadRequest(label + "格式有误")
 		}
 		ids = append(ids, n)
@@ -500,4 +502,76 @@ func ParseIDs(raw, label string) ([]int64, error) {
 		return nil, errs.BadRequest(label + "不能为空")
 	}
 	return ids, nil
+}
+
+// parsePyLaxInt 镜像 Pydantic v2 str→int（lax）：首尾空白、+/-、数字间单个
+// 下划线、".全零" 小数（"5.00"→5）；拒绝指数形式。与 dept.ParsePyQueryInt 同语义
+// （crudx 不能反向依赖业务模块，故在此保留一份）。
+func parsePyLaxInt(raw string) (int64, bool) {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return 0, false
+	}
+	neg := false
+	if s[0] == '+' || s[0] == '-' {
+		neg = s[0] == '-'
+		s = s[1:]
+	}
+	if i := strings.IndexByte(s, '.'); i >= 0 {
+		frac := s[i+1:]
+		if frac == "" {
+			return 0, false
+		}
+		for _, ch := range frac {
+			if ch != '0' {
+				return 0, false
+			}
+		}
+		s = s[:i]
+	}
+	n, ok := parsePyStrictInt(s)
+	if !ok {
+		return 0, false
+	}
+	if neg {
+		n = -n
+	}
+	return n, true
+}
+
+// parsePyStrictInt 镜像 Python 裸 int(str)：可选符号 + 数字间单个下划线，无小数。
+func parsePyStrictInt(s string) (int64, bool) {
+	if s == "" {
+		return 0, false
+	}
+	neg := false
+	if s[0] == '+' || s[0] == '-' {
+		neg = s[0] == '-'
+		s = s[1:]
+	}
+	var b strings.Builder
+	prevDigit := false
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		switch {
+		case ch >= '0' && ch <= '9':
+			b.WriteByte(ch)
+			prevDigit = true
+		case ch == '_' && prevDigit && i+1 < len(s) && s[i+1] >= '0' && s[i+1] <= '9':
+			prevDigit = false
+		default:
+			return 0, false
+		}
+	}
+	if b.Len() == 0 {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(b.String(), 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	if neg {
+		n = -n
+	}
+	return n, true
 }
