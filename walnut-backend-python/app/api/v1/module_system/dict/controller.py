@@ -141,7 +141,7 @@ async def add_dict_type(
 ):
     service = DictTypeService(auth, db)
     if not await service.check_dict_type_unique(req):
-        return ErrorResponse(msg=f"新增字典'{req.dict_name}'失败，字典类型已存在")
+        return ErrorResponse(msg=f"新增字典'{req.dict_name or ''}'失败，字典类型已存在")
     await service.insert_dict_type(req, _get_redis(request))
     return SuccessResponse()
 
@@ -156,7 +156,7 @@ async def update_dict_type(
 ):
     service = DictTypeService(auth, db)
     if not await service.check_dict_type_unique(req):
-        return ErrorResponse(msg=f"修改字典'{req.dict_name}'失败，字典类型已存在")
+        return ErrorResponse(msg=f"修改字典'{req.dict_name or ''}'失败，字典类型已存在")
     await service.update_dict_type(req, _get_redis(request))
     return SuccessResponse()
 

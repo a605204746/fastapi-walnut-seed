@@ -128,7 +128,7 @@ async def add_config(
 ):
     service = ConfigService(auth, db)
     if not await service.check_config_key_unique(req):
-        return ErrorResponse(msg=f"新增参数'{req.config_name}'失败，参数键名已存在")
+        return ErrorResponse(msg=f"新增参数'{req.config_name or ''}'失败，参数键名已存在")
     await service.insert_config(req, _get_redis(request))
     return SuccessResponse()
 
@@ -143,7 +143,7 @@ async def update_config(
 ):
     service = ConfigService(auth, db)
     if not await service.check_config_key_unique(req):
-        return ErrorResponse(msg=f"修改参数'{req.config_name}'失败，参数键名已存在")
+        return ErrorResponse(msg=f"修改参数'{req.config_name or ''}'失败，参数键名已存在")
     await service.update_config(req, _get_redis(request))
     return SuccessResponse()
 

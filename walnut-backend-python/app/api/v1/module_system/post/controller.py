@@ -88,7 +88,10 @@ async def optionselect_post(
     post_ids: Annotated[str | None, Query(alias="postIds", description="岗位ID串")] = None,
     dept_id: Annotated[int | None, Query(alias="deptId", description="部门id")] = None,
 ) -> SuccessResponse:
-    ids = [int(item) for item in str2list(post_ids)] if post_ids else None
+    try:
+        ids = [int(item) for item in str2list(post_ids)] if post_ids else None
+    except ValueError:
+        raise ServiceException("岗位ID格式有误", code=HttpStatus.BAD_REQUEST)
     return SuccessResponse(data=await PostService(auth, db).option_select(ids, dept_id))
 
 

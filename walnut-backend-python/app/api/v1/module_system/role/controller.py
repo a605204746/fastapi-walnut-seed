@@ -93,7 +93,10 @@ async def optionselect_role(
     db: DbSession,
     role_ids: Annotated[str | None, Query(alias="roleIds", description="角色ID串")] = None,
 ) -> SuccessResponse:
-    ids = [int(item) for item in str2list(role_ids)] if role_ids else None
+    try:
+        ids = [int(item) for item in str2list(role_ids)] if role_ids else None
+    except ValueError:
+        raise ServiceException("角色ID格式有误", code=HttpStatus.BAD_REQUEST)
     return SuccessResponse(data=await RoleService(auth, db).option_select(ids))
 
 

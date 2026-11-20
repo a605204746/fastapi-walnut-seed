@@ -34,6 +34,7 @@ from app.api.v1.module_system.user.schema import (
     dump_camel,
 )
 from app.common.constant import SystemConstants
+from app.common.enums import HttpStatus
 from app.core.base_schema import AuthSchema
 from app.core.exceptions import ServiceException
 from app.utils.string_util import is_blank, str2list
@@ -169,9 +170,15 @@ class UserService:
         if req.dept_id is not None:
             conditions.append(UserModel.dept_id.in_(await self.crud.dept_and_child_ids(req.dept_id)))
         if not is_blank(req.user_ids):
-            conditions.append(UserModel.id.in_([int(x) for x in str2list(req.user_ids)]))
+            try:
+                conditions.append(UserModel.id.in_([int(x) for x in str2list(req.user_ids)]))
+            except ValueError:
+                raise ServiceException("用户ID格式有误", code=HttpStatus.BAD_REQUEST)
         if not is_blank(req.exclude_user_ids):
-            conditions.append(UserModel.id.not_in([int(x) for x in str2list(req.exclude_user_ids)]))
+            try:
+                conditions.append(UserModel.id.not_in([int(x) for x in str2list(req.exclude_user_ids)]))
+            except ValueError:
+                raise ServiceException("用户ID格式有误", code=HttpStatus.BAD_REQUEST)
         return conditions
 
     async def _build_export_conditions(self, req: UserQueryParam) -> list[ColumnElement]:

@@ -86,6 +86,14 @@ class OperationLogRoute(APIRoute):
             start = time.perf_counter()
             response: Response = await original_route_handler(request)
 
+            # 响应发送前提交事务（db_getter 把会话挂在 request.state）。
+            # yield 依赖的 teardown 在响应发送后才跑，只靠它 commit 会让
+            # 「写后立即读」的下一个请求读到旧数据。teardown 的二次 commit
+            # 因事务已关闭而为 no-op；异常路径仍由 begin() 上下文 rollback。
+            session = getattr(request.state, "db_session", None)
+            if session is not None:
+                await session.commit()
+
             if request.method not in settings.OPERATION_RECORD_METHOD:
                 return response
             route: APIRoute | None = request.scope.get("route", None)

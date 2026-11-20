@@ -17,9 +17,16 @@ from app.core.redis_crud import RedisUtils
 from app.core.security import OAuth2Schema, decode_access_token
 
 
-async def db_getter() -> AsyncGenerator[AsyncSession, None]:
-    """数据库会话 — 请求级生命周期管理（一个请求内共享同一事务）。"""
+async def db_getter(request: Request) -> AsyncGenerator[AsyncSession, None]:
+    """数据库会话 — 请求级生命周期管理（一个请求内共享同一事务）。
+
+    会话挂到 request.state，由 OperationLogRoute 在**响应发送前**显式 commit。
+    不能只靠 session.begin() 的 teardown：FastAPI 的 yield 依赖清理在响应发送
+    **之后**才执行，客户端「写后立即读」会读到未提交的旧数据（竞态）。
+    异常路径仍由 begin() 上下文负责 rollback。
+    """
     async with async_db_session() as session, session.begin():
+        request.state.db_session = session
         yield session
 
 

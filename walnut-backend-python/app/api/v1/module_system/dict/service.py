@@ -148,7 +148,7 @@ class DictTypeService:
         for item in type_list:
             assert item.dict_type is not None
             if await self.dict_data_crud.exists_by_type(item.dict_type):
-                raise ServiceException(f"{item.dict_name}已分配,不能删除")
+                raise ServiceException(f"{item.dict_name or ''}已分配,不能删除")
         await self.dict_type_crud.delete_batch(dict_ids)
         if redis is not None:
             ru = RedisUtils(redis)

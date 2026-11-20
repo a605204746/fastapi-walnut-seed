@@ -21,7 +21,7 @@ from app.api.v1.module_system.log.schema import (
     OperLogQueryParam,
 )
 from app.api.v1.module_system.log.service import LogininforService, OperLogService
-from app.common.enums import BusinessType, CacheNames
+from app.common.enums import BusinessType, CacheNames, HttpStatus
 from app.common.response import ErrorResponse, SuccessResponse
 from app.core.base_schema import AuthSchema
 from app.core.dependencies import AuthPermission, db_getter, get_current_user, redis_getter
@@ -75,7 +75,10 @@ async def _collect_filter_params(request: Request) -> dict[str, Any]:
 
 def _parse_ids(raw_ids: str) -> list[int]:
     """解析路径中的逗号分隔ID串。"""
-    return [int(item) for item in str2list(raw_ids)]
+    try:
+        return [int(item) for item in str2list(raw_ids)]
+    except ValueError:
+        raise ServiceException("日志ID格式有误", code=HttpStatus.BAD_REQUEST)
 
 
 # ==================== 操作日志 ====================
