@@ -8,6 +8,7 @@ package role
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"time"
 
@@ -278,12 +279,16 @@ type AuthUserRow struct {
 	CreateTime  *time.Time `gorm:"column:create_time"`
 }
 
-func (r *Repo) PageAllocatedUsers(ctx context.Context, roleID int64, page crudx.Page, conds []crudx.Cond, scope permx.Scope) ([]AuthUserRow, int64, error) {
+func (r *Repo) PageAllocatedUsers(ctx context.Context, roleID *int64, page crudx.Page, conds []crudx.Cond, scope permx.Scope) ([]AuthUserRow, int64, error) {
 	newQuery := func() *gorm.DB {
+		// Python: role_id 缺省时仍 JOIN sys_user_role（仅去掉 role_id 条件），照抄
 		q := r.db.WithContext(ctx).Table("sys_user u").
 			Select("u.id, u.dept_id, u.user_name, u.nick_name, u.email, u.phonenumber, u.status, u.create_time").
 			Joins("INNER JOIN sys_user_role ur ON ur.user_id = u.id").
-			Where("u.del_flag = ? AND ur.role_id = ?", modelx.Normal, roleID)
+			Where("u.del_flag = ?", modelx.Normal)
+		if roleID != nil {
+			q = q.Where("ur.role_id = ?", *roleID)
+		}
 		q = scope.Apply(q)
 		return crudx.Apply(q, conds...)
 	}
@@ -302,11 +307,15 @@ func (r *Repo) PageAllocatedUsers(ctx context.Context, roleID int64, page crudx.
 	return rows, total, nil
 }
 
-func (r *Repo) PageUnallocatedUsers(ctx context.Context, roleID int64, page crudx.Page, conds []crudx.Cond, scope permx.Scope) ([]AuthUserRow, int64, error) {
+func (r *Repo) PageUnallocatedUsers(ctx context.Context, roleID *int64, page crudx.Page, conds []crudx.Cond, scope permx.Scope) ([]AuthUserRow, int64, error) {
 	newQuery := func() *gorm.DB {
+		// Python: role_id 缺省时不追加 NOT IN 子查询（返回全部可见用户），照抄
 		q := r.db.WithContext(ctx).Table("sys_user u").
 			Select("u.id, u.dept_id, u.user_name, u.nick_name, u.email, u.phonenumber, u.status, u.create_time").
-			Where("u.del_flag = ? AND u.id NOT IN (SELECT ur.user_id FROM sys_user_role ur WHERE ur.role_id = ?)", modelx.Normal, roleID)
+			Where("u.del_flag = ?", modelx.Normal)
+		if roleID != nil {
+			q = q.Where("u.id NOT IN (SELECT ur.user_id FROM sys_user_role ur WHERE ur.role_id = ?)", *roleID)
+		}
 		q = scope.Apply(q)
 		return crudx.Apply(q, conds...)
 	}
@@ -366,23 +375,24 @@ type SysUserRole struct {
 
 func (SysUserRole) TableName() string { return "sys_user_role" }
 
-type DeptTreeNode struct {
-	ID       int64   `gorm:"column:id"`
-	ParentID *int64  `gorm:"column:parent_id"`
-	DeptName *string `gorm:"column:dept_name"`
-	OrderNum *int    `gorm:"column:order_num"`
-	Status   *string `gorm:"column:status"`
-}
-
+// CheckedDeptIDs 对应 Python dept/crud.py list_dept_ids_by_role_id：
+//   - 授权子查询 LEFT JOIN sys_role 且只过滤 sr.status='0'，**不加 sr.del_flag**；
+//   - 主查询 del_flag='0' + id IN 授权子查询，按 parent_id, order_num 排序；
+//   - deptCheckStrictly 时剔父：父子查询 select parent_id from sys_dept
+//     where id IN 授权子查询，**不加 del_flag、不过滤 NULL 父**；
+//     SQL `NOT IN` 子查询含 NULL 时整体返回空集（照抄，不"修正"）。
 func (r *Repo) CheckedDeptIDs(ctx context.Context, roleID int64, deptCheckStrictly bool) ([]int64, error) {
-	grantSub := r.db.WithContext(ctx).Table("sys_role_dept rd").
-		Select("rd.dept_id").
-		Joins("INNER JOIN sys_role sr ON sr.id = rd.role_id").
-		Where("rd.role_id = ? AND sr.status = ? AND sr.del_flag = ?", roleID, modelx.Normal, modelx.Normal)
+	// 每次构造新的子查询 builder，避免同一 *gorm.DB 复用导致条件污染
+	grantSub := func() *gorm.DB {
+		return r.db.WithContext(ctx).Table("sys_role_dept rd").
+			Select("rd.dept_id").
+			Joins("LEFT JOIN sys_role sr ON sr.id = rd.role_id").
+			Where("rd.role_id = ? AND sr.status = ?", roleID, modelx.Normal)
+	}
 
 	q := r.db.WithContext(ctx).Table("sys_dept").
 		Select("id").
-		Where("del_flag = ? AND id IN (?)", modelx.Normal, grantSub).
+		Where("del_flag = ? AND id IN (?)", modelx.Normal, grantSub()).
 		Order("parent_id, order_num")
 
 	ids := make([]int64, 0)
@@ -391,45 +401,30 @@ func (r *Repo) CheckedDeptIDs(ctx context.Context, roleID int64, deptCheckStrict
 	}
 
 	if deptCheckStrictly {
-		parentIDs := make([]int64, 0)
-		if len(ids) > 0 {
-			err := r.db.WithContext(ctx).Table("sys_dept").
-				Where("id IN ? AND del_flag = ?", ids, modelx.Normal).
-				Where("parent_id IS NOT NULL").
-				Pluck("parent_id", &parentIDs).Error
-			if err != nil {
-				return nil, err
+		var parents []sql.NullInt64
+		err := r.db.WithContext(ctx).Table("sys_dept").
+			Where("id IN (?)", grantSub()).
+			Pluck("parent_id", &parents).Error
+		if err != nil {
+			return nil, err
+		}
+		parentSet := make(map[int64]bool, len(parents))
+		for _, p := range parents {
+			if !p.Valid {
+				// NOT IN (…, NULL, …) → 空集
+				return []int64{}, nil
+			}
+			parentSet[p.Int64] = true
+		}
+		filtered := make([]int64, 0, len(ids))
+		for _, id := range ids {
+			if !parentSet[id] {
+				filtered = append(filtered, id)
 			}
 		}
-		if len(parentIDs) > 0 {
-			parentSet := make(map[int64]bool, len(parentIDs))
-			for _, pid := range parentIDs {
-				parentSet[pid] = true
-			}
-			filtered := make([]int64, 0, len(ids))
-			for _, id := range ids {
-				if !parentSet[id] {
-					filtered = append(filtered, id)
-				}
-			}
-			ids = filtered
-		}
+		ids = filtered
 	}
 	return ids, nil
-}
-
-func (r *Repo) DeptTreeNodes(ctx context.Context) ([]DeptTreeNode, error) {
-	rows := make([]DeptTreeNode, 0)
-	err := r.db.WithContext(ctx).Table("sys_dept").
-		Select("id, parent_id, dept_name, order_num, status").
-		Where("del_flag = ?", modelx.Normal).
-		Clauses(clause.OrderBy{Columns: []clause.OrderByColumn{
-			{Column: clause.Column{Name: "parent_id"}},
-			{Column: clause.Column{Name: "order_num"}},
-			{Column: clause.Column{Name: "id"}},
-		}}).
-		Find(&rows).Error
-	return rows, err
 }
 
 func countGTZero(q *gorm.DB) (bool, error) {

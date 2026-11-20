@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"walnut-seed-go/internal/pkg/crudx"
 )
@@ -22,7 +23,18 @@ func (r *Repo) OperLogPage(ctx context.Context, page crudx.Page, conds []crudx.C
 	if err := newQuery().Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	q := newQuery().Order("id DESC")
+	// 用户排序在前；仅未指定 orderByColumn 时兜底 id DESC（log/crud._apply_order）。
+	order, err := crudx.BuildOrder(r.db, &SysOperLog{}, page)
+	if err != nil {
+		return nil, 0, err
+	}
+	if crudx.IsBlank(page.OrderByColumn) {
+		order = append(order, clause.OrderByColumn{Column: clause.Column{Name: "id"}, Desc: true})
+	}
+	q := newQuery()
+	if len(order) > 0 {
+		q = q.Clauses(clause.OrderBy{Columns: order})
+	}
 	if page.HasLimit() {
 		q = q.Offset(page.Offset()).Limit(*page.PageSize)
 	}
@@ -67,7 +79,17 @@ func (r *Repo) LogininforPage(ctx context.Context, page crudx.Page, conds []crud
 	if err := newQuery().Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	q := newQuery().Order("id DESC")
+	order, err := crudx.BuildOrder(r.db, &SysLogininfor{}, page)
+	if err != nil {
+		return nil, 0, err
+	}
+	if crudx.IsBlank(page.OrderByColumn) {
+		order = append(order, clause.OrderByColumn{Column: clause.Column{Name: "id"}, Desc: true})
+	}
+	q := newQuery()
+	if len(order) > 0 {
+		q = q.Clauses(clause.OrderBy{Columns: order})
+	}
 	if page.HasLimit() {
 		q = q.Offset(page.Offset()).Limit(*page.PageSize)
 	}
@@ -104,46 +126,51 @@ func (r *Repo) LogininforClean(ctx context.Context) error {
 
 // ---- 字典辅助 ----
 
+// DictLabelMap 对应 service._dict_label_map：不过滤 status，跳过 value/label 为 NULL 的行。
 func (r *Repo) DictLabelMap(ctx context.Context, dictType string) (map[string]string, error) {
 	type row struct {
-		DictValue string `gorm:"column:dict_value"`
-		DictLabel string `gorm:"column:dict_label"`
+		DictValue *string `gorm:"column:dict_value"`
+		DictLabel *string `gorm:"column:dict_label"`
 	}
 	var rows []row
 	err := r.db.WithContext(ctx).Table("sys_dict_data").
 		Select("dict_value, dict_label").
-		Where("dict_type = ? AND status = '0'", dictType).
+		Where("dict_type = ?", dictType).
 		Find(&rows).Error
 	if err != nil {
 		return nil, err
 	}
 	m := make(map[string]string, len(rows))
 	for _, r := range rows {
-		m[r.DictValue] = r.DictLabel
+		if r.DictValue == nil || r.DictLabel == nil {
+			continue
+		}
+		m[*r.DictValue] = *r.DictLabel
 	}
 	return m, nil
 }
 
 // ---- 导出列 ----
 
+// 列序/列头逐字对应 Python log/schema.py 的 OPER_LOG_EXPORT_HEADERS / LOGININFOR_EXPORT_HEADERS。
+
 func OperLogExportColumns() []excelCol {
 	return []excelCol{
-		{"日志编号", "id"}, {"系统模块", "title"}, {"操作类型", "businessType"},
-		{"请求方式", "requestMethod"}, {"操作类别", "operatorType"},
-		{"操作人员", "operName"}, {"部门名称", "deptName"}, {"操作地址", "operIp"},
-		{"操作地点", "operLocation"}, {"请求URL", "operUrl"},
-		{"请求参数", "operParam"}, {"返回参数", "jsonResult"},
-		{"操作状态", "status"}, {"错误消息", "errorMsg"}, {"操作时间", "operTime"},
-		{"消耗时间", "costTime"},
+		{"日志主键", "id"}, {"操作模块", "title"}, {"业务类型", "businessType"},
+		{"请求方法", "method"}, {"请求方式", "requestMethod"}, {"操作类别", "operatorType"},
+		{"操作人员", "operName"}, {"部门名称", "deptName"}, {"请求地址", "operUrl"},
+		{"操作地址", "operIp"}, {"操作地点", "operLocation"}, {"请求参数", "operParam"},
+		{"返回参数", "jsonResult"}, {"状态", "status"}, {"错误消息", "errorMsg"},
+		{"操作时间", "operTime"}, {"消耗时间", "costTime"},
 	}
 }
 
 func LogininforExportColumns() []excelCol {
 	return []excelCol{
-		{"访问编号", "id"}, {"用户账号", "userName"}, {"客户端", "clientKey"},
-		{"设备类型", "deviceType"}, {"登录地址", "ipaddr"}, {"登录地点", "loginLocation"},
-		{"浏览器", "browser"}, {"操作系统", "os"}, {"登录状态", "status"},
-		{"操作信息", "msg"}, {"登录时间", "loginTime"},
+		{"序号", "id"}, {"用户账号", "userName"}, {"客户端", "clientKey"},
+		{"设备类型", "deviceType"}, {"登录状态", "status"}, {"登录地址", "ipaddr"},
+		{"登录地点", "loginLocation"}, {"浏览器", "browser"}, {"操作系统", "os"},
+		{"提示消息", "msg"}, {"访问时间", "loginTime"},
 	}
 }
 

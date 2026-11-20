@@ -271,7 +271,9 @@ func DecodeCreate(body []byte) (CreateIn, error) {
 			msgs = append(msgs, valueErr("组件路径不能超过200个字符"))
 		}
 	}
-	// query_param：非空必须是 JSON 对象
+	// query_param：非空必须是 JSON 对象。
+	// ⚠️ "null" 能被 Unmarshal 进 map（得到 nil map），但 Python json.loads→None
+	// 非 dict → 400，故必须额外判 obj == nil。
 	v, terr = optStr(fields, "queryParam")
 	if terr != "" {
 		msgs = append(msgs, terr)
@@ -279,7 +281,7 @@ func DecodeCreate(body []byte) (CreateIn, error) {
 		in.QueryParam = v
 		if v != nil && strings.TrimSpace(*v) != "" {
 			var obj map[string]any
-			if json.Unmarshal([]byte(*v), &obj) != nil {
+			if json.Unmarshal([]byte(*v), &obj) != nil || obj == nil {
 				msgs = append(msgs, valueErr("路由参数必须符合JSON格式"))
 			}
 		}

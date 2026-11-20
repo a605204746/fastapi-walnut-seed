@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"walnut-seed-go/internal/module/system/dept"
 	"walnut-seed-go/internal/pkg/crudx"
 	"walnut-seed-go/internal/pkg/errs"
 	"walnut-seed-go/internal/pkg/idtype"
@@ -335,8 +336,9 @@ func decodeInt(raw json.RawMessage) (*int64, string) {
 		if err := json.Unmarshal(raw, &s); err != nil {
 			return nil, msgValidStr
 		}
-		n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
-		if err != nil {
+		// Pydantic lax str→int 接受 "3.0"→3、"1_0"→10（拒绝 "1e2"/"3.5"）。
+		n, valid := dept.ParsePyQueryInt(s)
+		if !valid {
 			return nil, msgValidInt
 		}
 		return &n, ""

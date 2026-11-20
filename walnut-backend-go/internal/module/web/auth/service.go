@@ -6,11 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"gorm.io/gorm"
 
@@ -231,7 +234,10 @@ func (s *Service) checkLogin(ctx context.Context, loginType, username, ip string
 	lockTime := time.Duration(s.cfg.PasswordLockTime) * time.Minute
 	retryLimitMsgKey := retryLimitKeyFor(loginType)
 
-	count := s.getErrCount(ctx, errorKey)
+	count, err := s.getErrCount(ctx, errorKey)
+	if err != nil {
+		return err
+	}
 	if count >= maxRetry {
 		s.recordLogininfor(ctx, RequestMeta{ClientIP: ip}, username, modelx.LoginFail,
 			s.t(retryLimitMsgKey, maxRetry, s.cfg.PasswordLockTime), logmodel.StatusFail, nil)
@@ -260,20 +266,82 @@ func (s *Service) checkLogin(ctx context.Context, loginType, username, ip string
 	return nil
 }
 
-// getErrCount 读取当前失败次数；键不存在或解析失败均按 0 处理。
-func (s *Service) getErrCount(ctx context.Context, key string) int64 {
+// getErrCount 读取当前失败次数，对应 Python `error_number = int(raw) if raw else 0`。
+//
+// ⚠️ 计数值损坏（如 "abc"/"3.0"）时 Python 的裸 int() 抛 ValueError →
+// 全局处理器 **400 + 原文** "invalid literal for int() with base 10: 'abc'"，
+// **不是**重置 0（曾误写成重置，契约比对抓出）。键不存在/空串才是 0。
+func (s *Service) getErrCount(ctx context.Context, key string) (int64, error) {
 	raw, ok := s.cache.Get(ctx, key)
 	if !ok || raw == "" {
-		return 0
+		return 0, nil
 	}
-	n, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	n, valid := parsePyInt(raw)
+	if !valid {
+		return 0, errs.BadRequest(fmt.Sprintf("invalid literal for int() with base 10: %s", pyRepr(raw)))
+	}
+	return n, nil
+}
+
+// pyIntArgRE 匹配 Python int() 接受的形态：可选符号 + 数字间可单个下划线。
+var pyIntArgRE = regexp.MustCompile(`^[+-]?[0-9](_?[0-9])*$`)
+
+// parsePyInt 复刻 Python int(str)：接受 "1_0"=10、"+1"、" 3 "，拒绝 "3.0"/"1e2"/""。
+// Python int 无溢出概念，超出 int64 时钳到边界（保持 >= maxRetry 的锁定语义）。
+func parsePyInt(raw string) (int64, bool) {
+	s := strings.TrimSpace(raw)
+	if !pyIntArgRE.MatchString(s) {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(strings.ReplaceAll(s, "_", ""), 10, 64)
 	if err != nil {
-		// 计数值损坏时按 0 处理并清理，避免用户被一个坏值永久锁住
-		s.logger.Warn("登录失败计数值非法，已重置", slog.String("key", key), slog.String("raw", raw))
-		s.cache.Delete(ctx, key)
-		return 0
+		if strings.HasPrefix(s, "-") {
+			return math.MinInt64, true
+		}
+		return math.MaxInt64, true
 	}
-	return n
+	return n, true
+}
+
+// pyRepr 复刻 Python repr(str)：优先单引号，含 ' 且不含 " 时改用双引号；
+// 转义反斜杠与常见控制字符，可打印 Unicode 原样保留。
+func pyRepr(s string) string {
+	quote := '\''
+	if strings.ContainsRune(s, '\'') && !strings.ContainsRune(s, '"') {
+		quote = '"'
+	}
+	var b strings.Builder
+	b.WriteRune(quote)
+	for _, r := range s {
+		switch r {
+		case '\\':
+			b.WriteString(`\\`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		case quote:
+			b.WriteRune('\\')
+			b.WriteRune(r)
+		default:
+			switch {
+			case r < 0x20 || r == 0x7f:
+				fmt.Fprintf(&b, `\x%02x`, r)
+			case !unicode.IsPrint(r):
+				if r <= 0xffff {
+					fmt.Fprintf(&b, `\u%04x`, r)
+				} else {
+					fmt.Fprintf(&b, `\U%08x`, r)
+				}
+			default:
+				b.WriteRune(r)
+			}
+		}
+	}
+	b.WriteRune(quote)
+	return b.String()
 }
 
 // retryLimitKeyFor 按登录类型返回重试提示的 i18n 键，对应 LoginType.retry_limit_key。
@@ -474,7 +542,7 @@ func (s *Service) buildOnlineUser(u *user.SysUser, session *SessionInfo, cli *cl
 // **幂等**：token 无效/已过期也返回成功。这是 /auth/logout 在认证白名单内的原因——
 // 未登录或 token 失效时调用它不应报错，否则前端"退出"按钮在 token 过期后会卡住。
 func (s *Service) Logout(ctx context.Context, meta RequestMeta) error {
-	token := extractBearerToken(meta.Authorization, s.cfg.TokenName, s.cfg.TokenPrefix)
+	token := extractLogoutToken(meta.Authorization)
 	if token == "" {
 		return nil
 	}
@@ -513,12 +581,16 @@ func (s *Service) Logout(ctx context.Context, meta RequestMeta) error {
 func (s *Service) Register(ctx context.Context, body *RegisterRequest, meta RequestMeta) error {
 	username, password := body.Username, body.Password
 
+	// Python: UserType.get_user_type(body.user_type or "sys_user").value
+	// ——**子串包含**匹配（item.value in value），"sys_user_x" 也能注册，
+	// 落库的是匹配到的**枚举值**（不是原串）；非法 → ValueError → 400 原文。
 	userType := strDeref(body.UserType)
 	if userType == "" {
 		userType = UserTypeSys
 	}
-	if !isValidUserType(userType) {
-		return errs.Newf("用户类型 %q 非法", userType)
+	resolved, ok := resolveUserType(userType)
+	if !ok {
+		return errs.BadRequest(fmt.Sprintf("'UserType' not found By %s", userType))
 	}
 
 	if s.cfg.CaptchaEnable {
@@ -547,7 +619,7 @@ func (s *Service) Register(ctx context.Context, body *RegisterRequest, meta Requ
 		UserName: username,
 		NickName: username,
 		Password: &hashed,
-		UserType: userType,
+		UserType: resolved,
 		Status:   modelx.Normal,
 		DelFlag:  modelx.Normal,
 	}
@@ -577,7 +649,18 @@ const (
 	UserTypeApp = "app_user"
 )
 
-func isValidUserType(v string) bool { return v == UserTypeSys || v == UserTypeApp }
+// resolveUserType 对应 UserType.get_user_type：**子串包含**匹配（item.value in value），
+// 按枚举声明序 sys_user 优先（"sys_userapp_user" → sys_user）。
+// 返回匹配到的枚举值；无匹配返回 false（调用方报 "'UserType' not found By x"）。
+func resolveUserType(v string) (string, bool) {
+	if strings.Contains(v, UserTypeSys) {
+		return UserTypeSys, true
+	}
+	if strings.Contains(v, UserTypeApp) {
+		return UserTypeApp, true
+	}
+	return "", false
+}
 
 // ==================== 验证码 ====================
 
@@ -589,19 +672,24 @@ func (s *Service) GetCaptcha(ctx context.Context) (*CaptchaResponse, error) {
 		return &CaptchaResponse{CaptchaEnabled: false}, nil
 	}
 
-	result, err := captcha.Generate(s.cfg.CaptchaType, s.cfg.CaptchaNumberLength, s.cfg.CaptchaCharLength)
+	// Python: `if settings.CAPTCHA_TYPE == "math": math else char`——
+	// **精确等于 "math"** 才走算式，其余任何值（含 "MATH"/" math"/拼错）都回退 char。
+	// 回退判定放在本模块（pkg/captcha.Generate 的兜底方向相反，是共享包不改）。
+	mode := s.cfg.CaptchaType
+	if mode != captcha.TypeMath {
+		mode = captcha.TypeChar
+	}
+	result, err := captcha.Generate(mode, s.cfg.CaptchaNumberLength, s.cfg.CaptchaCharLength)
 	if err != nil {
 		return nil, fmt.Errorf("生成验证码失败: %w", err)
 	}
 
 	uuid := idgen.UUID()
 	ttl := time.Duration(s.cfg.CaptchaExpireSeconds) * time.Second
-	// 存**答案**而非展示文本。math 模式下两者不同（"3+5=?" vs "8"）
-	if !s.cache.Set(ctx, keyCaptchaCode+uuid, result.Answer, ttl) {
-		// Redis 写不进去意味着这个验证码永远无法校验通过，
-		// 与其发给用户一个必然失败的验证码，不如直接报错
-		return nil, errs.New("验证码服务不可用，请稍后重试")
-	}
+	// 存**答案**而非展示文本。math 模式下两者不同（"3+5=?" vs "8"）。
+	// ⚠️ Redis 写失败时 Python 端 RedisUtils.set 吞异常记日志，仍 200 返回 uuid/img
+	// （cachex.Set 内部已记错误日志），这里照抄——不要改成 500。
+	s.cache.Set(ctx, keyCaptchaCode+uuid, result.Answer, ttl)
 	return &CaptchaResponse{CaptchaEnabled: true, UUID: &uuid, Img: &result.ImageBase64}, nil
 }
 
@@ -652,24 +740,18 @@ func (s *Service) recordLogininfor(ctx context.Context, meta RequestMeta, userna
 
 // ==================== 辅助函数 ====================
 
-// extractBearerToken 从 Authorization 头取 token。
+// extractLogoutToken 从 Authorization 头取登出用的 token，对应 Python 端 logout：
 //
-// 同时兼容「token 直接放在查询参数」的形态：SSE 用 EventSource，
-// 无法设置自定义请求头，前端只能把 token 放查询串（见 Python 端
-// CustomOAuth2PasswordBearer 的同款兼容处理）。
-func extractBearerToken(authorization, tokenName, tokenPrefix string) string {
-	if authorization == "" {
-		return ""
-	}
+//	token = authorization.split(" ", 1)[1].strip() if " " in authorization else authorization
+//
+// ⚠️ 剥的是**任意** scheme 前缀（不限 Bearer）：按第一个空格切分，取后半段再 strip；
+// 没有空格时**原样**使用（不 strip）。与鉴权中间件的 extractBearerToken 语义不同，
+// 不要合并（Python 端 security.py 的 OAuth2 取 token 才校验 scheme）。
+func extractLogoutToken(authorization string) string {
 	if idx := strings.Index(authorization, " "); idx >= 0 {
-		scheme := authorization[:idx]
-		if !strings.EqualFold(scheme, tokenPrefix) {
-			return ""
-		}
 		return strings.TrimSpace(authorization[idx+1:])
 	}
-	// 没有 scheme 前缀时按裸 token 处理
-	return strings.TrimSpace(authorization)
+	return authorization
 }
 
 // locateIP 返回 IP 的归属地描述，对应 Python 端 get_real_address_by_ip。

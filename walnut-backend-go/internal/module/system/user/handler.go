@@ -9,13 +9,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"walnut-seed-go/internal/module/system/dept"
+	"walnut-seed-go/internal/module/system/post"
 	"walnut-seed-go/internal/pkg/authctx"
 	"walnut-seed-go/internal/pkg/crudx"
 	"walnut-seed-go/internal/pkg/envelope"
 	"walnut-seed-go/internal/pkg/errs"
 	"walnut-seed-go/internal/pkg/excelx"
 	"walnut-seed-go/internal/pkg/idempotentx"
-	"walnut-seed-go/internal/pkg/idtype"
 	"walnut-seed-go/internal/pkg/permguard"
 	"walnut-seed-go/internal/pkg/routex"
 	"walnut-seed-go/internal/pkg/storagex"
@@ -122,8 +123,14 @@ func (h *Handler) ListByDept(c *gin.Context) {
 }
 
 func (h *Handler) GetByID(c *gin.Context) {
-	id, err := pathInt(c, "user_id")
+	id, err := pathIntConverter(c, "user_id")
 	if err != nil {
+		// Python：abc 不匹配 {user_id:int}，但命中 DELETE /{user_ids} 的路径
+		// → Starlette 部分匹配返回 405 Method Not Allowed（不是 404）
+		if he := errs.As(err); he != nil && he.HTTPStatus == errs.CodeNotFound {
+			h.errs.Abort(c, errs.HTTPError(errs.CodeBadMethod, "Method Not Allowed"))
+			return
+		}
 		h.errs.Abort(c, err)
 		return
 	}
@@ -170,7 +177,7 @@ func (h *Handler) GetInfo(c *gin.Context) {
 }
 
 func (h *Handler) GetAuthRole(c *gin.Context) {
-	id, err := pathInt(c, "user_id")
+	id, err := pathIntConverter(c, "user_id")
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -190,14 +197,21 @@ func (h *Handler) GetAuthRole(c *gin.Context) {
 func (h *Handler) OptionSelect(c *gin.Context) {
 	var ids []int64
 	if raw := c.Query("userIds"); crudx.IsNotBlank(raw) {
-		ids = parseIDList(raw)
+		var err error
+		ids, err = parseIDListStrict(raw, "用户ID")
+		if err != nil {
+			h.errs.Abort(c, err)
+			return
+		}
 	}
 	var deptID *int64
-	if raw := c.Query("deptId"); crudx.IsNotBlank(raw) {
+	if raw := c.Query("deptId"); raw != "" {
 		n, err := strconv.ParseInt(raw, 10, 64)
-		if err == nil {
-			deptID = &n
+		if err != nil {
+			h.errs.Abort(c, errs.BadRequest(msgValidInt))
+			return
 		}
+		deptID = &n
 	}
 	svc, ok := h.service(c)
 	if !ok {
@@ -211,26 +225,22 @@ func (h *Handler) OptionSelect(c *gin.Context) {
 	envelope.OK(c, data)
 }
 
-type DeptTreeNodeOut struct {
-	ID       idtype.JSInt       `json:"id"`
-	ParentID *idtype.JSInt      `json:"parentId"`
-	Label    *string            `json:"label"`
-	Weight   *idtype.JSInt      `json:"weight"`
-	Disabled bool               `json:"disabled"`
-	Children []*DeptTreeNodeOut `json:"children,omitempty"`
-}
-
 func (h *Handler) DeptTree(c *gin.Context) {
 	svc, ok := h.service(c)
 	if !ok {
 		return
 	}
-	nodes, err := svc.repo.DeptTreeNodes(c.Request.Context())
+	// 复用 DeptService.select_dept_tree_list：查询过滤 + 部门数据权限 + 排序
+	q, err := dept.BindQueryParamChecked(c)
+	if err != nil {
+		h.errs.Abort(c, err)
+		return
+	}
+	tree, err := dept.NewService(h.db, svc.auth).TreeSelectOut(c.Request.Context(), q)
 	if err != nil {
 		h.errs.Abort(c, errs.Wrap(err, errs.MsgDBFailed))
 		return
 	}
-	tree := buildDeptTree(nodes)
 	envelope.OK(c, tree)
 }
 
@@ -262,10 +272,6 @@ func (h *Handler) Update(c *gin.Context) {
 		h.errs.Abort(c, err)
 		return
 	}
-	if in.ID == nil {
-		h.errs.Abort(c, errs.New("用户ID不能为空"))
-		return
-	}
 	svc, ok := h.service(c)
 	if !ok {
 		return
@@ -283,7 +289,9 @@ func (h *Handler) Update(c *gin.Context) {
 }
 
 func (h *Handler) Delete(c *gin.Context) {
-	ids, err := crudx.ParseIDs(c.Param("user_ids"), "用户ID")
+	// Python _parse_id_list：非法 → 400「用户ID格式有误」；空串 → [] →
+	// service 删 0 行 → 500「删除用户失败!」（不是 400「不能为空」）
+	ids, err := parseIDListStrict(c.Param("user_ids"), "用户ID")
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -310,10 +318,6 @@ func (h *Handler) ResetPwd(c *gin.Context) {
 		h.errs.Abort(c, err)
 		return
 	}
-	if in.ID == nil {
-		h.errs.Abort(c, errs.New("用户ID不能为空"))
-		return
-	}
 	svc, ok := h.service(c)
 	if !ok {
 		return
@@ -334,10 +338,6 @@ func (h *Handler) ChangeStatus(c *gin.Context) {
 	in, err := DecodeChangeStatus(readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
-		return
-	}
-	if in.ID == nil {
-		h.errs.Abort(c, errs.New("用户ID不能为空"))
 		return
 	}
 	svc, ok := h.service(c)
@@ -369,7 +369,11 @@ func (h *Handler) AuthRole(c *gin.Context) {
 	}
 	var roleIDs []int64
 	if raw := c.Query("roleIds"); crudx.IsNotBlank(raw) {
-		roleIDs = parseIDList(raw)
+		roleIDs, err = parseIDListStrict(raw, "角色ID")
+		if err != nil {
+			h.errs.Abort(c, err)
+			return
+		}
 	}
 	svc, ok := h.service(c)
 	if !ok {
@@ -392,18 +396,61 @@ func (h *Handler) Export(c *gin.Context) {
 		h.errs.Abort(c, errs.BadRequest(errs.MsgValidationFailed))
 		return
 	}
-	q := QueryParam{}
-	q.UserName = strings.TrimSpace(c.PostForm("userName"))
-	q.NickName = strings.TrimSpace(c.PostForm("nickName"))
-	q.Status = strings.TrimSpace(c.PostForm("status"))
-	q.PhoneNumber = strings.TrimSpace(c.PostForm("phonenumber"))
-	q.BeginTime = strings.TrimSpace(c.PostForm("beginTime"))
-	q.EndTime = strings.TrimSpace(c.PostForm("endTime"))
-	if raw := c.PostForm("deptId"); raw != "" {
-		n, err := strconv.ParseInt(raw, 10, 64)
-		if err == nil {
-			q.DeptID = &n
+	// Python：query 打底，非空 form 值覆盖；pageNum/pageSize 丢弃；
+	// id/userIds/excludeUserIds 参与类型校验但不进导出条件
+	merged := make(map[string]string)
+	for k, v := range c.Request.URL.Query() {
+		if len(v) > 0 {
+			merged[k] = v[0]
 		}
+	}
+	for k, v := range c.Request.PostForm {
+		if len(v) > 0 && v[0] != "" {
+			merged[k] = v[0]
+		}
+	}
+	delete(merged, "pageNum")
+	delete(merged, "pageSize")
+
+	q := QueryParam{}
+	q.UserName = strings.TrimSpace(merged["userName"])
+	q.NickName = strings.TrimSpace(merged["nickName"])
+	q.Status = strings.TrimSpace(merged["status"])
+	q.PhoneNumber = strings.TrimSpace(merged["phonenumber"])
+	// UserQueryParam.model_validate 抛 pydantic ValidationError（⊂ValueError）
+	// → 全局 ValueError 处理器透传 __str__ 原文（与 post/export 同款排版）
+	var ferrs []post.FormFieldError
+	for _, key := range []string{"id", "deptId"} {
+		if raw, ok := merged[key]; ok {
+			n, valid := dept.ParsePyQueryInt(raw)
+			if !valid {
+				ferrs = append(ferrs, post.FormFieldError{Loc: key, Msg: msgValidInt, Typ: "int_parsing", Input: raw})
+				continue
+			}
+			if key == "deptId" {
+				q.DeptID = &n
+			}
+		}
+	}
+	for _, key := range []string{"beginTime", "endTime"} {
+		if raw, ok := merged[key]; ok {
+			v, derr := dept.ParseDateQuery(raw)
+			if derr != nil {
+				if se := errs.As(derr); se != nil {
+					ferrs = append(ferrs, post.FormFieldError{Loc: key, Msg: se.Msg, Typ: post.DateErrType(se.Msg), Input: raw})
+				}
+				continue
+			}
+			if key == "beginTime" {
+				q.BeginTime = v
+			} else {
+				q.EndTime = v
+			}
+		}
+	}
+	if len(ferrs) > 0 {
+		h.errs.Abort(c, errs.BadRequest(post.ValidationErrorText("UserQueryParam", ferrs)))
+		return
 	}
 
 	svc, ok := h.service(c)
@@ -434,7 +481,7 @@ func (h *Handler) Export(c *gin.Context) {
 func (h *Handler) ImportData(c *gin.Context) {
 	file, _, err := c.Request.FormFile("file")
 	if err != nil {
-		h.errs.Abort(c, errs.BadRequest("上传文件不能为空"))
+		h.errs.Abort(c, errs.BadRequest("导入文件不能为空"))
 		return
 	}
 	defer file.Close()
@@ -445,8 +492,17 @@ func (h *Handler) ImportData(c *gin.Context) {
 		return
 	}
 
+	// Python：form 优先、query 兜底；strip+lower 后属于 true/1/yes/on 即真
+	raw := c.PostForm("updateSupport")
+	if raw == "" {
+		raw = c.Query("updateSupport")
+	}
+	if raw == "" {
+		raw = "false"
+	}
 	updateSupport := false
-	if raw := c.PostForm("updateSupport"); raw == "true" || raw == "1" {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "true", "1", "yes", "on":
 		updateSupport = true
 	}
 
@@ -552,17 +608,17 @@ func (h *Handler) Avatar(c *gin.Context) {
 	}
 	file, header, err := c.Request.FormFile("avatarfile")
 	if err != nil {
-		h.errs.Abort(c, errs.BadRequest("上传文件不能为空"))
+		h.errs.Abort(c, errs.New("上传图片异常，请联系管理员"))
 		return
 	}
 	defer file.Close()
 
-	// 扩展名白名单（仅图片）
+	// 扩展名白名单（仅图片），文案与 Python _IMAGE_EXTENSIONS 拼接一致
 	ext := strings.ToLower(filepath.Ext(header.Filename))
 	ext = strings.TrimPrefix(ext, ".")
 	imageExts := map[string]bool{"bmp": true, "gif": true, "jpg": true, "jpeg": true, "png": true}
 	if !imageExts[ext] {
-		h.errs.Abort(c, errs.New("上传图片异常，请联系管理员"))
+		h.errs.Abort(c, errs.New("文件格式不正确，请上传[bmp, gif, jpg, jpeg, png]格式"))
 		return
 	}
 
@@ -596,39 +652,6 @@ func (h *Handler) Avatar(c *gin.Context) {
 
 // ---- Helpers ----
 
-func buildDeptTree(nodes []DeptTreeNode) []*DeptTreeNodeOut {
-	nodeMap := make(map[int64]*DeptTreeNodeOut, len(nodes))
-	idSet := make(map[int64]bool, len(nodes))
-	for _, n := range nodes {
-		idSet[n.ID] = true
-		tn := &DeptTreeNodeOut{
-			ID:       idtype.JSInt(n.ID),
-			Label:    n.DeptName,
-			Disabled: n.Status != nil && *n.Status == "1",
-		}
-		if n.ParentID != nil {
-			pid := idtype.JSInt(*n.ParentID)
-			tn.ParentID = &pid
-		}
-		if n.OrderNum != nil {
-			w := idtype.JSInt(*n.OrderNum)
-			tn.Weight = &w
-		}
-		nodeMap[n.ID] = tn
-	}
-	roots := make([]*DeptTreeNodeOut, 0)
-	for _, n := range nodes {
-		tn := nodeMap[n.ID]
-		if n.ParentID == nil || !idSet[*n.ParentID] {
-			roots = append(roots, tn)
-			continue
-		}
-		parent := nodeMap[*n.ParentID]
-		parent.Children = append(parent.Children, tn)
-	}
-	return roots
-}
-
 func pickSnake(field string) func(any) any {
 	return func(row any) any {
 		m, ok := row.(map[string]any)
@@ -655,6 +678,20 @@ func pathInt(c *gin.Context, name string) (int64, error) {
 	n, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil {
 		return 0, errs.BadRequest(msgValidInt)
+	}
+	return n, nil
+}
+
+// pathIntConverter 对应 Python 的 {user_id:int} 路径转换器：
+// 非纯数字路径**不匹配路由** → 框架级 HTTP 404 信封（不是 200+code400）。
+func pathIntConverter(c *gin.Context, name string) (int64, error) {
+	raw := c.Param(name)
+	if !pyIntRE.MatchString(raw) {
+		return 0, errs.HTTPError(errs.CodeNotFound, errs.MsgNotFound)
+	}
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, errs.HTTPError(errs.CodeNotFound, errs.MsgNotFound)
 	}
 	return n, nil
 }

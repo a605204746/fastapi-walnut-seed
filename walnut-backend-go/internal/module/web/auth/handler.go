@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"io"
 	"strings"
 	"time"
 
@@ -15,7 +16,6 @@ import (
 	"walnut-seed-go/internal/pkg/middleware"
 	"walnut-seed-go/internal/pkg/ratelimitx"
 	"walnut-seed-go/internal/pkg/routex"
-	"walnut-seed-go/internal/pkg/validatex"
 )
 
 // 限流规则，与 Python 端 controller 的 RateLimiter 依赖逐条对应：
@@ -120,7 +120,10 @@ func (h *Handler) Login(c *gin.Context) {
 	}
 
 	var body PasswordLoginRequest
-	if !h.bind(c, &body) {
+	raw, _ := io.ReadAll(c.Request.Body)
+	body, err := decodeLoginBody(raw)
+	if err != nil {
+		h.errs.Abort(c, err)
 		return
 	}
 
@@ -176,7 +179,10 @@ func (h *Handler) Logout(c *gin.Context) {
 // Register POST /auth/register
 func (h *Handler) Register(c *gin.Context) {
 	var body RegisterRequest
-	if !h.bind(c, &body) {
+	raw, _ := io.ReadAll(c.Request.Body)
+	body, err := decodeRegisterBody(raw)
+	if err != nil {
+		h.errs.Abort(c, err)
 		return
 	}
 
@@ -225,28 +231,14 @@ func (h *Handler) Code(c *gin.Context) {
 //
 // 配置项不存在时返回 false（**默认关闭注册**）——与 Python 端
 // `str(value).lower() == "true" if value is not None else False` 一致。
-// 默认关闭是安全取向：配置丢失时不应悄悄打开注册入口。
+// ⚠️ **不 trim**：Python 只 lower() 后精确比较，" true" 不算开启（曾误加
+// TrimSpace+EqualFold，契约比对抓出）。默认关闭是安全取向：配置丢失时不应悄悄打开注册入口。
 func (h *Handler) registerEnabled(c *gin.Context) (bool, error) {
 	value, _, err := h.repo.GetConfigValue(c.Request.Context(), "sys.account.registerUser")
 	if err != nil {
 		return false, err
 	}
-	return strings.EqualFold(strings.TrimSpace(value), "true"), nil
-}
-
-// bind 绑定并校验请求体，失败时按契约返回 code=400。
-//
-// ⚠️ 参数校验错误是 **HTTP 200 + body.code=400**（业务错误形态），
-// 不是 HTTP 400。见实施计划 §1 的契约说明。
-//
-// 错误文案经 validatex 翻译成与 Pydantic v2 逐字一致的消息——
-// 前端会直接把 msg 展示给用户，这是契约的一部分，不能自行改写。
-func (h *Handler) bind(c *gin.Context, dst any) bool {
-	if err := c.ShouldBindJSON(dst); err != nil {
-		h.errs.Abort(c, errs.BadRequest(validatex.Format(err)))
-		return false
-	}
-	return true
+	return strings.ToLower(value) == "true", nil
 }
 
 // i18n 按当前请求语言解析文案。

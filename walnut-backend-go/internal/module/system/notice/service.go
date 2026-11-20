@@ -161,15 +161,22 @@ func (s *Service) DeleteByIDs(ctx context.Context, ids []int64) (int64, error) {
 // ---- 内部工具 ----
 
 // GetNoticeTypeLabel 查 sys_notice_type 字典标签，对应 get_notice_type_label。
+//
+// ⚠️ Python 端 `result.scalars().first() or notice_type`：未命中（或 label 为空）
+// **回退原值**而不是空串——SSE 载荷因此是 "[3] 标题" 而非 "[] 标题"（实测钉住）。
+// 空类型（None/""）直接返回 ""（`if not notice_type`）。
 func (s *Service) GetNoticeTypeLabel(ctx context.Context, noticeType *string) string {
-	if noticeType == nil {
+	if noticeType == nil || *noticeType == "" {
 		return ""
 	}
 	m, err := s.repo.DictLabelMap(ctx, "sys_notice_type", []string{*noticeType})
-	if err != nil || m == nil {
-		return ""
+	if err != nil {
+		return *noticeType
 	}
-	return m[*noticeType]
+	if label := m[*noticeType]; label != "" {
+		return label
+	}
+	return *noticeType
 }
 
 func (s *Service) toOuts(rows []SysNotice) []Out {

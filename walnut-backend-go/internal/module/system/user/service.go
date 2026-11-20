@@ -6,10 +6,12 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
+	"walnut-seed-go/internal/module/system/post"
 	"walnut-seed-go/internal/module/system/role"
 	"walnut-seed-go/internal/pkg/authctx"
 	"walnut-seed-go/internal/pkg/crudx"
@@ -25,12 +27,13 @@ var nowFunc = time.Now
 const bcryptCost = 12
 
 type Service struct {
+	db   *gorm.DB
 	repo *Repo
 	auth authctx.Context
 }
 
 func NewService(db *gorm.DB, ac authctx.Context) *Service {
-	return &Service{repo: NewRepo(db), auth: ac}
+	return &Service{db: db, repo: NewRepo(db), auth: ac}
 }
 
 type PageOut struct {
@@ -146,62 +149,79 @@ func (s *Service) GetByID(ctx context.Context, id int64) (*UserInfoOut, error) {
 	if err != nil {
 		return nil, err
 	}
-	if u == nil {
-		return nil, nil
+
+	info := &UserInfoOut{}
+	if u != nil {
+		out := NewOut(u)
+		if err := s.fillDeptName(ctx, []*Out{&out}); err != nil {
+			return nil, err
+		}
+		roles, err := s.repo.FindRoles(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		roleOuts := make([]role.Out, 0, len(roles))
+		for i := range roles {
+			roleOuts = append(roleOuts, role.NewOut(&roles[i]))
+		}
+		out.Roles = roleOuts
+		// user 对象内的 roleIds/postIds/roleId 恒 null（Python select_user_by_id 不填充）
+		info.User = &out
 	}
-	out := NewOut(u)
-	if err := s.fillDeptName(ctx, []*Out{&out}); err != nil {
-		return nil, err
-	}
+
 	roleIDs, err := s.repo.RoleIDsByUserID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	out.RoleIDs = toJSIntSlice(roleIDs)
+	info.RoleIDs = toJSIntSlice(roleIDs)
 
-	roles, err := s.repo.FindRoles(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	roleOuts := make([]role.Out, 0, len(roles))
-	for i := range roles {
-		roleOuts = append(roleOuts, role.NewOut(&roles[i]))
-	}
-	out.Roles = roleOuts
-
-	if u.DeptID != nil {
+	if u != nil && u.DeptID != nil {
+		posts, err := post.NewService(s.db, s.auth).SelectList(ctx, post.QueryParam{DeptID: u.DeptID})
+		if err != nil {
+			return nil, err
+		}
+		info.Posts = posts
 		postIDs, err := s.repo.PostIDsByUserID(ctx, id)
 		if err != nil {
 			return nil, err
 		}
-		out.PostIDs = toJSIntSlice(postIDs)
+		info.PostIDs = toJSIntSlice(postIDs)
 	}
 
-	allRoles, err := s.normalRoles()
+	allRoles, err := s.scopedRoles(ctx, modelx.Normal)
 	if err != nil {
 		return nil, err
 	}
-	if !s.auth.User.IsSuperAdmin() && u.ID != modelx.SuperAdminID {
+	// 超管角色过滤按**目标用户 id** 判定（与当前登录者无关）
+	if id != modelx.SuperAdminID {
 		allRoles = filterOutSuperAdminOut(allRoles)
 	}
-
-	return &UserInfoOut{
-		User:    &out,
-		RoleIDs: out.RoleIDs,
-		PostIDs: out.PostIDs,
-		Roles:   allRoles,
-	}, nil
+	info.Roles = allRoles
+	return info, nil
 }
 
 func (s *Service) GetUserInfoNoID(ctx context.Context) (*UserInfoOut, error) {
-	allRoles, err := s.normalRoles()
+	allRoles, err := s.scopedRoles(ctx, modelx.Normal)
 	if err != nil {
 		return nil, err
 	}
-	if !s.auth.User.IsSuperAdmin() {
-		allRoles = filterOutSuperAdminOut(allRoles)
-	}
+	// GET / 无目标用户 → Python _is_super_admin_id(None)=False → 恒过滤超管角色
+	allRoles = filterOutSuperAdminOut(allRoles)
 	return &UserInfoOut{Roles: allRoles}, nil
+}
+
+// scopedRoles 经 RoleService.SelectList 取角色（含角色数据权限），
+// status 传空串表示不过滤状态（authRole 用）。
+func (s *Service) scopedRoles(ctx context.Context, status string) ([]role.Out, error) {
+	rows, err := role.NewService(s.db, s.auth).SelectList(ctx, role.QueryParam{Status: status})
+	if err != nil {
+		return nil, err
+	}
+	outs := make([]role.Out, 0, len(rows))
+	for i := range rows {
+		outs = append(outs, role.NewOut(&rows[i]))
+	}
+	return outs, nil
 }
 
 func (s *Service) GetInfo(ctx context.Context) (*GetInfoOut, error) {
@@ -231,9 +251,16 @@ func (s *Service) GetInfo(ctx context.Context) (*GetInfoOut, error) {
 	}
 	return &GetInfoOut{
 		User:        &out,
-		Permissions: s.auth.Permissions,
-		Roles:       s.auth.Roles,
+		Permissions: nonNilStrings(s.auth.Permissions),
+		Roles:       nonNilStrings(s.auth.Roles),
 	}, nil
+}
+
+func nonNilStrings(v []string) []string {
+	if v == nil {
+		return []string{}
+	}
+	return v
 }
 
 func (s *Service) GetAuthRole(ctx context.Context, userID int64) (*UserInfoOut, error) {
@@ -244,37 +271,49 @@ func (s *Service) GetAuthRole(ctx context.Context, userID int64) (*UserInfoOut, 
 	if err != nil {
 		return nil, err
 	}
-	if u == nil {
-		return nil, nil
-	}
-	out := NewOut(u)
-	if err := s.fillDeptName(ctx, []*Out{&out}); err != nil {
-		return nil, err
+	info := &UserInfoOut{}
+	if u != nil {
+		out := NewOut(u)
+		if err := s.fillDeptName(ctx, []*Out{&out}); err != nil {
+			return nil, err
+		}
+		roles, err := s.repo.FindRoles(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		roleOuts := make([]role.Out, 0, len(roles))
+		for i := range roles {
+			roleOuts = append(roleOuts, role.NewOut(&roles[i]))
+		}
+		out.Roles = roleOuts
+		info.User = &out
 	}
 	userRoleIDs, err := s.repo.RoleIDsByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	allRoles, err := s.repo.AllNormalRoles(ctx)
+	// Python _select_all_role_models：全部状态 + 角色数据权限
+	allRoles, err := s.scopedRoles(ctx, "")
 	if err != nil {
 		return nil, err
 	}
-	if u.ID != modelx.SuperAdminID {
-		allRoles = filterOutSuperAdmin(allRoles)
+	if userID != modelx.SuperAdminID {
+		allRoles = filterOutSuperAdminOut(allRoles)
 	}
-	roleOuts := make([]role.Out, 0, len(allRoles))
 	roleIDSet := make(map[int64]bool, len(userRoleIDs))
 	for _, rid := range userRoleIDs {
 		roleIDSet[rid] = true
 	}
+	roleOuts := make([]role.Out, 0, len(allRoles))
 	for i := range allRoles {
-		o := role.NewOut(&allRoles[i])
-		if roleIDSet[allRoles[i].ID] {
+		o := allRoles[i]
+		if o.ID != nil && roleIDSet[int64(*o.ID)] {
 			o.Flag = true
 		}
 		roleOuts = append(roleOuts, o)
 	}
-	return &UserInfoOut{User: &out, Roles: roleOuts}, nil
+	info.Roles = roleOuts
+	return info, nil
 }
 
 func (s *Service) OptionSelect(ctx context.Context, ids []int64, deptID *int64) ([]Out, error) {
@@ -292,16 +331,18 @@ func (s *Service) OptionSelect(ctx context.Context, ids []int64, deptID *int64) 
 }
 
 func (s *Service) InsertUser(ctx context.Context, in CreateIn) (bool, error) {
+	// Python controller 先查 userName/password 缺省（ServiceException 500），
+	// 再做部门数据权限与唯一性校验
+	if in.UserName == nil {
+		return false, errs.New("用户账号不能为空")
+	}
+	if in.Password == nil {
+		return false, errs.New("用户密码不能为空")
+	}
 	if in.DeptID != nil {
 		if err := s.checkDeptDataScope(ctx, *in.DeptID); err != nil {
 			return false, err
 		}
-	}
-	if in.UserName == nil || *in.UserName == "" {
-		return false, errs.New("用户账号不能为空")
-	}
-	if in.Password == nil || *in.Password == "" {
-		return false, errs.New("用户密码不能为空")
 	}
 	exists, err := s.repo.ExistsByField(ctx, "user_name", *in.UserName, nil)
 	if err != nil {
@@ -344,22 +385,19 @@ func (s *Service) InsertUser(ctx context.Context, in CreateIn) (bool, error) {
 	if err := s.repo.Create(ctx, &row); err != nil {
 		return false, err
 	}
-	if len(in.RoleIDs) > 0 {
-		if err := s.repo.InsertUserRoles(ctx, row.ID, in.RoleIDs); err != nil {
-			return false, err
-		}
+	// Python insert_user 顺序：先岗位后角色（含可见性/超管校验，缺省 no-op）
+	if err := s.rebuildUserPosts(ctx, row.ID, in.PostIDs); err != nil {
+		return false, err
 	}
-	if len(in.PostIDs) > 0 {
-		if err := s.repo.InsertUserPosts(ctx, row.ID, in.PostIDs); err != nil {
-			return false, err
-		}
+	if err := s.rebuildUserRoles(ctx, row.ID, in.RoleIDs); err != nil {
+		return false, err
 	}
 	return true, nil
 }
 
 func (s *Service) UpdateUser(ctx context.Context, in UpdateIn) (bool, error) {
 	if in.ID == nil {
-		return false, nil
+		return false, errs.New("用户ID不能为空")
 	}
 	if err := s.CheckUserAllowed(ctx, *in.ID); err != nil {
 		return false, err
@@ -403,28 +441,19 @@ func (s *Service) UpdateUser(ctx context.Context, in UpdateIn) (bool, error) {
 	if err != nil {
 		return false, errs.Wrap(err, errs.MsgDBFailed)
 	}
+	// Python update_user 先重建关联（缺省 no-op），再取用户、更新字段
+	if err := s.rebuildUserRoles(ctx, *in.ID, in.RoleIDs); err != nil {
+		return false, err
+	}
+	if err := s.rebuildUserPosts(ctx, *in.ID, in.PostIDs); err != nil {
+		return false, err
+	}
 	u, err := s.repo.FindByIDWithScope(ctx, *in.ID, scope)
 	if err != nil {
 		return false, err
 	}
 	if u == nil {
-		return false, nil
-	}
-	if err := s.repo.DeleteUserRoles(ctx, *in.ID); err != nil {
-		return false, err
-	}
-	if len(in.RoleIDs) > 0 {
-		if err := s.repo.InsertUserRoles(ctx, *in.ID, in.RoleIDs); err != nil {
-			return false, err
-		}
-	}
-	if err := s.repo.DeleteUserPosts(ctx, *in.ID); err != nil {
-		return false, err
-	}
-	if len(in.PostIDs) > 0 {
-		if err := s.repo.InsertUserPosts(ctx, *in.ID, in.PostIDs); err != nil {
-			return false, err
-		}
+		return false, errs.Newf("修改用户%s信息失败", derefStr(in.UserName))
 	}
 	applyUpdateFields(u, in)
 	crudx.FillUpdate(&u.BaseModel, s.auth, nowFunc())
@@ -432,6 +461,79 @@ func (s *Service) UpdateUser(ctx context.Context, in UpdateIn) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// rebuildUserRoles 复刻 Python _insert_user_role(clear=True)：
+// null/缺省 → no-op 保留原关联；非超管目标剔除超管角色，剔空报错；
+// 数据权限可见数不足报错；最后先删后插。
+func (s *Service) rebuildUserRoles(ctx context.Context, userID int64, roleIDs []int64) error {
+	if len(roleIDs) == 0 {
+		return nil
+	}
+	list := roleIDs
+	if userID != modelx.SuperAdminID {
+		list = filterSuperAdminFromIDs(list)
+	}
+	if len(list) == 0 {
+		return errs.New("不允许为普通用户分配超级管理员角色，请至少选择一个其他角色")
+	}
+	if err := s.checkRolesVisible(ctx, list); err != nil {
+		return err
+	}
+	if err := s.repo.DeleteUserRoles(ctx, userID); err != nil {
+		return err
+	}
+	return s.repo.InsertUserRoles(ctx, userID, list)
+}
+
+// rebuildUserPosts 复刻 Python _insert_user_post(clear=True)。
+func (s *Service) rebuildUserPosts(ctx context.Context, userID int64, postIDs []int64) error {
+	if len(postIDs) == 0 {
+		return nil
+	}
+	if err := s.checkPostsVisible(ctx, postIDs); err != nil {
+		return err
+	}
+	if err := s.repo.DeleteUserPosts(ctx, userID); err != nil {
+		return err
+	}
+	return s.repo.InsertUserPosts(ctx, userID, postIDs)
+}
+
+// checkRolesVisible 对齐 count_visible_roles：del_flag='0' + 数据权限行级过滤，
+// 可见数 != 请求数 → 500「没有权限访问角色的数据」。
+func (s *Service) checkRolesVisible(ctx context.Context, ids []int64) error {
+	scope, err := permx.Build(ctx, s.db, s.auth, permx.Default)
+	if err != nil {
+		return errs.Wrap(err, errs.MsgDBFailed)
+	}
+	var n int64
+	q := s.db.WithContext(ctx).Table("sys_role").
+		Where("id IN ? AND del_flag = ?", ids, modelx.Normal)
+	if err := scope.Apply(q).Count(&n).Error; err != nil {
+		return errs.Wrap(err, errs.MsgDBFailed)
+	}
+	if n != int64(len(ids)) {
+		return errs.New("没有权限访问角色的数据")
+	}
+	return nil
+}
+
+// checkPostsVisible 对齐 count_visible_posts（sys_post 无 del_flag 列）。
+func (s *Service) checkPostsVisible(ctx context.Context, ids []int64) error {
+	scope, err := permx.Build(ctx, s.db, s.auth, permx.Default)
+	if err != nil {
+		return errs.Wrap(err, errs.MsgDBFailed)
+	}
+	var n int64
+	q := s.db.WithContext(ctx).Table("sys_post").Where("id IN ?", ids)
+	if err := scope.Apply(q).Count(&n).Error; err != nil {
+		return errs.Wrap(err, errs.MsgDBFailed)
+	}
+	if n != int64(len(ids)) {
+		return errs.New("没有权限访问岗位的数据")
+	}
+	return nil
 }
 
 func (s *Service) DeleteUserByIDs(ctx context.Context, ids []int64) (int64, error) {
@@ -508,38 +610,27 @@ func (s *Service) InsertAuthRole(ctx context.Context, userID int64, roleIDs []in
 	if err := s.CheckUserDataScope(ctx, userID); err != nil {
 		return false, err
 	}
-	filtered := roleIDs
-	if userID != modelx.SuperAdminID {
-		filtered = filterSuperAdminFromIDs(filtered)
-	}
-	if err := s.repo.DeleteUserRoles(ctx, userID); err != nil {
+	// 空 roleIds → no-op 保留原角色（Python _insert_user_role 早退）
+	if err := s.rebuildUserRoles(ctx, userID, roleIDs); err != nil {
 		return false, err
-	}
-	if len(filtered) > 0 {
-		if err := s.repo.InsertUserRoles(ctx, userID, filtered); err != nil {
-			return false, err
-		}
 	}
 	return true, nil
 }
 
 // ImportUsers 从 Excel 批量导入用户，对应 Python 端 UserService.import_users。
+// 任一行失败 → 整体 500「很抱歉，导入失败！…」；全部成功 → 恭喜消息。
 func (s *Service) ImportUsers(ctx context.Context, data []byte, updateSupport bool) (string, error) {
 	rows, headers, err := excelx.ReadRows(data)
 	if err != nil {
 		return "", err
 	}
-	if len(rows) == 0 {
-		return "", errs.New("导入数据不能为空")
-	}
 
-	// 建立表头索引
 	headerIdx := make(map[string]int, len(headers))
 	for i, h := range headers {
 		headerIdx[h] = i
 	}
 
-	// 初始密码（从 sys_config 读取 sys.user.initPassword，缺省回退 Walnut@123）
+	// 初始密码：sys.user.initPassword 优先，回退 USER_IMPORT_INIT_PASSWORD
 	initPwd, err := s.repo.ConfigValueByKey(ctx, "sys.user.initPassword")
 	if err != nil || initPwd == "" {
 		initPwd = "Walnut@123"
@@ -549,118 +640,191 @@ func (s *Service) ImportUsers(ctx context.Context, data []byte, updateSupport bo
 		return "", err
 	}
 
-	// 性别/状态字典值→标签映射
-	sexMap := map[string]string{"男": "0", "女": "1", "未知": "2"}
-	statusMap := map[string]string{"正常": "0", "停用": "1"}
+	// 性别/状态：字典 label→value，未命中回退原标签，空单元格 → None
+	sexL2V := s.dictLabelToValue(ctx, "sys_user_sex")
+	statusL2V := s.dictLabelToValue(ctx, "sys_normal_disable")
 
-	var successLog []string
-	var failLog []string
+	successNum, failureNum := 0, 0
+	var successMsg, failureMsg string
+	fail := func(userName, reason string) {
+		failureNum++
+		failureMsg += fmt.Sprintf("<br/>%d、账号 %s 导入失败：%s", failureNum, userName, reason)
+	}
 
-	for i, row := range rows {
-		rowNum := i + 2 // Excel 行号（表头占第 1 行）
+	for _, row := range rows {
 		userName := cellStr(row, headerIdx, "用户账号")
 		nickName := cellStr(row, headerIdx, "用户昵称")
 		email := cellStr(row, headerIdx, "用户邮箱")
 		phone := cellStr(row, headerIdx, "手机号码")
-		deptIDStr := cellStr(row, headerIdx, "部门编号")
+		deptID := cellInt(row, headerIdx, "部门编号")
 		sexLabel := cellStr(row, headerIdx, "用户性别")
 		statusLabel := cellStr(row, headerIdx, "账号状态")
 
-		if userName == "" {
-			failLog = append(failLog, fmt.Sprintf("第%d行：用户账号不能为空", rowNum))
-			continue
-		}
-
-		// 查找已有用户
-		existing, err := s.repo.FindByUserName(ctx, userName)
-		if err != nil {
-			failLog = append(failLog, fmt.Sprintf("第%d行：查询用户失败: %v", rowNum, err))
-			continue
-		}
-
-		sex := sexMap[sexLabel]
-		status := statusMap[statusLabel]
-		if status == "" {
-			status = "0"
-		}
-
-		var deptID *int64
-		if deptIDStr != "" {
-			d, err := strconv.ParseInt(deptIDStr, 10, 64)
-			if err == nil {
-				deptID = &d
+		var sex, status *string
+		if sexLabel != "" {
+			v, ok := sexL2V[sexLabel]
+			if !ok {
+				v = sexLabel
 			}
+			sex = &v
+		}
+		if statusLabel != "" {
+			v, ok := statusL2V[statusLabel]
+			if !ok {
+				v = statusLabel
+			}
+			status = &v
+		}
+
+		var existing *SysUser
+		if userName != "" {
+			existing, err = s.repo.FindByUserName(ctx, userName)
+			if err != nil {
+				fail(userName, err.Error())
+				continue
+			}
+		}
+
+		// UserBaseSchema/UserUpdateSchema 校验器（userName/nickName/email，声明序拼接）
+		var msgs []string
+		if userName == "" {
+			msgs = append(msgs, "用户账号不能为空")
+		} else if n := utf8.RuneCountInString(userName); n < 2 || n > 30 {
+			msgs = append(msgs, "用户账号长度必须在2到30个字符之间")
+		}
+		if nickName == "" {
+			msgs = append(msgs, "用户昵称不能为空")
+		} else if utf8.RuneCountInString(nickName) > 30 {
+			msgs = append(msgs, "用户昵称长度不能超过30个字符")
+		}
+		if email != "" {
+			if utf8.RuneCountInString(email) > 50 {
+				msgs = append(msgs, "邮箱长度不能超过50个字符")
+			} else if !emailRE.MatchString(email) {
+				msgs = append(msgs, "邮箱格式不正确")
+			}
+		}
+		if len(msgs) > 0 {
+			fail(userName, strings.Join(msgs, ", "))
+			continue
 		}
 
 		if existing == nil {
-			// 新增
-			in := CreateIn{
-				UserName:    &userName,
-				NickName:    &nickName,
-				Password:    &initPwd,
-				Email:       strPtrOrNil(email),
-				PhoneNumber: strPtrOrNil(phone),
-				Sex:         &sex,
-				Status:      &status,
-				DeptID:      deptID,
+			// 新增：status 为 None 时 Python 显式 INSERT NULL → NOT NULL 违例 → 行失败
+			if status == nil {
+				err := s.db.WithContext(ctx).Table("sys_user").Create(map[string]any{
+					"user_name": userName, "nick_name": nickName, "password": hashedInitPwd,
+					"status": nil, "del_flag": modelx.Normal,
+				}).Error
+				reason := "Column 'status' cannot be null"
+				if err != nil {
+					reason = err.Error()
+				}
+				fail(userName, reason)
+				continue
 			}
-			// 使用初始密码的哈希
-			hashedPwd := hashedInitPwd
 			row := SysUser{
 				UserType: "sys_user",
-				Status:   status,
+				Status:   *status,
 				DelFlag:  modelx.Normal,
-				Password: &hashedPwd,
+				Password: &hashedInitPwd,
+			}
+			in := CreateIn{
+				UserName: &userName, NickName: &nickName,
+				Email: strPtrOrNil(email), PhoneNumber: strPtrOrNil(phone),
+				Sex: sex, DeptID: deptID,
 			}
 			applyCreateFields(&row, in)
 			crudx.FillCreate(&row.BaseModel, s.auth, nowFunc())
 			if err := s.repo.Create(ctx, &row); err != nil {
-				failLog = append(failLog, fmt.Sprintf("第%d行：新增用户'%s'失败: %v", rowNum, userName, err))
+				fail(userName, err.Error())
 				continue
 			}
-			successLog = append(successLog, fmt.Sprintf("第%d行：新增用户'%s'成功", rowNum, userName))
+			successNum++
+			successMsg += fmt.Sprintf("<br/>%d、账号 %s 导入成功", successNum, userName)
 		} else if updateSupport {
-			// 更新
-			if existing.ID == modelx.SuperAdminID {
-				failLog = append(failLog, fmt.Sprintf("第%d行：不允许操作超级管理员用户", rowNum))
+			if err := s.CheckUserAllowed(ctx, existing.ID); err != nil {
+				fail(userName, errMsg(err))
 				continue
 			}
-			if nickName != "" {
-				existing.NickName = nickName
+			if err := s.CheckUserDataScope(ctx, existing.ID); err != nil {
+				fail(userName, errMsg(err))
+				continue
 			}
+			// update_user：exclude_none —— 空单元格（None）不覆盖旧值
+			existing.UserName = userName
+			existing.NickName = nickName
 			if email != "" {
 				existing.Email = &email
 			}
 			if phone != "" {
 				existing.Phonenumber = &phone
 			}
-			existing.Sex = &sex
-			existing.Status = status
+			if sex != nil {
+				existing.Sex = sex
+			}
+			if status != nil {
+				existing.Status = *status
+			}
 			if deptID != nil {
 				existing.DeptID = deptID
 			}
 			crudx.FillUpdate(&existing.BaseModel, s.auth, nowFunc())
 			if err := s.repo.Update(ctx, existing); err != nil {
-				failLog = append(failLog, fmt.Sprintf("第%d行：更新用户'%s'失败: %v", rowNum, userName, err))
+				fail(userName, err.Error())
 				continue
 			}
-			successLog = append(successLog, fmt.Sprintf("第%d行：更新用户'%s'成功", rowNum, userName))
+			successNum++
+			successMsg += fmt.Sprintf("<br/>%d、账号 %s 更新成功", successNum, userName)
 		} else {
-			failLog = append(failLog, fmt.Sprintf("第%d行：用户'%s'已存在", rowNum, userName))
+			failureNum++
+			failureMsg += fmt.Sprintf("<br/>%d、账号 %s 已存在", failureNum, existing.UserName)
 		}
 	}
 
-	msg := strings.Join(successLog, "<br/>")
-	if len(failLog) > 0 {
-		if msg != "" {
-			msg += "<br/>"
-		}
-		msg += strings.Join(failLog, "<br/>")
+	if failureNum > 0 {
+		return "", errs.Newf("很抱歉，导入失败！共 %d 条数据格式不正确，错误如下：%s", failureNum, failureMsg)
 	}
-	if len(successLog) == 0 && len(failLog) > 0 {
-		return "", errs.New(msg)
+	return fmt.Sprintf("恭喜您，数据已全部导入成功！共 %d 条，数据如下：%s", successNum, successMsg), nil
+}
+
+// dictLabelToValue 字典 label→value 映射（无 status 过滤，对齐 list_by_type）。
+func (s *Service) dictLabelToValue(ctx context.Context, dictType string) map[string]string {
+	type kv struct {
+		DictLabel string `gorm:"column:dict_label"`
+		DictValue string `gorm:"column:dict_value"`
 	}
-	return msg, nil
+	var rows []kv
+	s.db.WithContext(ctx).Table("sys_dict_data").
+		Select("dict_label, dict_value").
+		Where("dict_type = ?", dictType).
+		Find(&rows)
+	m := make(map[string]string, len(rows))
+	for _, r := range rows {
+		m[r.DictLabel] = r.DictValue
+	}
+	return m
+}
+
+func errMsg(err error) string {
+	if se := errs.As(err); se != nil {
+		return se.Msg
+	}
+	return err.Error()
+}
+
+// cellInt 对齐 _cell_int：int(float(value))，非法/空 → None。
+func cellInt(row []string, idx map[string]int, header string) *int64 {
+	s := cellStr(row, idx, header)
+	if s == "" {
+		return nil
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return nil
+	}
+	n := int64(f)
+	return &n
 }
 
 func cellStr(row []string, idx map[string]int, header string) string {
@@ -714,7 +878,7 @@ func (s *Service) UpdateProfile(ctx context.Context, in ProfileUpdateIn) (bool, 
 			return false, err
 		}
 		if exists {
-			return false, errs.New("修改用户失败，手机号码已存在")
+			return false, errs.Newf("修改用户'%s'失败，手机号码已存在", s.auth.User.UserName)
 		}
 	}
 	if in.Email != nil && *in.Email != "" {
@@ -723,7 +887,7 @@ func (s *Service) UpdateProfile(ctx context.Context, in ProfileUpdateIn) (bool, 
 			return false, err
 		}
 		if exists {
-			return false, errs.New("修改用户失败，邮箱账号已存在")
+			return false, errs.Newf("修改用户'%s'失败，邮箱账号已存在", s.auth.User.UserName)
 		}
 	}
 	n, err := s.repo.UpdateProfile(ctx, s.auth.User.ID, in.NickName, in.PhoneNumber, in.Email, in.Sex)
@@ -857,29 +1021,6 @@ func (s *Service) fillDeptName(ctx context.Context, outs []*Out) error {
 		}
 	}
 	return nil
-}
-
-func (s *Service) normalRoles() ([]role.Out, error) {
-	rows, err := s.repo.AllNormalRoles(context.Background())
-	if err != nil {
-		return nil, err
-	}
-	outs := make([]role.Out, 0, len(rows))
-	for i := range rows {
-		outs = append(outs, role.NewOut(&rows[i]))
-	}
-	return outs, nil
-}
-
-func filterOutSuperAdmin(roles []role.SysRole) []role.SysRole {
-	out := make([]role.SysRole, 0, len(roles))
-	for _, r := range roles {
-		if r.ID == modelx.SuperAdminID {
-			continue
-		}
-		out = append(out, r)
-	}
-	return out
 }
 
 func filterOutSuperAdminOut(roles []role.Out) []role.Out {

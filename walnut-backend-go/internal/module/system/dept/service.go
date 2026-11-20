@@ -456,6 +456,16 @@ func (s *Service) TreeSelectOut(ctx context.Context, q QueryParam) ([]*TreeNode,
 	return BuildTreeSelect(rows), nil
 }
 
+// TreeSelectAll 无查询参数的部门下拉树，对应 select_dept_tree_list()（param=None）。
+// 供 role/deptTree/{roleId} 复用：带 dept 数据权限 + (orderNum, id) 排序。
+func (s *Service) TreeSelectAll(ctx context.Context) ([]*TreeNode, error) {
+	rows, err := s.selectList(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	return BuildTreeSelect(rows), nil
+}
+
 // ---- 校验 ----
 
 // CheckNameUnique 同父级下部门名称唯一性，对应 check_dept_name_unique。

@@ -2,11 +2,15 @@ package user
 
 import (
 	"encoding/json"
+	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"walnut-seed-go/internal/module/system/dept"
+	"walnut-seed-go/internal/module/system/post"
 	"walnut-seed-go/internal/module/system/role"
 	"walnut-seed-go/internal/pkg/crudx"
 	"walnut-seed-go/internal/pkg/errs"
@@ -45,15 +49,20 @@ type Out struct {
 }
 
 func (o *Out) SlimOnly() {
+	o.DeptID = nil
 	o.UserType = nil
+	o.Email = nil
+	o.Phonenumber = nil
 	o.Sex = nil
 	o.Avatar = nil
+	o.Status = nil
 	o.LoginIP = nil
 	o.LoginDate = nil
 	o.Remark = nil
 	o.CreateTime = nil
 	o.DeptName = nil
 	o.Roles = nil
+	o.RoleIDs = nil
 	o.PostIDs = nil
 	o.RoleID = nil
 }
@@ -85,14 +94,16 @@ type GetInfoOut struct {
 }
 
 type UserInfoOut struct {
-	User    *Out           `json:"user,omitempty"`
-	RoleIDs []idtype.JSInt `json:"roleIds,omitempty"`
-	PostIDs []idtype.JSInt `json:"postIds,omitempty"`
-	Roles   []role.Out     `json:"roles,omitempty"`
+	User    *Out           `json:"user"`
+	RoleIDs []idtype.JSInt `json:"roleIds"`
+	PostIDs []idtype.JSInt `json:"postIds"`
+	Roles   []role.Out     `json:"roles"`
+	Posts   []post.Out     `json:"posts"`
 }
 
 type ProfileUserOut struct {
 	ID          *idtype.JSInt   `json:"id"`
+	TenantID    *string         `json:"tenantId"`
 	DeptID      *idtype.JSInt   `json:"deptId"`
 	UserName    *string         `json:"userName"`
 	NickName    *string         `json:"nickName"`
@@ -103,7 +114,6 @@ type ProfileUserOut struct {
 	Avatar      *string         `json:"avatar"`
 	LoginIP     *string         `json:"loginIp"`
 	LoginDate   *timex.JSONTime `json:"loginDate"`
-	CreateTime  *timex.JSONTime `json:"createTime"`
 	DeptName    *string         `json:"deptName"`
 }
 
@@ -126,7 +136,6 @@ func newProfileUserOut(u *SysUser) *ProfileUserOut {
 		Avatar:      u.Avatar,
 		LoginIP:     u.LoginIP,
 		LoginDate:   jsonTimeOrNil(u.LoginDate),
-		CreateTime:  jsonTimeOrNil(u.CreateTime),
 	}
 }
 
@@ -157,31 +166,73 @@ func BindQueryParam(q crudx.Querier) (QueryParam, error) {
 		NickName:    strings.TrimSpace(q.Query("nickName")),
 		Status:      strings.TrimSpace(q.Query("status")),
 		PhoneNumber: strings.TrimSpace(q.Query("phonenumber")),
-		BeginTime:   strings.TrimSpace(q.Query("beginTime")),
-		EndTime:     strings.TrimSpace(q.Query("endTime")),
 	}
-	if raw := q.Query("deptId"); raw != "" {
-		n, err := strconv.ParseInt(raw, 10, 64)
-		if err == nil {
-			qp.DeptID = &n
+	// Python UserQueryParam 绑定校验按声明序拼接：id → deptId → beginTime → endTime；
+	// userIds/excludeUserIds 是 str 型，绑定不校验，service 条件构造时裸 int() →
+	// ValueError 原文（parseIDListQuery），仅在绑定通过后才会触及。
+	var msgs []string
+	intField := func(key string, dst **int64) {
+		if raw, ok := q.GetQuery(key); ok {
+			n, valid := dept.ParsePyQueryInt(raw)
+			if !valid {
+				msgs = append(msgs, msgValidInt)
+				return
+			}
+			*dst = &n
 		}
 	}
-	if raw := q.Query("id"); raw != "" {
-		n, err := strconv.ParseInt(raw, 10, 64)
-		if err == nil {
-			qp.ID = &n
+	dateField := func(key string, dst *string) {
+		if raw, ok := q.GetQuery(key); ok {
+			v, derr := dept.ParseDateQuery(raw)
+			if derr != nil {
+				if se := errs.As(derr); se != nil {
+					msgs = append(msgs, se.Msg)
+				}
+				return
+			}
+			*dst = v
 		}
+	}
+	intField("id", &qp.ID)
+	intField("deptId", &qp.DeptID)
+	dateField("beginTime", &qp.BeginTime)
+	dateField("endTime", &qp.EndTime)
+	if len(msgs) > 0 {
+		return QueryParam{}, errs.BadRequest(strings.Join(msgs, ", "))
 	}
 	if raw := q.Query("userIds"); raw != "" {
-		qp.UserIDs = parseIDList(raw)
+		ids, err := parseIDListQuery(raw)
+		if err != nil {
+			return QueryParam{}, err
+		}
+		qp.UserIDs = ids
 	}
 	if raw := q.Query("excludeUserIds"); raw != "" {
-		qp.ExcludeUserIDs = parseIDList(raw)
+		ids, err := parseIDListQuery(raw)
+		if err != nil {
+			return QueryParam{}, err
+		}
+		qp.ExcludeUserIDs = ids
 	}
 	return qp, nil
 }
 
-func parseIDList(raw string) []int64 {
+// pyIntRE 是 Starlette int 路径转换器的正则（仅纯数字，无符号/下划线）。
+var pyIntRE = regexp.MustCompile(`^[0-9]+$`)
+
+// pyIntArgRE 匹配 Python int() 接受的形态：可选符号 + 数字间可单个下划线。
+var pyIntArgRE = regexp.MustCompile(`^[+-]?[0-9](_?[0-9])*$`)
+
+// pyAtoi 复刻 Python int(str)：接受 "1_0"=10、"+1"、"-1"，拒绝 "_1"/"1__0"/"1_"。
+func pyAtoi(s string) (int64, error) {
+	if !pyIntArgRE.MatchString(s) {
+		return 0, fmt.Errorf("invalid literal for int() with base 10: '%s'", s)
+	}
+	return strconv.ParseInt(strings.ReplaceAll(s, "_", ""), 10, 64)
+}
+
+// parseIDListStrict 复刻 _parse_id_list：任一分量非法 → 400「{label}格式有误」。
+func parseIDListStrict(raw, label string) ([]int64, error) {
 	parts := strings.Split(raw, ",")
 	ids := make([]int64, 0, len(parts))
 	for _, p := range parts {
@@ -189,12 +240,32 @@ func parseIDList(raw string) []int64 {
 		if p == "" {
 			continue
 		}
-		n, err := strconv.ParseInt(p, 10, 64)
-		if err == nil {
-			ids = append(ids, n)
+		n, err := pyAtoi(p)
+		if err != nil {
+			return nil, errs.BadRequest(label + "格式有误")
 		}
+		ids = append(ids, n)
 	}
-	return ids
+	return ids, nil
+}
+
+// parseIDListQuery 查询条件里的 ID 串解析：非法分量 → 400「用户ID格式有误」
+// （Python 端已从裸 int() 透传 traceback 改为 ServiceException，两端同步）。
+func parseIDListQuery(raw string) ([]int64, error) {
+	parts := strings.Split(raw, ",")
+	ids := make([]int64, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		n, err := pyAtoi(p)
+		if err != nil {
+			return nil, errs.BadRequest("用户ID格式有误")
+		}
+		ids = append(ids, n)
+	}
+	return ids, nil
 }
 
 // ---- Input DTOs ----
@@ -245,6 +316,18 @@ func DecodeCreate(body []byte) (CreateIn, error) {
 	if err != nil {
 		return CreateIn{}, err
 	}
+	in, msgs := decodeCreateFields(fields, true)
+	if len(msgs) > 0 {
+		return in, errs.WithCode(errs.CodeBadRequest, strings.Join(msgs, ", "))
+	}
+	return in, nil
+}
+
+// decodeCreateFields 按 Python UserBaseSchema 的字段声明序收集校验错误：
+// deptId → userName → nickName → email → phonenumber → sex → password →
+// status → remark → roleIds → postIds。validatePassword 仅新增时为 true
+// （UserUpdateSchema 不校验密码复杂度，password 在修改时被忽略）。
+func decodeCreateFields(fields map[string]json.RawMessage, validatePassword bool) (CreateIn, []string) {
 	var in CreateIn
 	var msgs []string
 
@@ -255,28 +338,38 @@ func DecodeCreate(body []byte) (CreateIn, error) {
 			in.DeptID = &v
 		}
 	}
+	// userName/nickName 带 validate_default：缺省/null 也触发非空校验；
+	// 类型错误时 pydantic 不再跑自定义校验器，故只报类型错误。
+	userNameFailed := false
 	if raw, ok := fields["userName"]; ok && !isNull(raw) {
 		if v, terr := decodeStr(raw); terr != nil {
 			msgs = append(msgs, *terr)
+			userNameFailed = true
 		} else {
 			in.UserName = &v
-			if utf8.RuneCountInString(v) < 2 || utf8.RuneCountInString(v) > 30 {
-				msgs = append(msgs, "String should have at least 2 characters")
-			}
 		}
 	}
+	if !userNameFailed {
+		if in.UserName == nil || strings.TrimSpace(*in.UserName) == "" {
+			msgs = append(msgs, "用户账号不能为空")
+		} else if n := utf8.RuneCountInString(*in.UserName); n < 2 || n > 30 {
+			msgs = append(msgs, "用户账号长度必须在2到30个字符之间")
+		}
+	}
+	nickNameFailed := false
 	if raw, ok := fields["nickName"]; ok && !isNull(raw) {
 		if v, terr := decodeStr(raw); terr != nil {
 			msgs = append(msgs, *terr)
+			nickNameFailed = true
 		} else {
 			in.NickName = &v
 		}
 	}
-	if raw, ok := fields["password"]; ok && !isNull(raw) {
-		if v, terr := decodeStr(raw); terr != nil {
-			msgs = append(msgs, *terr)
-		} else {
-			in.Password = &v
+	if !nickNameFailed {
+		if in.NickName == nil || strings.TrimSpace(*in.NickName) == "" {
+			msgs = append(msgs, "用户昵称不能为空")
+		} else if utf8.RuneCountInString(*in.NickName) > 30 {
+			msgs = append(msgs, "用户昵称长度不能超过30个字符")
 		}
 	}
 	if raw, ok := fields["email"]; ok && !isNull(raw) {
@@ -284,6 +377,13 @@ func DecodeCreate(body []byte) (CreateIn, error) {
 			msgs = append(msgs, *terr)
 		} else {
 			in.Email = &v
+			if v != "" {
+				if utf8.RuneCountInString(v) > 50 {
+					msgs = append(msgs, "邮箱长度不能超过50个字符")
+				} else if !emailRE.MatchString(v) {
+					msgs = append(msgs, "邮箱格式不正确")
+				}
+			}
 		}
 	}
 	if raw, ok := fields["phonenumber"]; ok && !isNull(raw) {
@@ -298,6 +398,18 @@ func DecodeCreate(body []byte) (CreateIn, error) {
 			msgs = append(msgs, *terr)
 		} else {
 			in.Sex = &v
+		}
+	}
+	if raw, ok := fields["password"]; ok && !isNull(raw) {
+		if v, terr := decodeStr(raw); terr != nil {
+			msgs = append(msgs, *terr)
+		} else {
+			in.Password = &v
+			if validatePassword {
+				if m := checkPasswordComplexity(v, "用户密码"); m != "" {
+					msgs = append(msgs, m)
+				}
+			}
 		}
 	}
 	if raw, ok := fields["status"]; ok && !isNull(raw) {
@@ -319,6 +431,9 @@ func DecodeCreate(body []byte) (CreateIn, error) {
 			msgs = append(msgs, *terr)
 		} else {
 			in.RoleIDs = v
+			if len(v) == 0 {
+				msgs = append(msgs, "用户角色不能为空")
+			}
 		}
 	}
 	if raw, ok := fields["postIds"]; ok && !isNull(raw) {
@@ -328,19 +443,46 @@ func DecodeCreate(body []byte) (CreateIn, error) {
 			in.PostIDs = v
 		}
 	}
-	if len(msgs) > 0 {
-		return in, errs.WithCode(errs.CodeBadRequest, strings.Join(msgs, ", "))
+	return in, msgs
+}
+
+var emailRE = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+
+// checkPasswordComplexity 复刻 Python _check_password_complexity +
+// RegexConstants.PASSWORD（RE2 不支持 lookahead，用等价手动检查）：
+// 至少 8 位，仅限 A-Za-z0-9@$!%*?&，且四类字符各至少一个。
+func checkPasswordComplexity(value, label string) string {
+	if strings.TrimSpace(value) == "" {
+		return label + "不能为空"
 	}
-	return in, nil
+	var hasLower, hasUpper, hasDigit, hasSpecial bool
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z':
+			hasLower = true
+		case r >= 'A' && r <= 'Z':
+			hasUpper = true
+		case r >= '0' && r <= '9':
+			hasDigit = true
+		case strings.ContainsRune("@$!%*?&", r):
+			hasSpecial = true
+		default:
+			return "密码必须包含大写字母、小写字母、数字和特殊字符"
+		}
+	}
+	if utf8.RuneCountInString(value) < 8 || !hasLower || !hasUpper || !hasDigit || !hasSpecial {
+		return "密码必须包含大写字母、小写字母、数字和特殊字符"
+	}
+	return ""
 }
 
 func DecodeUpdate(body []byte) (UpdateIn, error) {
-	createIn, err := DecodeCreate(body)
+	fields, err := rawFields(body)
 	if err != nil {
-		return UpdateIn{CreateIn: createIn}, err
+		return UpdateIn{}, err
 	}
-	fields, _ := rawFields(body)
-	var msgs []string
+	createIn, msgs := decodeCreateFields(fields, false)
+	// id 的 validate_default 校验排在继承字段之后（实测拼接序）
 	var idPtr *int64
 	if raw, ok := fields["id"]; ok && !isNull(raw) {
 		if v, terr := decodeInt64(raw); terr != nil {
@@ -348,6 +490,9 @@ func DecodeUpdate(body []byte) (UpdateIn, error) {
 		} else {
 			idPtr = &v
 		}
+	}
+	if idPtr == nil {
+		msgs = append(msgs, "用户ID不能为空")
 	}
 	if len(msgs) > 0 {
 		return UpdateIn{CreateIn: createIn}, errs.WithCode(errs.CodeBadRequest, strings.Join(msgs, ", "))
@@ -369,12 +514,20 @@ func DecodeResetPwd(body []byte) (ResetPwdIn, error) {
 			in.ID = &v
 		}
 	}
+	if in.ID == nil {
+		msgs = append(msgs, "用户ID不能为空")
+	}
 	if raw, ok := fields["password"]; ok && !isNull(raw) {
 		if v, terr := decodeStr(raw); terr != nil {
 			msgs = append(msgs, *terr)
 		} else {
 			in.Password = &v
+			if m := checkPasswordComplexity(v, "用户密码"); m != "" {
+				msgs = append(msgs, m)
+			}
 		}
+	} else {
+		msgs = append(msgs, "用户密码不能为空")
 	}
 	if len(msgs) > 0 {
 		return in, errs.WithCode(errs.CodeBadRequest, strings.Join(msgs, ", "))
@@ -395,6 +548,9 @@ func DecodeChangeStatus(body []byte) (ChangeStatusIn, error) {
 		} else {
 			in.ID = &v
 		}
+	}
+	if in.ID == nil {
+		msgs = append(msgs, "用户ID不能为空")
 	}
 	if raw, ok := fields["status"]; ok && !isNull(raw) {
 		if v, terr := decodeStr(raw); terr != nil {
@@ -421,13 +577,9 @@ func DecodeProfileUpdate(body []byte) (ProfileUpdateIn, error) {
 			msgs = append(msgs, *terr)
 		} else {
 			in.NickName = &v
-		}
-	}
-	if raw, ok := fields["phonenumber"]; ok && !isNull(raw) {
-		if v, terr := decodeStr(raw); terr != nil {
-			msgs = append(msgs, *terr)
-		} else {
-			in.PhoneNumber = &v
+			if utf8.RuneCountInString(v) > 30 {
+				msgs = append(msgs, "用户昵称长度不能超过30个字符")
+			}
 		}
 	}
 	if raw, ok := fields["email"]; ok && !isNull(raw) {
@@ -435,6 +587,23 @@ func DecodeProfileUpdate(body []byte) (ProfileUpdateIn, error) {
 			msgs = append(msgs, *terr)
 		} else {
 			in.Email = &v
+			if v != "" {
+				if utf8.RuneCountInString(v) > 50 {
+					msgs = append(msgs, "邮箱长度不能超过50个字符")
+				} else if !emailRE.MatchString(v) {
+					msgs = append(msgs, "邮箱格式不正确")
+				}
+			}
+		}
+	}
+	if raw, ok := fields["phonenumber"]; ok && !isNull(raw) {
+		if v, terr := decodeStr(raw); terr != nil {
+			msgs = append(msgs, *terr)
+		} else {
+			in.PhoneNumber = &v
+			if v != "" && !mobileRE.MatchString(v) {
+				msgs = append(msgs, "手机号格式不正确")
+			}
 		}
 	}
 	if raw, ok := fields["sex"]; ok && !isNull(raw) {
@@ -450,6 +619,8 @@ func DecodeProfileUpdate(body []byte) (ProfileUpdateIn, error) {
 	return in, nil
 }
 
+var mobileRE = regexp.MustCompile(`^1(3\d|4[4-9]|5[0-35-9]|6[67]|7[013-8]|8[0-9]|9[0-9])\d{8}$`)
+
 func DecodeUpdatePwd(body []byte) (UpdatePwdIn, error) {
 	fields, err := rawFields(body)
 	if err != nil {
@@ -462,14 +633,24 @@ func DecodeUpdatePwd(body []byte) (UpdatePwdIn, error) {
 			msgs = append(msgs, *terr)
 		} else {
 			in.OldPassword = v
+			if strings.TrimSpace(v) == "" {
+				msgs = append(msgs, "旧密码不能为空")
+			}
 		}
+	} else {
+		msgs = append(msgs, "旧密码不能为空")
 	}
 	if raw, ok := fields["newPassword"]; ok && !isNull(raw) {
 		if v, terr := decodeStr(raw); terr != nil {
 			msgs = append(msgs, *terr)
 		} else {
 			in.NewPassword = v
+			if m := checkPasswordComplexity(v, "新密码"); m != "" {
+				msgs = append(msgs, m)
+			}
 		}
+	} else {
+		msgs = append(msgs, "新密码不能为空")
 	}
 	if len(msgs) > 0 {
 		return in, errs.WithCode(errs.CodeBadRequest, strings.Join(msgs, ", "))
@@ -496,18 +677,19 @@ func ExportColumns() []string {
 func ExportRowToMap(r ExportRow) map[string]any {
 	status := r.User.Status
 	sex := r.User.Sex
+	// *string 必须解引用：excelize 对指针按 %v 输出会写成内存地址
 	return map[string]any{
 		"id":          r.User.ID,
 		"user_name":   r.User.UserName,
 		"nick_name":   r.User.NickName,
-		"email":       r.User.Email,
-		"phonenumber": r.User.Phonenumber,
+		"email":       derefStr(r.User.Email),
+		"phonenumber": derefStr(r.User.Phonenumber),
 		"sex":         sexLabel(sex),
 		"status":      statusLabel(&status),
-		"login_ip":    r.User.LoginIP,
+		"login_ip":    derefStr(r.User.LoginIP),
 		"login_date":  loginDateStr(r.User.LoginDate),
-		"dept_name":   r.DeptName,
-		"leader_name": r.LeaderName,
+		"dept_name":   derefStr(r.DeptName),
+		"leader_name": derefStr(r.LeaderName),
 	}
 }
 

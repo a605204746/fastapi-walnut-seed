@@ -129,15 +129,18 @@ func (s *Service) OptionSelect(ctx context.Context, ids []int64) ([]Out, error) 
 }
 
 func (s *Service) InsertRole(ctx context.Context, in CreateIn) (bool, error) {
-	if err := s.CheckRoleAllowed(ctx, nil, in.RoleKey); err != nil {
-		return false, err
+	// Python: status / role_sort 列 nullable=False 且**无默认值**，缺省落 NULL →
+	// IntegrityError → 全局处理器转 409「数据已存在或违反完整性约束」（实测钉住）。
+	// check_role_allowed 由 handler 在唯一性校验之前调用（controller 顺序）。
+	if in.Status == nil || in.RoleSort == nil {
+		return false, errs.Conflict(errs.MsgDBIntegrity)
 	}
-	// 默认值与 Python 端 SQLAlchemy 列默认对齐：
-	// data_scope='1' (全部), menu_check_strictly=1, dept_check_strictly=1, status='0'
+	// 其余列默认与 Python 端 SQLAlchemy 列默认对齐（显式 None 也会触发默认值，实测）：
+	// data_scope='1' (全部), menu_check_strictly=1, dept_check_strictly=1
 	defaultScope := "1"
 	defaultStrictly := 1
 	row := SysRole{
-		Status:            modelx.Normal,
+		Status:            *in.Status,
 		DelFlag:           modelx.Normal,
 		DataScope:         &defaultScope,
 		MenuCheckStrictly: &defaultStrictly,
@@ -149,9 +152,7 @@ func (s *Service) InsertRole(ctx context.Context, in CreateIn) (bool, error) {
 	if in.RoleKey != nil {
 		row.RoleKey = *in.RoleKey
 	}
-	if in.RoleSort != nil {
-		row.RoleSort = *in.RoleSort
-	}
+	row.RoleSort = *in.RoleSort
 	if in.DataScope != nil {
 		row.DataScope = in.DataScope
 	}
@@ -160,9 +161,6 @@ func (s *Service) InsertRole(ctx context.Context, in CreateIn) (bool, error) {
 	}
 	if in.DeptCheckStrictly != nil {
 		row.DeptCheckStrictly = boolToInt(in.DeptCheckStrictly)
-	}
-	if in.Status != nil {
-		row.Status = *in.Status
 	}
 	if in.Remark != nil {
 		row.Remark = in.Remark
@@ -188,27 +186,8 @@ func (s *Service) UpdateRole(ctx context.Context, in UpdateIn) (bool, error) {
 	if in.ID == nil {
 		return false, nil
 	}
-	row, err := s.repo.GetByIDNoScope(ctx, *in.ID)
-	if err != nil {
-		return false, err
-	}
-	if row == nil {
-		return false, nil
-	}
-	if err := s.CheckRoleAllowed(ctx, in.ID, in.RoleKey); err != nil {
-		return false, err
-	}
-	if row.RoleKey != derefStr(in.RoleKey) {
-		if builtinRoleKeys[row.RoleKey] {
-			return false, errs.New("不允许修改系统内置管理员角色标识符!")
-		}
-		if in.RoleKey != nil && builtinRoleKeys[*in.RoleKey] {
-			return false, errs.New("不允许使用系统内置管理员角色标识符!")
-		}
-	}
-	if err := s.CheckRoleDataScope(ctx, []int64{*in.ID}); err != nil {
-		return false, err
-	}
+	// check_role_allowed / check_role_data_scope / 名称与 key 唯一性由 handler
+	// 按 Python controller 顺序先行调用；此处对应 service.update_role 本体。
 	if err := s.CheckRoleSelfEdit(ctx, *in.ID); err != nil {
 		return false, err
 	}
@@ -324,14 +303,16 @@ func (s *Service) UpdateRoleStatus(ctx context.Context, in StatusIn) (bool, erro
 	if in.ID == nil {
 		return false, nil
 	}
-	if in.Status == nil {
-		return false, errs.New("角色状态不能为空")
-	}
+	// Python controller 先 check_role_allowed + check_role_data_scope，
+	// 之后 service.update_role_status 才判 status 为空（顺序不可调换）
 	if err := s.CheckRoleAllowed(ctx, in.ID, nil); err != nil {
 		return false, err
 	}
 	if err := s.CheckRoleDataScope(ctx, []int64{*in.ID}); err != nil {
 		return false, err
+	}
+	if in.Status == nil {
+		return false, errs.New("角色状态不能为空")
 	}
 	if *in.Status == modelx.Disabled {
 		n, err := s.repo.CountUserRoleByRoleID(ctx, *in.ID)
@@ -462,12 +443,42 @@ func (s *Service) SelectAuthUsers(ctx context.Context, roleID int64, userIDs []i
 
 // ---- 校验方法 ----
 
-func (s *Service) CheckRoleAllowed(_ context.Context, roleID *int64, roleKey *string) error {
+// CheckRoleAllowed 对应 Python check_role_allowed：
+//   - id==1 → 一律拒绝；
+//   - 新增（roleID==nil）→ 仅拒绝「使用」内置标识符；
+//   - 修改（roleID!=nil）→ 仅当 key **变化**时才校验：现 key 是内置 → 拒「修改」，
+//     新 key 是内置 → 拒「使用」。保持原 key（含 DELETE 传自身 key、
+//     dataScope/changeStatus 传 None 之外的相等 key）放行。
+//
+// ⚠️ dataScope/changeStatus 传 role_key=None：DB key 非空 → 恒视为「变化」，
+// 内置角色因此被拒「不允许修改系统内置管理员角色标识符!」（Python 实测分支）。
+func (s *Service) CheckRoleAllowed(ctx context.Context, roleID *int64, roleKey *string) error {
 	if roleID != nil && *roleID == modelx.SuperAdminID {
 		return errs.New("不允许操作超级管理员角色")
 	}
-	if roleKey != nil && builtinRoleKeys[*roleKey] {
-		return errs.New("不允许使用系统内置管理员角色标识符!")
+	if roleID == nil {
+		if roleKey != nil && builtinRoleKeys[*roleKey] {
+			return errs.New("不允许使用系统内置管理员角色标识符!")
+		}
+		return nil
+	}
+	roles, err := s.repo.ListByIDs(ctx, []int64{*roleID})
+	if err != nil {
+		return errs.Wrap(err, errs.MsgDBFailed)
+	}
+	if len(roles) == 0 {
+		return nil
+	}
+	sysRole := roles[0]
+	// Python: sys_role.role_key != role_key（role_key 可为 None，DB key 非空 → 恒不等）
+	keyChanged := roleKey == nil || sysRole.RoleKey != *roleKey
+	if keyChanged {
+		if builtinRoleKeys[sysRole.RoleKey] {
+			return errs.New("不允许修改系统内置管理员角色标识符!")
+		}
+		if roleKey != nil && builtinRoleKeys[*roleKey] {
+			return errs.New("不允许使用系统内置管理员角色标识符!")
+		}
 	}
 	return nil
 }

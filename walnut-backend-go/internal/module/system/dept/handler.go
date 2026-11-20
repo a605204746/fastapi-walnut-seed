@@ -88,7 +88,11 @@ func (h *Handler) service(c *gin.Context) (*Service, bool) {
 //
 // ⚠️ 响应 data 是**数组**而不是 {"rows","total"}——部门列表不分页。
 func (h *Handler) List(c *gin.Context) {
-	q := BindQueryParam(c)
+	q, err := BindQueryParamChecked(c)
+	if err != nil {
+		h.errs.Abort(c, err)
+		return
+	}
 	svc, ok := h.service(c)
 	if !ok {
 		return
@@ -122,7 +126,11 @@ func (h *Handler) ListExclude(c *gin.Context) {
 
 // TreeSelect GET /system/dept/treeselect
 func (h *Handler) TreeSelect(c *gin.Context) {
-	q := BindQueryParam(c)
+	q, err := BindQueryParamChecked(c)
+	if err != nil {
+		h.errs.Abort(c, err)
+		return
+	}
 	svc, ok := h.service(c)
 	if !ok {
 		return

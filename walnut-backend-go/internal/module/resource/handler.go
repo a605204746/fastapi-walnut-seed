@@ -2,9 +2,11 @@
 package resource
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"walnut-seed-go/internal/config"
+	"walnut-seed-go/internal/module/web/auth"
 	"walnut-seed-go/internal/pkg/authctx"
 	"walnut-seed-go/internal/pkg/cachex"
 	"walnut-seed-go/internal/pkg/cryptox"
@@ -47,35 +50,47 @@ func (h *Handler) Mount(protected routex.Binder, public routex.Binder) {
 
 // WebSocket GET /resource/websocket — WebSocket 连接。
 //
-// 认证：从查询参数或请求头读 token，解码并校验 clientid，
-// 通过后注册会话。认证失败关闭连接（code=4401）。
+// 认证：从查询参数或请求头读 token，解码 → Redis 会话 → clientid 一致性。
+// 任一失败在 accept 前拒绝握手：HTTP 403 空体（uvicorn 对 close(4401) 的呈现，
+// 实测 content-type: text/plain、connection: close）。Redis 缺失同样拒绝（fail-closed）。
 func (h *Handler) WebSocket(c *gin.Context) {
 	// 从 query 或 header 取 token
 	token := c.Query("token")
 	if token == "" {
 		auth := c.GetHeader(h.cfg.TokenName)
 		if strings.HasPrefix(auth, h.cfg.TokenPrefix+" ") {
-			token = strings.TrimPrefix(auth, h.cfg.TokenPrefix+" ")
+			token = strings.TrimSpace(strings.TrimPrefix(auth, h.cfg.TokenPrefix+" "))
 		}
+	}
+
+	reject := func(reason string) {
+		h.log.Warn("WebSocket 认证失败", slog.String("reason", reason))
+		c.Header("Content-Type", "text/plain")
+		c.Header("Connection", "close")
+		c.Status(http.StatusForbidden)
 	}
 
 	// JWT 解码（exp 始终按硬过期校验）
 	claims, err := cryptox.ParseToken(token, h.cfg.SecretKey, true)
-	if err != nil || claims.UserID == nil {
-		h.log.Warn("WebSocket 认证失败", slog.String("err", errString(err)))
-		c.JSON(http.StatusOK, gin.H{"code": 4401, "msg": "认证失败"})
+	if err != nil || claims.Sub == "" {
+		reject(errString(err))
 		return
 	}
 
-	// Redis 会话检查
-	if h.cache != nil && claims.Sub != "" {
-		sessionKey := h.cache.Key("user_session:" + claims.Sub)
-		exists, _ := h.cache.Client.Exists(c.Request.Context(), sessionKey).Result()
-		if exists == 0 {
-			h.log.Warn("WebSocket 会话不存在", slog.String("sub", claims.Sub))
-			c.JSON(http.StatusOK, gin.H{"code": 4401, "msg": "认证已失效"})
-			return
-		}
+	// Redis 会话检查（缺失/不可达一律拒绝，对齐 Python try/except fail-closed）
+	if h.cache == nil {
+		reject("redis 不可用")
+		return
+	}
+	raw, ok := h.cache.Get(c.Request.Context(), "user_session:"+claims.Sub)
+	if !ok || raw == "" {
+		reject("认证已失效")
+		return
+	}
+	var sess auth.SessionInfo
+	if jsonErr := json.Unmarshal([]byte(raw), &sess); jsonErr != nil {
+		reject("会话快照损坏")
+		return
 	}
 
 	// clientid 一致性检查
@@ -85,13 +100,20 @@ func (h *Handler) WebSocket(c *gin.Context) {
 			requestClient = c.GetHeader(h.cfg.ClientIDHeader)
 		}
 		if requestClient != *claims.ClientID {
-			h.log.Warn("WebSocket clientid 不匹配")
-			c.JSON(http.StatusOK, gin.H{"code": 4401, "msg": "客户端ID与Token不匹配"})
+			reject("客户端ID与Token不匹配")
 			return
 		}
 	}
 
-	userID := *claims.UserID
+	// Python：user_id 优先取会话快照，回退 JWT claims
+	userID := sess.UserID
+	if userID == 0 && claims.UserID != nil {
+		userID = *claims.UserID
+	}
+	if userID == 0 {
+		reject("认证已失效")
+		return
+	}
 
 	// 升级为 WebSocket
 	conn, err := websocket.Accept(c.Writer, c.Request, &websocket.AcceptOptions{
@@ -137,22 +159,14 @@ func (h *Handler) WebSocket(c *gin.Context) {
 	}
 }
 
-// SSEConnect GET /resource/sse — SSE 连接（需登录，token 可走 query 参数）。
+// SSEConnect GET /resource/sse — SSE 连接（需登录）。
+// 认证由 Protected 分组的 auth 中间件完成（支持 Authorization 头与同名 query，
+// 含 JWT+Redis 会话+clientid+滑动续期），handler 内不再二次解 token。
 func (h *Handler) SSEConnect(c *gin.Context) {
 	ac, ok := authctx.From(c)
 	if !ok {
-		// 尝试从 query 参数取 token（EventSource 无法设 Authorization 头）
-		token := extractQueryToken(c)
-		if token == "" {
-			h.err.Abort(c, errs.NotLogin())
-			return
-		}
-		claims, err := cryptox.ParseToken(token, h.cfg.SecretKey, false)
-		if err != nil || claims.UserID == nil {
-			h.err.Abort(c, errs.NotLogin())
-			return
-		}
-		ac = authctx.Context{User: authctx.User{ID: *claims.UserID}}
+		h.err.Abort(c, errs.NotLogin())
+		return
 	}
 
 	userID := ac.User.ID
@@ -164,18 +178,37 @@ func (h *Handler) SSEConnect(c *gin.Context) {
 	ch := h.sse.Connect(userID, token)
 	defer h.sse.Disconnect(userID, token)
 
-	c.Writer.Header().Set("Content-Type", "text/event-stream")
+	// 头与 Python EventSourceResponse 实测一致（无 Connection 头）
+	c.Writer.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
-	c.Writer.Header().Set("Connection", "keep-alive")
 	c.Writer.Header().Set("X-Accel-Buffering", "no")
 	c.Writer.WriteHeader(http.StatusOK)
 
-	// 发送初始 connected 事件
-	fmt.Fprintf(c.Writer, "event: connected\ndata: \n\n")
-	c.Writer.Flush()
+	writeFrame := func(s string) {
+		fmt.Fprint(c.Writer, s)
+		c.Writer.Flush()
+	}
 
-	heartbeat := time.NewTicker(ssex.HeartbeatInterval)
-	defer heartbeat.Stop()
+	// connected 事件 raw_data="" → 无 data: 行（fastapi build_sse_bytes 语义）
+	writeFrame("event: connected\n\n")
+
+	// 双计时器复刻 Python 两层空闲语义：
+	//   heartbeat：生成器 60s 拿不到消息 → 发 heartbeat（消息/心跳后均重置）
+	//   ping：路由层 15s 拿不到任何事件 → 发 ": ping" 注释（仅事件后重置，心跳也算事件）
+	const pingInterval = 15 * time.Second
+	pingTimer := time.NewTimer(pingInterval)
+	defer pingTimer.Stop()
+	hbTimer := time.NewTimer(ssex.HeartbeatInterval)
+	defer hbTimer.Stop()
+	resetTimer := func(t *time.Timer, d time.Duration) {
+		if !t.Stop() {
+			select {
+			case <-t.C:
+			default:
+			}
+		}
+		t.Reset(d)
+	}
 
 	ctx := c.Request.Context()
 	for {
@@ -186,19 +219,51 @@ func (h *Handler) SSEConnect(c *gin.Context) {
 			if !ok {
 				return
 			}
-			fmt.Fprintf(c.Writer, "event: message\ndata: %s\n\n", msg)
-			c.Writer.Flush()
-		case <-heartbeat.C:
-			fmt.Fprintf(c.Writer, "event: heartbeat\ndata: \n\n")
-			c.Writer.Flush()
+			writeFrame(sseMessageFrame(msg))
+			resetTimer(pingTimer, pingInterval)
+			resetTimer(hbTimer, ssex.HeartbeatInterval)
+		case <-hbTimer.C:
+			writeFrame("event: heartbeat\n\n")
+			resetTimer(pingTimer, pingInterval)
+			resetTimer(hbTimer, ssex.HeartbeatInterval)
+		case <-pingTimer.C:
+			writeFrame(": ping\n\n")
+			resetTimer(pingTimer, pingInterval)
 		}
 	}
 }
 
+// sseMessageFrame 按 fastapi build_sse_bytes 渲染 message 事件：
+// 多行消息拆成多条 data: 行；空消息无 data: 行。
+func sseMessageFrame(msg string) string {
+	var b strings.Builder
+	b.WriteString("event: message\n")
+	if msg != "" {
+		normalized := strings.ReplaceAll(strings.ReplaceAll(msg, "\r\n", "\n"), "\r", "\n")
+		// str.splitlines 不产生末尾空元素："abc\n" → ["abc"]
+		normalized = strings.TrimSuffix(normalized, "\n")
+		for _, line := range strings.Split(normalized, "\n") {
+			b.WriteString("data: ")
+			b.WriteString(line)
+			b.WriteByte('\n')
+		}
+	}
+	b.WriteByte('\n')
+	return b.String()
+}
+
 // SSEClose GET /resource/sse/close — 断开 SSE 连接（白名单内，无需登录）。
+// 查询参数名与 Python 一致：user_id / token；user_id 非整数 → 400（pydantic 文案）。
 func (h *Handler) SSEClose(c *gin.Context) {
-	userIDStr := c.Query("userId")
+	userIDStr, userIDPresent := c.GetQuery("user_id")
 	token := c.Query("token")
+
+	if userIDPresent {
+		if _, err := strconv.ParseInt(userIDStr, 10, 64); err != nil {
+			h.err.Abort(c, errs.BadRequest("Input should be a valid integer, unable to parse string as an integer"))
+			return
+		}
+	}
 
 	// 如果 query 没有，尝试从 header 解析
 	if userIDStr == "" || token == "" {
@@ -217,11 +282,11 @@ func (h *Handler) SSEClose(c *gin.Context) {
 
 	if userIDStr != "" && token != "" {
 		var userID int64
-		if _, err := fmt.Sscanf(userIDStr, "%d", &userID); err == nil && userID > 0 {
+		if _, err := fmt.Sscanf(userIDStr, "%d", &userID); err == nil {
 			h.sse.Disconnect(userID, token)
 		}
 	}
-	envelope.OK(c, nil)
+	envelope.OKMsg(c, nil, "SSE 连接已断开")
 }
 
 func extractQueryToken(c *gin.Context) string {

@@ -32,6 +32,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"walnut-seed-go/internal/module/system/dept"
 	"walnut-seed-go/internal/pkg/authctx"
 	"walnut-seed-go/internal/pkg/crudx"
 	"walnut-seed-go/internal/pkg/envelope"
@@ -159,26 +160,27 @@ func (h *Handler) GetByID(c *gin.Context) {
 // OptionSelect GET /system/post/optionselect
 //
 // 查询参数用的是 **别名**：postIds（逗号分隔串）、deptId。
-// ⚠️ Python 端对 postIds 做的是 `[int(item) for item in str2list(post_ids)]`，
-// **没有** try/except —— 非数字会抛 ValueError 变成 500，而不是 400。
-// 这里保持一致：解析失败按系统异常处理，不要"改进"成 400。
+// ⚠️ postIds 分量走 Python 裸 int() 语义（接受 "1_0"→10、拒绝 "3.0"）；
+// 非法时 Python 端已两端同步改为 ServiceException → **400「岗位ID格式有误」**
+// （不再是 ValueError 原文透传，见 Python post/controller.py 的 try/except）。
+// deptId 是 int|None 查询参数，走 Pydantic lax int（接受 "3.0"），非法 → 400 原文。
 func (h *Handler) OptionSelect(c *gin.Context) {
 	var ids []int64
 	if raw := c.Query("postIds"); crudx.IsNotBlank(raw) {
 		for _, item := range crudx.Str2List(raw) {
-			n, err := strconv.ParseInt(item, 10, 64)
+			n, err := pyAtoi(item)
 			if err != nil {
-				h.errs.Abort(c, errs.Wrap(err, errs.MsgSystemError))
+				// Python 已改为 ServiceException（两端同步，不再透传 traceback）
+				h.errs.Abort(c, errs.BadRequest("岗位ID格式有误"))
 				return
 			}
 			ids = append(ids, n)
 		}
 	}
 	var deptID *int64
-	if raw := c.Query("deptId"); crudx.IsNotBlank(raw) {
-		n, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
-		if err != nil {
-			// deptId 是 `int | None` 的查询参数，由 FastAPI/Pydantic 校验 → 400
+	if raw, ok := c.GetQuery("deptId"); ok {
+		n, valid := dept.ParsePyQueryInt(raw)
+		if !valid {
 			h.errs.Abort(c, errs.BadRequest(msgValidInt))
 			return
 		}
@@ -199,7 +201,11 @@ func (h *Handler) OptionSelect(c *gin.Context) {
 
 // DeptTree GET /system/post/deptTree
 func (h *Handler) DeptTree(c *gin.Context) {
-	q := BindDeptTreeQuery(c)
+	q, err := BindDeptTreeQuery(c)
+	if err != nil {
+		h.errs.Abort(c, err)
+		return
+	}
 	svc, ok := h.service(c)
 	if !ok {
 		return
@@ -344,23 +350,37 @@ func (h *Handler) Delete(c *gin.Context) {
 
 // Export POST /system/post/export
 //
-// ⚠️ 请求体是 **form**（不是 JSON）：Python 端 `await request.form()`，
-// 且会 `data.pop("pageSize")` —— 导出不分页，查全部。
+// ⚠️ 请求体是 **form**（不是 JSON）：Python 端 `form = await request.form()`，
+// **只取 form、不看 query**（实测：query 带非法 deptId 而 form 为空仍导出成功），
+// 过滤空值后 `data.pop("pageSize")`（导出不分页），再手工 model_validate——
+// 校验失败透传 **ValidationError 原文**（见 dto.go bindExportForm 注释）。
 func (h *Handler) Export(c *gin.Context) {
+	// starlette request.form() 同时支持 urlencoded 与 multipart：
+	// ParseForm 只解析 urlencoded；multipart 需再跑 ParseMultipartForm（值并入 PostForm）
 	if err := c.Request.ParseForm(); err != nil {
 		h.errs.Abort(c, errs.BadRequest(errs.MsgValidationFailed))
 		return
 	}
-	// 只取非空的 form 字段（Python: `if value not in (None, "")`）
-	q := QueryParam{}
-	q.DeptID = formInt(c, "deptId")
-	q.BelongDeptID = formInt(c, "belongDeptId")
-	q.PostCode = c.PostForm("postCode")
-	q.PostCategory = c.PostForm("postCategory")
-	q.PostName = c.PostForm("postName")
-	q.Status = c.PostForm("status")
-	q.BeginTime = c.PostForm("beginTime")
-	q.EndTime = c.PostForm("endTime")
+	if strings.HasPrefix(c.ContentType(), "multipart/form-data") {
+		if err := c.Request.ParseMultipartForm(32 << 20); err != nil {
+			h.errs.Abort(c, errs.BadRequest(errs.MsgValidationFailed))
+			return
+		}
+	}
+	// 只取非空的 form 字段（Python: `if value not in (None, "")`）；
+	// 重复键取**最后一个**值（starlette MultiDict.items() 语义）
+	data := make(map[string]string)
+	for k, v := range c.Request.PostForm {
+		if len(v) > 0 && v[len(v)-1] != "" {
+			data[k] = v[len(v)-1]
+		}
+	}
+	delete(data, "pageSize")
+	q, err := bindExportForm(data)
+	if err != nil {
+		h.errs.Abort(c, err)
+		return
+	}
 	// 刻意不设 q.Page.PageSize：导出走 select_list → list_all，本就不分页
 
 	svc, ok := h.service(c)
@@ -494,19 +514,6 @@ func pathInt(c *gin.Context, name string) (int64, error) {
 		return 0, errs.BadRequest(msgValidInt)
 	}
 	return n, nil
-}
-
-// formInt 读取可选的 form 整型字段（空值视为未提供）。
-func formInt(c *gin.Context, key string) *int64 {
-	raw := strings.TrimSpace(c.PostForm(key))
-	if raw == "" {
-		return nil
-	}
-	n, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil {
-		return nil
-	}
-	return &n
 }
 
 func deref(s *string) string {

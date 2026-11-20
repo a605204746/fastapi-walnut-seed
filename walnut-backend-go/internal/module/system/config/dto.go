@@ -11,6 +11,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"walnut-seed-go/internal/module/system/dept"
 	"walnut-seed-go/internal/pkg/crudx"
 	"walnut-seed-go/internal/pkg/errs"
 	"walnut-seed-go/internal/pkg/idtype"
@@ -60,19 +61,44 @@ type Query struct {
 }
 
 // BindQuery 从查询串解析。
+//
+// beginTime/endTime 是 DateStr|None：出现（含空串）即走 Pydantic 解析，
+// 非法 → 400 date 解析原文（dept.ParseDateQuery）。多个错误按声明序拼接：
+// pageNum/pageSize（crudx）→ beginTime → endTime。
 func BindQuery(q crudx.Querier) (Query, error) {
-	page, err := crudx.BindPageQuery(q)
-	if err != nil {
-		return Query{}, err
-	}
-	return Query{
+	page, pageErr := crudx.BindPageQuery(q)
+	out := Query{
 		Page:       page,
 		ConfigName: q.Query("configName"),
 		ConfigKey:  q.Query("configKey"),
 		ConfigType: q.Query("configType"),
-		BeginTime:  q.Query("beginTime"),
-		EndTime:    q.Query("endTime"),
-	}, nil
+	}
+	var msgs []string
+	if pageErr != nil {
+		se := errs.As(pageErr)
+		if se == nil {
+			return Query{}, pageErr
+		}
+		msgs = append(msgs, se.Msg)
+	}
+	dateField := func(key string, dst *string) {
+		if raw, ok := q.GetQuery(key); ok {
+			v, derr := dept.ParseDateQuery(raw)
+			if derr != nil {
+				if se := errs.As(derr); se != nil {
+					msgs = append(msgs, se.Msg)
+				}
+				return
+			}
+			*dst = v
+		}
+	}
+	dateField("beginTime", &out.BeginTime)
+	dateField("endTime", &out.EndTime)
+	if len(msgs) > 0 {
+		return Query{}, errs.BadRequest(strings.Join(msgs, ", "))
+	}
+	return out, nil
 }
 
 // ---- 写入入参 ----
@@ -354,8 +380,9 @@ func parseLooseInt(raw json.RawMessage) (int64, bool, string) {
 		if err := json.Unmarshal(raw, &s); err != nil {
 			return 0, false, msgValidStr
 		}
-		n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
-		if err != nil {
+		// Pydantic lax str→int 接受 "3.0"→3、"1_0"→10（拒绝 "1e2"/"3.5"）。
+		n, valid := dept.ParsePyQueryInt(s)
+		if !valid {
 			return 0, false, msgValidInt
 		}
 		return n, true, ""

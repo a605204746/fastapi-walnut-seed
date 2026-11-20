@@ -2,6 +2,7 @@
 package file
 
 import (
+	"errors"
 	"io"
 	"net/http"
 
@@ -42,26 +43,41 @@ func (h *Handler) Upload(c *gin.Context) {
 	}
 	defer file.Close()
 
+	// 先校验扩展名再读文件体（对齐 Python upload 的顺序：
+	// 坏扩展名 + 超限时 Python 报扩展名错误而非大小错误）。
+	if err := storagex.CheckAllowedExtension(header.Filename, h.cfg.AllowedExtensions); err != nil {
+		h.errs.Abort(c, err)
+		return
+	}
+
 	// 分块读取，累计计数，超限即中止
 	data, err := readWithLimit(file, h.cfg.MaxFileSize)
 	if err != nil {
+		if errors.Is(err, storagex.ErrSizeExceeded) {
+			h.errs.Abort(c, &errs.ServiceError{
+				Code:       errs.CodeBadRequest,
+				MessageKey: "upload.exceed.maxSize",
+				KeyArgs:    []any{h.cfg.MaxFileSize / (1024 * 1024)},
+			})
+			return
+		}
 		h.errs.Abort(c, errs.BadRequest(err.Error()))
 		return
 	}
 
 	result, err := h.storage.Upload(c.Request.Context(), header.Filename, data)
 	if err != nil {
-		h.errs.Abort(c, err)
+		h.errs.Abort(c, errs.Wrap(err, errs.MsgSystemError))
 		return
 	}
-	envelope.OK(c, result)
+	envelope.OKMsg(c, result, "上传成功")
 }
 
-// Download GET /common/file/download?fileUrl=xxx
+// Download GET /common/file/download?file_url=xxx
 func (h *Handler) Download(c *gin.Context) {
-	fileURL := c.Query("fileUrl")
-	if fileURL == "" {
-		h.errs.Abort(c, errs.BadRequest("文件URL不能为空"))
+	fileURL, exists := c.GetQuery("file_url")
+	if !exists {
+		h.errs.Abort(c, errs.BadRequest("Field required"))
 		return
 	}
 
@@ -78,11 +94,11 @@ func (h *Handler) Download(c *gin.Context) {
 	c.Data(http.StatusOK, obj.ContentType, obj.Data)
 }
 
-// Delete DELETE /common/file/delete?fileUrl=xxx
+// Delete DELETE /common/file/delete?file_url=xxx
 func (h *Handler) Delete(c *gin.Context) {
-	fileURL := c.Query("fileUrl")
-	if fileURL == "" {
-		h.errs.Abort(c, errs.BadRequest("文件URL不能为空"))
+	fileURL, exists := c.GetQuery("file_url")
+	if !exists {
+		h.errs.Abort(c, errs.BadRequest("Field required"))
 		return
 	}
 
@@ -90,7 +106,7 @@ func (h *Handler) Delete(c *gin.Context) {
 		h.errs.Abort(c, errs.Wrap(err, errs.MsgSystemError))
 		return
 	}
-	envelope.OK(c, nil)
+	envelope.OKMsg(c, nil, "删除成功")
 }
 
 // readWithLimit 分块读取上传文件，超限即中止。
@@ -105,7 +121,7 @@ func readWithLimit(r io.Reader, maxSize int64) ([]byte, error) {
 		if n > 0 {
 			total += int64(n)
 			if total > maxSize {
-				return nil, io.ErrUnexpectedEOF
+				return nil, storagex.ErrSizeExceeded
 			}
 			buf = append(buf, chunk[:n]...)
 		}

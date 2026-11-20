@@ -153,8 +153,8 @@ func requestClientID(c *gin.Context, header string) string {
 // splitAuthScheme 复刻 starlette 的 get_authorization_scheme_param：
 // 按**第一个空格**切分，无空格时 scheme 取整串、token 为空。
 //
-// ⚠️ 与 service.go 的 extractBearerToken **语义不同**，不要合并：
-// 那个用于登出（宽松，接受裸 token，因为登出要幂等成功），
+// ⚠️ 与 service.go 的 extractLogoutToken **语义不同**，不要合并：
+// 那个用于登出（宽松，剥任意 scheme 前缀、接受裸 token，因为登出要幂等成功），
 // 这个用于鉴权（严格，scheme 不匹配就拒绝，与 OAuth2PasswordBearer 一致）。
 func splitAuthScheme(header string) (scheme, token string) {
 	if header == "" {

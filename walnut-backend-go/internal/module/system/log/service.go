@@ -139,13 +139,14 @@ func (s *Service) OperLogExportRows(ctx context.Context, q OperLogFilterParam) (
 			"id":            r.ID,
 			"title":         r.Title,
 			"businessType":  dictLabelInt(businessMap, r.BusinessType),
+			"method":        r.Method,
 			"requestMethod": r.RequestMethod,
 			"operatorType":  operatorTypeLabel(r.OperatorType),
 			"operName":      r.OperName,
 			"deptName":      r.DeptName,
+			"operUrl":       r.OperURL,
 			"operIp":        r.OperIP,
 			"operLocation":  r.OperLocation,
-			"operUrl":       r.OperURL,
 			"operParam":     r.OperParam,
 			"jsonResult":    r.JsonResult,
 			"status":        dictLabelInt(statusMap, r.Status),
@@ -219,13 +220,13 @@ func (s *Service) LogininforClean(ctx context.Context) error {
 
 type OperLogFilterParam struct {
 	Title         string
-	BusinessType  *int
-	BusinessTypes []int
-	Status        *int
+	BusinessType  *int64
+	BusinessTypes []int64
+	Status        *int64
 	OperName      string
 	OperIP        string
-	BeginTime     string
-	EndTime       string
+	BeginTime     *time.Time
+	EndTime       *time.Time
 }
 
 func (p OperLogFilterParam) toQuery() OperLogQueryParam {
@@ -241,8 +242,8 @@ type LogininforFilterParam struct {
 	UserName  string
 	IPAddr    string
 	Status    string
-	BeginTime string
-	EndTime   string
+	BeginTime *time.Time
+	EndTime   *time.Time
 }
 
 func (p LogininforFilterParam) toQuery() LogininforQueryParam {
@@ -270,11 +271,7 @@ func buildOperLogConditions(q OperLogQueryParam) []crudx.Cond {
 		conds = append(conds, crudx.Eq("business_type", *f.BusinessType))
 	}
 	if len(f.BusinessTypes) > 0 {
-		bt64 := make([]int64, 0, len(f.BusinessTypes))
-		for _, bt := range f.BusinessTypes {
-			bt64 = append(bt64, int64(bt))
-		}
-		conds = append(conds, crudx.In("business_type", bt64))
+		conds = append(conds, crudx.In("business_type", f.BusinessTypes))
 	}
 	if f.Status != nil {
 		conds = append(conds, crudx.Eq("status", *f.Status))
@@ -305,8 +302,10 @@ func buildLogininforConditions(q LogininforQueryParam) []crudx.Cond {
 
 // ---- Helpers ----
 
+// dictLabel 对应 Python `if row.status:` 真值判断后才查字典：nil/空串保持原样
+// （单元格为空），未命中回退原值。
 func dictLabel(m map[string]string, key *string) string {
-	if key == nil {
+	if key == nil || *key == "" {
 		return ""
 	}
 	if v, ok := m[*key]; ok {
@@ -315,20 +314,23 @@ func dictLabel(m map[string]string, key *string) string {
 	return *key
 }
 
-func dictLabelInt(m map[string]string, key *int) string {
+// dictLabelInt 对应 Python labels.get(str(v), v)：未命中回退**数字本身**
+// （Excel 单元格保留数值类型），nil 保持空单元格。
+func dictLabelInt(m map[string]string, key *int) any {
 	if key == nil {
-		return ""
+		return nil
 	}
-	k := strconv.Itoa(*key)
-	if v, ok := m[k]; ok {
+	if v, ok := m[strconv.Itoa(*key)]; ok {
 		return v
 	}
-	return k
+	return *key
 }
 
-func operatorTypeLabel(v *int) string {
+// operatorTypeLabel 对应 OPERATOR_TYPE_LABELS.get(str(v), v)：
+// nil → 空单元格；未知值 → 原数字（不是「其它」）。
+func operatorTypeLabel(v *int) any {
 	if v == nil {
-		return "其它"
+		return nil
 	}
 	switch *v {
 	case 0:
@@ -338,7 +340,7 @@ func operatorTypeLabel(v *int) string {
 	case 2:
 		return "手机端用户"
 	}
-	return "其它"
+	return *v
 }
 
 func timePtrStr(t *time.Time) *string {
@@ -364,19 +366,11 @@ func pickSnake(field string) func(any) any {
 	}
 }
 
-func dateRange(beginTime, endTime string) (time.Time, time.Time, bool) {
-	if beginTime == "" || endTime == "" {
+func dateRange(beginTime, endTime *time.Time) (time.Time, time.Time, bool) {
+	if beginTime == nil || endTime == nil {
 		return time.Time{}, time.Time{}, false
 	}
-	begin, err := time.Parse("2006-01-02", beginTime)
-	if err != nil {
-		return time.Time{}, time.Time{}, false
-	}
-	end, err := time.Parse("2006-01-02", endTime)
-	if err != nil {
-		return time.Time{}, time.Time{}, false
-	}
-	return begin, end.Add(24*time.Hour - time.Second), true
+	return *beginTime, endTime.Add(24*time.Hour - time.Second), true
 }
 
 func formatDateTime(t *time.Time) string {

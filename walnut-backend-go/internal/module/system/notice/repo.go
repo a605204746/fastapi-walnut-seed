@@ -130,26 +130,36 @@ func (r *Repo) UserNameMap(ctx context.Context, ids []int64) (map[int64]*string,
 }
 
 // DictLabelMap 批量取字典标签（dict_type + dict_values → labels），
-// 对应 _dict_label_map。
+// 对应 get_notice_type_label 的字典查询。
+//
+// ⚠️ **不过滤 status**（Python 端 where 只有 dict_type + dict_value，实测钉住）；
+// 同值多行时取**第一行**（.scalars().first()），label 为 NULL 记 ""（调用方回退原值）。
 func (r *Repo) DictLabelMap(ctx context.Context, dictType string, values []string) (map[string]string, error) {
 	out := make(map[string]string, len(values))
 	if len(values) == 0 {
 		return out, nil
 	}
 	type row struct {
-		DictValue string `gorm:"column:dict_value"`
-		DictLabel string `gorm:"column:dict_label"`
+		DictValue string  `gorm:"column:dict_value"`
+		DictLabel *string `gorm:"column:dict_label"`
 	}
 	var rows []row
 	err := r.db.WithContext(ctx).Table("sys_dict_data").
 		Select("dict_value, dict_label").
-		Where("dict_type = ? AND status = '0' AND dict_value IN ?", dictType, values).
+		Where("dict_type = ? AND dict_value IN ?", dictType, values).
 		Scan(&rows).Error
 	if err != nil {
 		return nil, err
 	}
 	for i := range rows {
-		out[rows[i].DictValue] = rows[i].DictLabel
+		if _, ok := out[rows[i].DictValue]; ok {
+			continue
+		}
+		label := ""
+		if rows[i].DictLabel != nil {
+			label = *rows[i].DictLabel
+		}
+		out[rows[i].DictValue] = label
 	}
 	return out, nil
 }

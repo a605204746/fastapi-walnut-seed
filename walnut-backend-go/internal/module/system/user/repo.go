@@ -52,15 +52,18 @@ func (r *Repo) ListExport(ctx context.Context, conds []crudx.Cond, scope permx.S
 		DeptName   *string `gorm:"column:dept_name"`
 		LeaderName *string `gorm:"column:leader_name"`
 	}
+	// 条件/数据权限的列名不带限定词，而 leader 也是 sys_user——MySQL 里别名表
+	// 的列同样参与无限定列名解析，直接 JOIN 会触发 1052 歧义。故先在无 JOIN 的
+	// 子查询里过滤，外层只做名称翻译 JOIN。
+	inner := r.db.WithContext(ctx).Table("sys_user").Where("del_flag = ?", modelx.Normal)
+	inner = scope.Apply(inner)
+	inner = crudx.Apply(inner, conds...)
 	q := r.db.WithContext(ctx).
-		Table("sys_user u").
-		Select("u.*, d.dept_name, leader.nick_name AS leader_name").
+		Table("(?) AS u", inner).
+		Select("u.*, d.dept_name, leader.user_name AS leader_name").
 		Joins("LEFT JOIN sys_dept d ON d.id = u.dept_id AND d.del_flag = ?", modelx.Normal).
 		Joins("LEFT JOIN sys_user leader ON leader.id = d.leader").
-		Where("u.del_flag = ?", modelx.Normal)
-	q = scope.Apply(q)
-	q = crudx.Apply(q, conds...)
-	q = q.Order("u.id ASC")
+		Order("u.id ASC")
 	var rows []joinRow
 	if err := q.Find(&rows).Error; err != nil {
 		return nil, err
@@ -186,24 +189,18 @@ func (r *Repo) UpdateAvatar(ctx context.Context, userID int64, avatar string) (i
 }
 
 func (r *Repo) UpdateProfile(ctx context.Context, userID int64, nickName *string, phone *string, email *string, sex *string) (int64, error) {
-	updates := map[string]any{}
+	// Python update_user_profile：phonenumber/email/sex 无条件覆盖（缺省置 NULL），
+	// nickName 仅在显式提供时更新
+	updates := map[string]any{
+		"phonenumber": phone,
+		"email":       email,
+		"sex":         sex,
+	}
 	if nickName != nil {
 		updates["nick_name"] = *nickName
 	}
-	if phone != nil {
-		updates["phonenumber"] = *phone
-	}
-	if email != nil {
-		updates["email"] = *email
-	}
-	if sex != nil {
-		updates["sex"] = *sex
-	}
-	if len(updates) == 0 {
-		return 0, nil
-	}
 	res := r.db.WithContext(ctx).Model(&SysUser{}).
-		Where("id = ? AND del_flag = ?", userID, modelx.Normal).
+		Where("id = ?", userID).
 		Updates(updates)
 	return res.RowsAffected, res.Error
 }
@@ -385,18 +382,6 @@ func (r *Repo) PostNameGroup(ctx context.Context, userID int64) (string, error) 
 		join += n
 	}
 	return join, nil
-}
-
-func (r *Repo) AllNormalRoles(ctx context.Context) ([]role.SysRole, error) {
-	rows := make([]role.SysRole, 0)
-	err := r.db.WithContext(ctx).Model(&role.SysRole{}).
-		Where("del_flag = ? AND status = ?", modelx.Normal, modelx.Normal).
-		Clauses(clause.OrderBy{Columns: []clause.OrderByColumn{
-			{Column: clause.Column{Name: "role_sort"}},
-			{Column: clause.Column{Name: "create_time"}},
-		}}).
-		Find(&rows).Error
-	return rows, err
 }
 
 func (r *Repo) PostsByDeptID(ctx context.Context, deptID int64) ([]PostInfo, error) {

@@ -9,6 +9,17 @@
 //	GET  /auth/code         图形验证码
 package auth
 
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"unicode/utf8"
+
+	"walnut-seed-go/internal/pkg/errs"
+	"walnut-seed-go/internal/pkg/validatex"
+)
+
 // LoginRequest 登录公共入参，对应 Python 端 LoginBodySchema。
 //
 // ⚠️ json tag 用 **camelCase**（clientId/grantType/tenantId）：
@@ -37,6 +48,90 @@ type RegisterRequest struct {
 	Username string  `json:"username" binding:"required,min=2,max=30"`
 	Password string  `json:"password" binding:"required,min=5,max=30"`
 	UserType *string `json:"userType"`
+}
+
+// decodeLoginBody / decodeRegisterBody 镜像 Pydantic 的**全量错误收集**：
+// 按字段声明序（clientId → grantType → tenantId → code → uuid → username →
+// password [→ userType]）逐字段校验，多条错误用 ", " 拼接。
+// ShouldBindJSON 遇到第一个类型错误即返回，无法复刻多错误拼接，故弃用。
+func decodeLoginBody(body []byte) (PasswordLoginRequest, error) {
+	req, _, err := decodeAuthFields(body, "PasswordLoginBodySchema", false)
+	return req, err
+}
+
+func decodeRegisterBody(body []byte) (RegisterRequest, error) {
+	req, ut, err := decodeAuthFields(body, "RegisterBodySchema", true)
+	return RegisterRequest{LoginRequest: req.LoginRequest, Username: req.Username, Password: req.Password, UserType: ut}, err
+}
+
+func decodeAuthFields(body []byte, model string, withUserType bool) (PasswordLoginRequest, *string, error) {
+	var req PasswordLoginRequest
+	trimmed := strings.TrimSpace(string(body))
+	if trimmed == "" {
+		// 空 body：FastAPI 对必填 body 模型报单条 body 级 "Field required"
+		return req, nil, errs.BadRequest("Field required")
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(body, &fields); err != nil {
+		var syntax *json.SyntaxError
+		if errors.As(err, &syntax) {
+			return req, nil, errs.BadRequest(validatex.MsgJSONInvalid)
+		}
+		return req, nil, errs.BadRequest("Input should be a valid dictionary or instance of " + model)
+	}
+
+	var msgs []string
+	// required：缺省 → Field required；null/非字符串 → string_type；长度按 rune 计
+	reqStr := func(key string, min, max int, dst *string) {
+		raw, present := fields[key]
+		if !present {
+			msgs = append(msgs, "Field required")
+			return
+		}
+		var s string
+		if err := json.Unmarshal(raw, &s); err != nil {
+			msgs = append(msgs, "Input should be a valid string")
+			return
+		}
+		n := utf8.RuneCountInString(s)
+		if n < min {
+			msgs = append(msgs, fmt.Sprintf("String should have at least %d characters", min))
+			return
+		}
+		if n > max {
+			msgs = append(msgs, fmt.Sprintf("String should have at most %d characters", max))
+			return
+		}
+		*dst = s
+	}
+	optStr := func(key string, dst **string) {
+		raw, present := fields[key]
+		if !present || string(raw) == "null" {
+			return
+		}
+		var s string
+		if err := json.Unmarshal(raw, &s); err != nil {
+			msgs = append(msgs, "Input should be a valid string")
+			return
+		}
+		*dst = &s
+	}
+
+	reqStr("clientId", 1, 1<<30, &req.ClientID)
+	reqStr("grantType", 1, 1<<30, &req.GrantType)
+	optStr("tenantId", &req.TenantID)
+	optStr("code", &req.Code)
+	optStr("uuid", &req.UUID)
+	reqStr("username", 2, 30, &req.Username)
+	reqStr("password", 5, 30, &req.Password)
+	var userType *string
+	if withUserType {
+		optStr("userType", &userType)
+	}
+	if len(msgs) > 0 {
+		return req, nil, errs.BadRequest(strings.Join(msgs, ", "))
+	}
+	return req, userType, nil
 }
 
 // LoginResponse 登录成功响应。

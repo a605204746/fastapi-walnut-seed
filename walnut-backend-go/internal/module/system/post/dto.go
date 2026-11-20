@@ -20,11 +20,16 @@ package post
 
 import (
 	"encoding/json"
+	"fmt"
+	"math"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
+	"walnut-seed-go/internal/module/system/dept"
 	"walnut-seed-go/internal/pkg/crudx"
 	"walnut-seed-go/internal/pkg/errs"
 	"walnut-seed-go/internal/pkg/idtype"
@@ -106,20 +111,53 @@ type QueryParam struct {
 // BindQueryParam 从查询串解析，对应 FastAPI 的 Depends() 注入。
 //
 // ⚠️ 用 crudx.BindPageQuery（pageSize 默认 10、上限 1000），不是 BindPage。
+// deptId/belongDeptId 是 int|None、beginTime/endTime 是 DateStr|None：
+// 出现（含空串）即校验，非法 → 400 Pydantic 原文；多个错误按声明序拼接
+// （pageNum/pageSize → deptId → belongDeptId → beginTime → endTime，已实测钉住）。
 func BindQueryParam(q crudx.Querier) (QueryParam, error) {
-	page, err := crudx.BindPageQuery(q)
-	if err != nil {
-		return QueryParam{}, err
-	}
+	page, pageErr := crudx.BindPageQuery(q)
 	p := QueryParam{Page: page}
-	p.DeptID = queryInt(q, "deptId")
-	p.BelongDeptID = queryInt(q, "belongDeptId")
+	var msgs []string
+	if pageErr != nil {
+		se := errs.As(pageErr)
+		if se == nil {
+			return QueryParam{}, pageErr
+		}
+		msgs = append(msgs, se.Msg)
+	}
+	intField := func(key string, dst **int64) {
+		if raw, ok := q.GetQuery(key); ok {
+			n, valid := dept.ParsePyQueryInt(raw)
+			if !valid {
+				msgs = append(msgs, msgValidInt)
+				return
+			}
+			*dst = &n
+		}
+	}
+	dateField := func(key string, dst *string) {
+		if raw, ok := q.GetQuery(key); ok {
+			v, derr := dept.ParseDateQuery(raw)
+			if derr != nil {
+				if se := errs.As(derr); se != nil {
+					msgs = append(msgs, se.Msg)
+				}
+				return
+			}
+			*dst = v
+		}
+	}
+	intField("deptId", &p.DeptID)
+	intField("belongDeptId", &p.BelongDeptID)
 	p.PostCode = q.Query("postCode")
 	p.PostCategory = q.Query("postCategory")
 	p.PostName = q.Query("postName")
 	p.Status = q.Query("status")
-	p.BeginTime = q.Query("beginTime")
-	p.EndTime = q.Query("endTime")
+	dateField("beginTime", &p.BeginTime)
+	dateField("endTime", &p.EndTime)
+	if len(msgs) > 0 {
+		return QueryParam{}, errs.BadRequest(strings.Join(msgs, ", "))
+	}
 	return p, nil
 }
 
@@ -138,34 +176,47 @@ type DeptTreeQuery struct {
 }
 
 // BindDeptTreeQuery 从查询串解析部门树参数。
-func BindDeptTreeQuery(q crudx.Querier) DeptTreeQuery {
-	return DeptTreeQuery{
-		ID:           queryInt(q, "id"),
-		ParentID:     queryInt(q, "parentId"),
-		BelongDeptID: queryInt(q, "belongDeptId"),
-		DeptName:     q.Query("deptName"),
-		DeptCategory: q.Query("deptCategory"),
-		Status:       q.Query("status"),
-		BeginTime:    q.Query("beginTime"),
-		EndTime:      q.Query("endTime"),
-	}
-}
-
-// queryInt 读取可选整型查询参数。
 //
-// 非法值返回 nil（视为未提供）。Python 端 Pydantic 会报校验错误，
-// 但 GET 查询参数的类型错误在本项目前端不会触发；若后续契约比对发现偏差，
-// 应改为返回错误而非静默忽略。
-func queryInt(q crudx.Querier, key string) *int64 {
-	raw, ok := q.GetQuery(key)
-	if !ok || strings.TrimSpace(raw) == "" {
-		return nil
+// id/parentId/belongDeptId 是 int|None、beginTime/endTime 是 DateStr|None：
+// 出现（含空串）即校验，非法 → 400 Pydantic 原文，按声明序拼接
+// （id → parentId → belongDeptId → beginTime → endTime）。
+func BindDeptTreeQuery(q crudx.Querier) (DeptTreeQuery, error) {
+	var out DeptTreeQuery
+	var msgs []string
+	intField := func(key string, dst **int64) {
+		if raw, ok := q.GetQuery(key); ok {
+			n, valid := dept.ParsePyQueryInt(raw)
+			if !valid {
+				msgs = append(msgs, msgValidInt)
+				return
+			}
+			*dst = &n
+		}
 	}
-	n, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
-	if err != nil {
-		return nil
+	dateField := func(key string, dst *string) {
+		if raw, ok := q.GetQuery(key); ok {
+			v, derr := dept.ParseDateQuery(raw)
+			if derr != nil {
+				if se := errs.As(derr); se != nil {
+					msgs = append(msgs, se.Msg)
+				}
+				return
+			}
+			*dst = v
+		}
 	}
-	return &n
+	intField("id", &out.ID)
+	intField("parentId", &out.ParentID)
+	intField("belongDeptId", &out.BelongDeptID)
+	out.DeptName = q.Query("deptName")
+	out.DeptCategory = q.Query("deptCategory")
+	out.Status = q.Query("status")
+	dateField("beginTime", &out.BeginTime)
+	dateField("endTime", &out.EndTime)
+	if len(msgs) > 0 {
+		return DeptTreeQuery{}, errs.BadRequest(strings.Join(msgs, ", "))
+	}
+	return out, nil
 }
 
 // ---- 写入入参 ----
@@ -404,14 +455,14 @@ func parseLooseInt(raw json.RawMessage) (int64, bool, string) {
 	if text == "" || text == "null" {
 		return 0, false, ""
 	}
-	// 字符串形式：必须是纯整数字面量
+	// 字符串形式：Pydantic lax str→int 接受 "3.0"→3、"1_0"→10（拒绝 "1e2"/"3.5"）
 	if strings.HasPrefix(text, `"`) {
 		var s string
 		if err := json.Unmarshal(raw, &s); err != nil {
 			return 0, false, msgValidStr
 		}
-		n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
-		if err != nil {
+		n, valid := dept.ParsePyQueryInt(s)
+		if !valid {
 			return 0, false, msgValidInt
 		}
 		return n, true, ""
@@ -429,6 +480,188 @@ func parseLooseInt(raw json.RawMessage) (int64, bool, string) {
 		return 0, false, msgValidIntNum
 	}
 	return int64(f), true, ""
+}
+
+// ---- 导出 form 校验（POST /post/export）----
+//
+// ⚠️ Python 端 export_post 是**手工** `PostQueryParam.model_validate(form-data)`，
+// 抛的是 pydantic ValidationError（ValueError 子类）→ 全局 ValueError 处理器
+// **原样透传 str(exc)**——不是列表接口那种剥净的 ", " 拼接文案。
+// 实测原文形如：
+//
+//	1 validation error for PostQueryParam
+//	deptId
+//	  Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='abc', input_type=str]
+//	    For further information visit https://errors.pydantic.dev/2.13/v/int_parsing
+//
+// 多错误时首行是 "N validation errors for PostQueryParam"，各字段按声明序追加。
+// 另两个实测钉住的点：form 打底（**query 不参与**）、pageSize 在校验前被 pop
+// （pageNum 仍参与校验，ge=1 失败时 input_value 是原始字符串、input_type=str）。
+
+// FormFieldError 一条 ValidationError 明细（Loc 用驼峰别名，与实测一致）。
+// 导出供其他模块的 export 端点复用同款 pydantic 错误排版。
+type FormFieldError struct {
+	Loc   string
+	Msg   string
+	Typ   string
+	Input string
+}
+
+// bindExportForm 镜像 PostQueryParam.model_validate(data)（python 模式、值全为 str）。
+// data 已由调用方过滤空值并 pop pageSize。
+func bindExportForm(data map[string]string) (QueryParam, error) {
+	var q QueryParam
+	var ferrs []FormFieldError
+	addErr := func(loc, msg, typ, input string) {
+		ferrs = append(ferrs, FormFieldError{Loc: loc, Msg: msg, Typ: typ, Input: input})
+	}
+
+	// page_num: int = Field(default=1, ge=1)——解析失败报 int_parsing，
+	// 解析成功但 <1 报 greater_than_equal（input_value 仍是原始串）。
+	if raw, ok := data["pageNum"]; ok {
+		n, valid := dept.ParsePyQueryInt(raw)
+		switch {
+		case !valid:
+			addErr("pageNum", msgValidInt, "int_parsing", raw)
+		case n < 1:
+			addErr("pageNum", "Input should be greater than or equal to 1", "greater_than_equal", raw)
+		}
+	}
+	intField := func(key string, dst **int64) {
+		if raw, ok := data[key]; ok {
+			n, valid := dept.ParsePyQueryInt(raw)
+			if !valid {
+				addErr(key, msgValidInt, "int_parsing", raw)
+				return
+			}
+			*dst = &n
+		}
+	}
+	intField("deptId", &q.DeptID)
+	intField("belongDeptId", &q.BelongDeptID)
+	q.PostCode = data["postCode"]
+	q.PostCategory = data["postCategory"]
+	q.PostName = data["postName"]
+	q.Status = data["status"]
+	dateField := func(key string, dst *string) {
+		if raw, ok := data[key]; ok {
+			v, derr := dept.ParseDateQuery(raw)
+			if derr != nil {
+				if se := errs.As(derr); se != nil {
+					addErr(key, se.Msg, DateErrType(se.Msg), raw)
+				}
+				return
+			}
+			*dst = v
+		}
+	}
+	dateField("beginTime", &q.BeginTime)
+	dateField("endTime", &q.EndTime)
+
+	if len(ferrs) > 0 {
+		return QueryParam{}, errs.BadRequest(ValidationErrorText("PostQueryParam", ferrs))
+	}
+	return q, nil
+}
+
+// DateErrType 由 dept.ParseDateQuery 的原文反推 pydantic 错误类型（实测钉住）：
+// 零时间判定 → date_from_datetime_inexact；year 0 → date_parsing；其余 → date_from_datetime_parsing。
+func DateErrType(msg string) string {
+	switch {
+	case strings.HasPrefix(msg, "Datetimes provided to dates"):
+		return "date_from_datetime_inexact"
+	case strings.HasPrefix(msg, "Input should be a valid date in the format"):
+		return "date_parsing"
+	default:
+		return "date_from_datetime_parsing"
+	}
+}
+
+// ValidationErrorText 复刻 pydantic ValidationError.__str__ 的排版（含错误详情 URL）。
+func ValidationErrorText(model string, ferrs []FormFieldError) string {
+	var b strings.Builder
+	if len(ferrs) == 1 {
+		b.WriteString("1 validation error for ")
+	} else {
+		fmt.Fprintf(&b, "%d validation errors for ", len(ferrs))
+	}
+	b.WriteString(model)
+	for _, e := range ferrs {
+		b.WriteString("\n")
+		b.WriteString(e.Loc)
+		b.WriteString("\n  ")
+		b.WriteString(e.Msg)
+		b.WriteString(" [type=")
+		b.WriteString(e.Typ)
+		b.WriteString(", input_value=")
+		b.WriteString(PyRepr(e.Input))
+		b.WriteString(", input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/")
+		b.WriteString(e.Typ)
+	}
+	return b.String()
+}
+
+// PyRepr 复刻 Python repr(str)：优先单引号，含 ' 且不含 " 时改用双引号；
+// 转义反斜杠与常见控制字符，可打印 Unicode（如中文）原样保留。
+func PyRepr(s string) string {
+	quote := '\''
+	if strings.ContainsRune(s, '\'') && !strings.ContainsRune(s, '"') {
+		quote = '"'
+	}
+	var b strings.Builder
+	b.WriteRune(quote)
+	for _, r := range s {
+		switch r {
+		case '\\':
+			b.WriteString(`\\`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		case quote:
+			b.WriteRune('\\')
+			b.WriteRune(r)
+		default:
+			switch {
+			case r < 0x20 || r == 0x7f:
+				fmt.Fprintf(&b, `\x%02x`, r)
+			case !unicode.IsPrint(r):
+				if r <= 0xffff {
+					fmt.Fprintf(&b, `\u%04x`, r)
+				} else {
+					fmt.Fprintf(&b, `\U%08x`, r)
+				}
+			default:
+				b.WriteRune(r)
+			}
+		}
+	}
+	b.WriteRune(quote)
+	return b.String()
+}
+
+// pyIntArgRE 匹配 Python int() 接受的形态：可选符号 + 数字间可单个下划线。
+var pyIntArgRE = regexp.MustCompile(`^[+-]?[0-9](_?[0-9])*$`)
+
+// pyAtoi 复刻 Python int(str)（optionselect 的 postIds 分量用）：
+// 接受 "1_0"=10、"+1"、"-1"，拒绝 "3.0"/"1e2"/"_1"/"1__0"/"1_"。
+// 失败返回 ValueError 原文风格的 error（调用方按模块契约映射文案，
+// post/optionselect 两端同步后报「岗位ID格式有误」）。
+// Python int 无溢出概念，超出 int64 时钳到边界（后续 SQL 比较同样查不到行）。
+func pyAtoi(s string) (int64, error) {
+	if !pyIntArgRE.MatchString(s) {
+		return 0, fmt.Errorf("invalid literal for int() with base 10: %s", PyRepr(s))
+	}
+	n, err := strconv.ParseInt(strings.ReplaceAll(s, "_", ""), 10, 64)
+	if err != nil {
+		if strings.HasPrefix(s, "-") {
+			return math.MinInt64, nil
+		}
+		return math.MaxInt64, nil
+	}
+	return n, nil
 }
 
 // ---- 小工具（与其它模块的 dto.go 同构，便于复制）----

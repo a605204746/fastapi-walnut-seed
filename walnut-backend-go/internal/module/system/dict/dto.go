@@ -16,6 +16,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"walnut-seed-go/internal/module/system/dept"
 	"walnut-seed-go/internal/pkg/crudx"
 	"walnut-seed-go/internal/pkg/errs"
 	"walnut-seed-go/internal/pkg/idtype"
@@ -89,18 +90,43 @@ type TypeQuery struct {
 }
 
 // BindTypeQuery 从查询串解析（分页用 BindPageQuery：缺省 10 条/上限 1000）。
+//
+// beginTime/endTime 是 DateStr|None：出现（含空串）即走 Pydantic 解析，
+// 非法 → 400 date 解析原文（dept.ParseDateQuery）。多个错误按声明序拼接：
+// pageNum/pageSize（crudx）→ beginTime → endTime（已用 Python 实测钉住）。
 func BindTypeQuery(q crudx.Querier) (TypeQuery, error) {
-	page, err := crudx.BindPageQuery(q)
-	if err != nil {
-		return TypeQuery{}, err
+	page, pageErr := crudx.BindPageQuery(q)
+	out := TypeQuery{
+		Page:     page,
+		DictName: q.Query("dictName"),
+		DictType: q.Query("dictType"),
 	}
-	return TypeQuery{
-		Page:      page,
-		DictName:  q.Query("dictName"),
-		DictType:  q.Query("dictType"),
-		BeginTime: q.Query("beginTime"),
-		EndTime:   q.Query("endTime"),
-	}, nil
+	var msgs []string
+	if pageErr != nil {
+		se := errs.As(pageErr)
+		if se == nil {
+			return TypeQuery{}, pageErr
+		}
+		msgs = append(msgs, se.Msg)
+	}
+	dateField := func(key string, dst *string) {
+		if raw, ok := q.GetQuery(key); ok {
+			v, derr := dept.ParseDateQuery(raw)
+			if derr != nil {
+				if se := errs.As(derr); se != nil {
+					msgs = append(msgs, se.Msg)
+				}
+				return
+			}
+			*dst = v
+		}
+	}
+	dateField("beginTime", &out.BeginTime)
+	dateField("endTime", &out.EndTime)
+	if len(msgs) > 0 {
+		return TypeQuery{}, errs.BadRequest(strings.Join(msgs, ", "))
+	}
+	return out, nil
 }
 
 // DataQuery 字典数据列表/导出查询参数，对应 DictDataQueryParam。
@@ -113,21 +139,31 @@ type DataQuery struct {
 
 // BindDataQuery 从查询串解析。
 //
-// ⚠️ dictSort 是 `int | None` 查询参数：显式出现即由 Pydantic 校验，
-// 非法（含空串）→ 400 原文；缺省才是 nil。与 post/dept 的静默 queryInt 不同，
-// 这里按契约返回 400（diff 脚本覆盖该分支）。
+// ⚠️ dictSort 是 `int | None` 查询参数：显式出现即由 Pydantic lax int 校验
+// （接受 "3.0"→3、"1_0"→10），非法（含空串）→ 400 int_parsing 原文；缺省才是 nil。
+// 分页错误与 dictSort 错误按声明序拼接（pageNum/pageSize 在前）。
 func BindDataQuery(q crudx.Querier) (DataQuery, error) {
-	page, err := crudx.BindPageQuery(q)
-	if err != nil {
-		return DataQuery{}, err
-	}
+	page, pageErr := crudx.BindPageQuery(q)
 	out := DataQuery{Page: page, DictLabel: q.Query("dictLabel"), DictType: q.Query("dictType")}
-	if raw, ok := q.GetQuery("dictSort"); ok {
-		n, perr := strconv.Atoi(strings.TrimSpace(raw))
-		if perr != nil {
-			return DataQuery{}, errs.BadRequest(msgValidInt)
+	var msgs []string
+	if pageErr != nil {
+		se := errs.As(pageErr)
+		if se == nil {
+			return DataQuery{}, pageErr
 		}
-		out.DictSort = &n
+		msgs = append(msgs, se.Msg)
+	}
+	if raw, ok := q.GetQuery("dictSort"); ok {
+		n, valid := dept.ParsePyQueryInt(raw)
+		if !valid {
+			msgs = append(msgs, msgValidInt)
+		} else {
+			v := int(n)
+			out.DictSort = &v
+		}
+	}
+	if len(msgs) > 0 {
+		return DataQuery{}, errs.BadRequest(strings.Join(msgs, ", "))
 	}
 	return out, nil
 }
@@ -467,8 +503,10 @@ func parseLooseInt(raw json.RawMessage) (int64, bool, string) {
 		if err := json.Unmarshal(raw, &s); err != nil {
 			return 0, false, msgValidStr
 		}
-		n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
-		if err != nil {
+		// Pydantic lax str→int 接受 "3.0"→3、"1_0"→10（拒绝 "1e2"/"3.5"），
+		// 与查询参数同款解析器（dept.ParsePyQueryInt）。
+		n, valid := dept.ParsePyQueryInt(s)
+		if !valid {
 			return 0, false, msgValidInt
 		}
 		return n, true, ""
