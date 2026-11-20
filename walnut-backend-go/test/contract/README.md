@@ -84,3 +84,16 @@ P3 起业务端点大量接入后，建议：
 2. 增加「路由清单 diff」：从 Python 的 `/openapi.json` 提取 `(method, path)` 全集，
    与 Go 的 `Builder.Routes()` 对比，缺失或多余都算失败（防止私自增删接口造成漂移）
 3. 接入 `scripts/smoke_all.py` 已有的全端点冒烟能力，避免重复造轮子
+
+## 已落地的补充脚本
+
+- `routes_inventory_test.go`：路由清单 diff（上述第 2 条），`go test ./test/contract/` 即可跑，纯静态。
+- `diff_auth.py` / `diff_system.py` / `diff_{client,config,dept,dict,menu,notice,post,role,social}.py`：
+  各模块双端响应逐字节比对（需两端运行 + MySQL/Redis 可达）。
+- `diff_p0_fixes.py`：2026-11-20 契约深挖修复的回归集，覆盖既有脚本盲区：
+  file 参数名/上传出参/白名单/回源 404 形状、user 出参（posts/null 键）与校验拼接、
+  非数字路径 405/404 语义、sse/close 参数、WS 拒绝握手 403、monitor 操作日志
+  title/method 列与 unlock 的 Redis 键副作用、user/export 的 query 过滤与单元格内容。
+  跑法同上：`python test/contract/diff_p0_fixes.py --py http://127.0.0.1:8012 --go http://127.0.0.1:8011`。
+  注意：登录限流 10 次/分/IP，连续跑多个脚本前清计数：
+  `docker exec walnut-redis sh -c 'redis-cli --scan --pattern "*rate_limit*" | xargs -r redis-cli del'`。
