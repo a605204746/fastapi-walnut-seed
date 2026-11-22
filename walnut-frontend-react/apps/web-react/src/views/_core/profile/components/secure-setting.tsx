@@ -1,4 +1,4 @@
-import { useVbenForm, type FormSchema } from '@vben-core/form-ui';
+import { useWalnutForm, type FormSchema } from '@walnut-core/form-ui';
 
 import { userUpdatePassword } from '@/api/system/profile';
 import { getMessageApi } from '@/services/message';
@@ -65,7 +65,7 @@ const formSchema: FormSchema[] = [
 export function SecureSetting() {
   const logout = useAuthStore((state) => state.logout);
 
-  const [BasicForm, formApi] = useVbenForm({
+  const [BasicForm, formApi] = useWalnutForm({
     commonConfig: { labelWidth: 90 },
     schema: formSchema,
     showDefaultActions: false,

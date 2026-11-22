@@ -2,9 +2,9 @@ import { forwardRef, useImperativeHandle, useState } from 'react';
 
 import type { SysConfig } from '@/api/system/config/model';
 
-import { useVbenForm, type FormSchema } from '@vben-core/form-ui';
-import { useVbenModal } from '@vben-core/popup-ui';
-import { cloneDeep } from '@vben-core/shared/utils';
+import { useWalnutForm, type FormSchema } from '@walnut-core/form-ui';
+import { useWalnutModal } from '@walnut-core/popup-ui';
+import { cloneDeep } from '@walnut-core/shared/utils';
 
 import { configAdd, configInfo, configUpdate } from '@/api/system/config';
 import { useDictStore } from '@/store/dict';
@@ -32,13 +32,13 @@ export const ConfigModal = forwardRef<ConfigModalHandle, ConfigModalProps>(
     useDictStore((state) => state.map);
     const [isUpdate, setIsUpdate] = useState(false);
 
-    const [BasicForm, formApi] = useVbenForm({
+    const [BasicForm, formApi] = useWalnutForm({
       commonConfig: { labelWidth: 80 },
       schema: modalSchema() as FormSchema[],
       showDefaultActions: false,
     });
 
-    const [BasicModal, modalApi] = useVbenModal({
+    const [BasicModal, modalApi] = useWalnutModal({
       onClosed: async () => {
         await formApi.resetForm();
       },

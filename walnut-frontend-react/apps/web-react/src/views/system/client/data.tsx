@@ -2,8 +2,8 @@ import type { FormSchemaGetter } from '@/adapter/form';
 
 import type { GridColumn } from '@/adapter/grid';
 
-import { DictEnum } from '@vben/constants';
-import { getPopupContainer } from '@vben/utils';
+import { DictEnum } from '@walnut/constants';
+import { getPopupContainer } from '@walnut/utils';
 
 import { getDictOptions } from '@/utils/dict';
 import { renderDict, renderDictTags } from '@/utils/render';

@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-/// <reference types="@vben/types/global" />
+/// <reference types="@walnut/types/global" />
 
 /**
  * 扩展 axios 的请求配置。

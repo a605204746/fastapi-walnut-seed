@@ -1,4 +1,4 @@
-import { Store } from '@vben-core/shared/store';
+import { Store } from '@walnut-core/shared/store';
 
 export type DrawerPlacement = 'bottom' | 'left' | 'right' | 'top';
 
@@ -215,7 +215,7 @@ export class DrawerApi {
     return this.lock(false);
   }
 
-  /** 每次渲染同步最新回调，避免 useVbenDrawer 构造时捕获的闭包过期 */
+  /** 每次渲染同步最新回调，避免 useWalnutDrawer 构造时捕获的闭包过期 */
   updateCallbacks(options: DrawerApiOptions) {
     this.api = {
       onBeforeClose: options.onBeforeClose,

@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 
-import { defineConfig } from '@vben/vite-config';
+import { defineConfig } from '@walnut/vite-config';
 
 export default defineConfig(async () => {
   // 后端服务地址，与 walnut-frontend/apps/web-antd/vite.config.ts 保持一致

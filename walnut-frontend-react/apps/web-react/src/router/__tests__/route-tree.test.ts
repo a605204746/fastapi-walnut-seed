@@ -1,4 +1,4 @@
-import type { AppRouteObject } from '@vben-core/typings';
+import type { AppRouteObject } from '@walnut-core/typings';
 
 import { describe, expect, it } from 'vitest';
 

@@ -4,15 +4,15 @@ import type {
   MenuRecordRaw,
   RouteHandle,
   RouteMeta,
-} from '@vben-core/typings';
+} from '@walnut-core/typings';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { updatePreferences, usePreferences } from '@vben/preferences';
-import { useAccessStore, useUserStore } from '@vben/stores';
-import { findMenuByPath, setObjToUrlParams } from '@vben/utils';
-import { isHttpUrl } from '@vben-core/shared/utils';
-import { VbenIcon, VbenIconButton } from '@vben-core/shadcn-ui';
+import { updatePreferences, usePreferences } from '@walnut/preferences';
+import { useAccessStore, useUserStore } from '@walnut/stores';
+import { findMenuByPath, setObjToUrlParams } from '@walnut/utils';
+import { isHttpUrl } from '@walnut-core/shared/utils';
+import { WalnutIcon, WalnutIconButton } from '@walnut-core/shadcn-ui';
 import { Avatar, Badge, Breadcrumb, ConfigProvider, Dropdown, Drawer, Layout } from 'antd';
 import {
   ChevronsLeft,
@@ -26,8 +26,8 @@ import {
 } from 'lucide-react';
 import { useLocation, useMatches, useNavigate } from 'react-router';
 
-import { VbenMenu } from '@/adapter/menu';
-import { VbenTabs } from '@/adapter/tabs';
+import { WalnutMenu } from '@/adapter/menu';
+import { WalnutTabs } from '@/adapter/tabs';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { usePreferenceEffects } from '@/hooks/use-preference-effects';
 import { $t } from '@/locales';
@@ -69,7 +69,7 @@ export function UserDropdown() {
     },
   ];
   if (tenantSelected) items.splice(0,1);
-  items.push({ key: 'about', label: '关于项目' });
+  items.push({ key: 'about', label: $t('demos.walnut.about') });
   if (preferences.app.enablePreferences && preferencesButtonPosition.userDropdown) {
     items.push({
       icon: <Settings className="size-4" />,
@@ -194,14 +194,20 @@ export function BasicLayout() {
     updatePreferences({ sidebar: { collapsed: !collapsed } });
   }
 
-  /** 手风琴：一次只保留一个展开的顶级菜单（navigation.accordion） */
+  /** 手风琴：只收起同级兄弟子树，保留新展开项的祖先链（对应 Vue menu-ui openMenu） */
   function handleOpenChange(keys: string[]) {
     if (!preferences.navigation.accordion) {
       setOpenKeys(keys);
       return;
     }
     const added = keys.filter((key) => !openKeys.includes(key));
-    setOpenKeys(added.length > 0 ? [added[added.length - 1]!] : keys);
+    if (added.length === 0) {
+      setOpenKeys(keys);
+      return;
+    }
+    const key = added[added.length - 1]!;
+    const parents = findMenuByPath(accessMenus, key)?.parents ?? [];
+    setOpenKeys([...parents, key]);
   }
 
   function handleMenuSelect(menu: MenuRecordRaw) {
@@ -241,7 +247,7 @@ export function BasicLayout() {
             className="text-primary flex cursor-pointer items-center"
             onClick={() => navigate('/')}
           >
-            <VbenIcon className="size-3.5" icon="mdi:home-outline" />
+            <WalnutIcon className="size-3.5" icon="mdi:home-outline" />
           </span>
         ),
       });
@@ -258,7 +264,7 @@ export function BasicLayout() {
             }
           >
             {showIcon && item.icon ? (
-              <VbenIcon className="size-3.5" icon={item.icon as string} />
+              <WalnutIcon className="size-3.5" icon={item.icon as string} />
             ) : null}
             {$t(item.title)}
           </span>
@@ -276,7 +282,7 @@ export function BasicLayout() {
   return (
     <Layout className="h-screen overflow-hidden">
       {mobile && <Drawer title={preferences.app.name} open={mobileOpen} width={280} onClose={() => setMobileOpen(false)} styles={{ body: { padding: 0 } }}>
-        <VbenMenu menus={accessMenus} mode="inline" selectedKeys={[activePath]} openKeys={openKeys} onOpenChange={handleOpenChange} onMenuSelect={menu => { handleMenuSelect(menu); setMobileOpen(false); }} />
+        <WalnutMenu menus={accessMenus} mode="inline" selectedKeys={[activePath]} openKeys={openKeys} onOpenChange={handleOpenChange} onMenuSelect={menu => { handleMenuSelect(menu); setMobileOpen(false); }} />
       </Drawer>}
       {showSidebar ? (
         <ConfigProvider theme={semiDarkSidebar ? semiDarkTheme : undefined}>
@@ -299,7 +305,7 @@ export function BasicLayout() {
         >
           {preferences.sidebar.draggable && !effectiveCollapsed ? (
             <div
-              className="vben-sidebar-dragger"
+              className="walnut-sidebar-dragger"
               onMouseDown={handleSidebarDragStart}
             />
           ) : null}
@@ -321,7 +327,7 @@ export function BasicLayout() {
             <div
               className="flex-1 overflow-x-hidden overflow-y-auto"
             >
-              <VbenMenu
+              <WalnutMenu
                 inlineCollapsed={effectiveCollapsed}
                 menus={accessMenus}
                 mode="inline"
@@ -338,17 +344,17 @@ export function BasicLayout() {
             */}
             <div className="flex h-9 shrink-0 items-center justify-between px-3">
               {preferences.widget.sidebarToggle && preferences.sidebar.collapsedButton ? (
-                <VbenIconButton onClick={() => mobile ? setMobileOpen(true) : toggleCollapsed()}>
+                <WalnutIconButton onClick={() => mobile ? setMobileOpen(true) : toggleCollapsed()}>
                   {effectiveCollapsed ? (
                     <ChevronsRight className="size-4" />
                   ) : (
                     <ChevronsLeft className="size-4" />
                   )}
-                </VbenIconButton>
+                </WalnutIconButton>
               ) : (
                 <span />
               )}
-              {preferences.sidebar.fixedButton ? <VbenIconButton aria-label="pin-sidebar" class="h-6 w-6 rounded-sm bg-accent" onClick={() => updatePreferences({ sidebar: { expandOnHover: !preferences.sidebar.expandOnHover } })}>{preferences.sidebar.expandOnHover ? <Pin className="size-3.5" /> : <PinOff className="size-3.5" />}</VbenIconButton> : null}
+              {preferences.sidebar.fixedButton ? <WalnutIconButton aria-label="pin-sidebar" class="h-6 w-6 rounded-sm bg-accent" onClick={() => updatePreferences({ sidebar: { expandOnHover: !preferences.sidebar.expandOnHover } })}>{preferences.sidebar.expandOnHover ? <Pin className="size-3.5" /> : <PinOff className="size-3.5" />}</WalnutIconButton> : null}
             </div>
           </div>
         </Sider>
@@ -362,6 +368,9 @@ export function BasicLayout() {
             className={`${semiDarkHeader ? 'dark ' : ''}bg-header border-border flex items-center justify-between gap-2 border-b px-3`}
             style={{
               height: preferences.header.height,
+              // antd 6 的 header line-height 固定取 headerHeight token（64px），
+              // 不显式覆盖会让顶栏内的水平菜单继承 64px 行高而溢出
+              lineHeight: `${preferences.header.height}px`,
               marginTop: headerOffset,
               transition: preferences.header.mode === 'static' ? 'none' : 'margin-top 180ms ease',
               // antd 6 scopes Layout tokens to .ant-layout, not a standalone Header.
@@ -372,32 +381,32 @@ export function BasicLayout() {
             <div className="flex min-w-0 flex-1 items-center gap-2">
               {/*
                 折叠按钮的图标与按钮形态对齐 Vue 侧 layout-ui：
-                `VbenIconButton`（无边框图标按钮）+ Iconify `ep:fold` / `ep:expand`。
+                `WalnutIconButton`（无边框图标按钮）+ Iconify `ep:fold` / `ep:expand`。
                 此前用 antd `Button type="text"` + lucide 箭头，字形和按钮盒子都不对。
               */}
               {(showSidebar || mobile) && preferences.widget.sidebarToggle ? (
-                <VbenIconButton
+                <WalnutIconButton
                   aria-label="toggle-sidebar"
                   class="my-0 mr-1 rounded-md"
                   onClick={() => mobile ? setMobileOpen(true) : toggleCollapsed()}
                 >
                   {collapsed ? <EpExpand /> : <EpFold />}
-                </VbenIconButton>
+                </WalnutIconButton>
               ) : null}
               {preferences.widget.refresh ? (
-                <VbenIconButton
+                <WalnutIconButton
                   aria-label="refresh"
                   class="my-0 mr-1 rounded-md"
                   onClick={refresh}
                 >
                   <RotateCw className="size-4" />
-                </VbenIconButton>
+                </WalnutIconButton>
               ) : null}
               {!mobile && breadcrumbItems.length > 0 ? (
                 <span
                   className={
                     preferences.breadcrumb.styleType === 'background'
-                      ? 'vben-breadcrumb-background'
+                      ? 'walnut-breadcrumb-background'
                       : undefined
                   }
                 >
@@ -420,7 +429,7 @@ export function BasicLayout() {
           </ConfigProvider>
         ) : null}
 
-        {showTabbar ? <VbenTabs /> : null}
+        {showTabbar ? <WalnutTabs /> : null}
 
         <ContentArea />
 

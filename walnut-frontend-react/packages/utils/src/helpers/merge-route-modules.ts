@@ -1,4 +1,4 @@
-import type { AppRouteObject } from '@vben-core/typings';
+import type { AppRouteObject } from '@walnut-core/typings';
 
 // 定义模块类型
 interface RouteModuleType {

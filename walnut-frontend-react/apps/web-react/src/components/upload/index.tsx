@@ -1,6 +1,8 @@
 import { Button, Upload } from "antd";
 import { useEffect, useRef } from "react";
 import type { UploadFile } from "antd";
+import { usePreferences } from "@walnut/preferences";
+import { $t } from "@/locales";
 import { uploadApi } from "@/api/core/upload";
 import { getMessageApi } from "@/services/message";
 function FileControl({
@@ -20,6 +22,8 @@ function FileControl({
   disabled?: boolean;
   accept?: string;
 }) {
+  // 订阅偏好：locale 变化时重译上传文案
+  usePreferences();
   const urls = Array.isArray(value) ? value : value ? value.split(",") : [];
   const latestUrls = useRef(urls);
   useEffect(() => {
@@ -48,7 +52,7 @@ function FileControl({
           (image && !file.type.startsWith("image/"))
         ) {
           getMessageApi()?.message.error(
-            `请选择 ${maxSize}MB 以内${image ? "的图片" : "的文件"}`,
+            $t('component.upload.maxSize', [maxSize]),
           );
           return Upload.LIST_IGNORE;
         }
@@ -69,7 +73,7 @@ function FileControl({
       }}
     >
       {files.length < maxCount ? (
-        <Button disabled={disabled}>{image ? "上传图片" : "上传文件"}</Button>
+        <Button disabled={disabled}>{$t('component.upload.upload')}</Button>
       ) : null}
     </Upload>
   );

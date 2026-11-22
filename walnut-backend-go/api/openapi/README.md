@@ -1,8 +1,13 @@
-# Golden 契约快照
+# Golden 契约快照（历史 Python 导出）
 
-本目录是 **Go 后端必须对齐的接口契约事实源**，由 Python 端（当前最完整的实现）导出。
+> **事实源已迁移**：自 **2026-11-20** 起，契约事实源冻结于 **`api/golden/`**
+> （Go 自有基线，见该目录 README）。本目录为**历史 Python 导出**，仅作存档与对照；
+> `make contract-export` 仅作**参照复现**用（重新从 Python 端导出到本目录），
+> **不再更新冻结基线**。路由清单 diff 等测试已改读 `api/golden/`。
 
-> 生成方式：`make contract-export`（或 `python scripts/export_contract.py`）
+本目录曾是 Go 后端必须对齐的接口契约事实源，由 Python 端（冻结时最完整的实现）导出。
+
+> 生成方式：`make contract-export`（或在仓库根 `python scripts/export_contract.py`）
 > 该脚本直接调用 FastAPI 的 `create_app()` 生成 OpenAPI 文档，**不需要启动服务**——
 > 无端口冲突、结果可重复，且 `create_app()` 内部会跑 `audit_routes_auth`，
 > 导出成功本身就意味着 Python 端的路由认证约束是通过的。
@@ -56,7 +61,7 @@ Go 首期范围内  : 125
 **没有 include 它**——全部 `module_ai` 引用都在模块内部。所以它既不出现在 `routes.txt`，
 也不出现在 `contract.json`。
 
-`scripts/export_contract.py` 里的 `EXCLUDED_MODULE_PREFIXES` 机制已就位：
+仓库根 `scripts/export_contract.py` 里的 `EXCLUDED_MODULE_PREFIXES` 机制已就位：
 一旦 AI 模块被挂载，其路由会按 `endpoint.__module__` **自动**归入排除清单，
 无需手工维护路径前缀（路径改了归属也不会错）。
 

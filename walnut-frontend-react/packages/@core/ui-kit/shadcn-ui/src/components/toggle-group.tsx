@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
-import { cn } from '@vben-core/shared/utils';
+import { cn } from '@walnut-core/shared/utils';
 import { createContext, useContext } from 'react';
 
 /**

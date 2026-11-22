@@ -3,16 +3,16 @@ import type {
   MaybeReadonlyRef,
   TabDefinition,
   TabMeta,
-} from '@vben-core/typings';
+} from '@walnut-core/typings';
 
-import { preferences } from '@vben-core/preferences';
+import { preferences } from '@walnut-core/preferences';
 import {
   createStack,
   openWindow,
   Stack,
   startProgress,
   stopProgress,
-} from '@vben-core/shared/utils';
+} from '@walnut-core/shared/utils';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 

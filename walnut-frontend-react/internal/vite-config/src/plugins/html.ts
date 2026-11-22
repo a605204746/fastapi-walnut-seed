@@ -16,7 +16,7 @@ const HTML_MINIFY_OPTIONS = {
 
 function viteHtmlPlugin(options: HtmlMinifierOptions = {}): PluginOption {
   return {
-    name: 'vben-native-html',
+    name: 'walnut-native-html',
     transformIndexHtml: {
       order: 'post',
       async handler(html, ctx) {

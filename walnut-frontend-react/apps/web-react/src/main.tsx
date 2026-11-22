@@ -1,17 +1,17 @@
-// 根入口会经 css/global.css 带进 @vben/tailwind-config/theme（Tailwind 4 入口）
-import '@vben-core/design';
+// 根入口会经 css/global.css 带进 @walnut/tailwind-config/theme（Tailwind 4 入口）
+import '@walnut-core/design';
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import { loadLocaleMessages, setupI18n } from '@vben/locales';
-import { getPreferences, initPreferences } from '@vben/preferences';
-import { initStores } from '@vben/stores';
-import { unmountGlobalLoading } from '@vben/utils';
+import { loadLocaleMessages, setupI18n } from '@walnut/locales';
+import { getPreferences, initPreferences } from '@walnut/preferences';
+import { initStores } from '@walnut/stores';
+import { unmountGlobalLoading } from '@walnut/utils';
 
 import { setupComponents } from './adapter/component';
 import { setupDrawer } from './adapter/drawer';
-import { initSetupVbenForm } from './adapter/form';
+import { initSetupWalnutForm } from './adapter/form';
 import { App } from './App';
 import { initAppStores } from './store/setup';
 import { appConfig } from './lib/config';
@@ -41,10 +41,10 @@ async function bootstrap() {
   // 注册表单组件映射表（componentMap）
   setupComponents();
 
-  // 注册必填校验的国际化文案（对应 Vue 侧 setupVbenForm 的 defineRules）
-  initSetupVbenForm();
+  // 注册必填校验的国际化文案（对应 Vue 基线表单 setup 的 defineRules）
+  initSetupWalnutForm();
 
-  // 注入抽屉底部按钮的 i18n 文案（@core 层不能依赖 @vben/locales）
+  // 注入抽屉底部按钮的 i18n 文案（@core 层不能依赖 @walnut/locales）
   setupDrawer();
 
   createRoot(document.querySelector('#root')!).render(

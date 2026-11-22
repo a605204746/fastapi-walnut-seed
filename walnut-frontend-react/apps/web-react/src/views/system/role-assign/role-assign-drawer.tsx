@@ -1,6 +1,6 @@
 import { forwardRef, useImperativeHandle } from 'react';
 
-import { useVbenDrawer } from '@vben-core/popup-ui';
+import { useWalnutDrawer } from '@walnut-core/popup-ui';
 import { useParams } from 'react-router';
 
 import { useGrid } from '@/adapter/grid';
@@ -65,7 +65,7 @@ export const RoleAssignDrawer = forwardRef<
 
   const [BasicTable, tableApi] = useGrid({ formOptions, gridOptions });
 
-  const [BasicDrawer, drawerApi] = useVbenDrawer({
+  const [BasicDrawer, drawerApi] = useWalnutDrawer({
     destroyOnClose: true,
     onCancel: handleReset,
     onConfirm: handleSubmit,

@@ -307,7 +307,7 @@ func TestParseTokenErrorKinds(t *testing.T) {
 		{"已过期", expired, secret, true, TokenErrExpired, "认证已过期，请重新登录"},
 		// ⚠️ 结构非法属 PyJWT 的 **DecodeError**（被第一个 except 捕获），
 		// 文案是"无效认证"而不是"token已失效"。四种畸形形态已逐一实测比对
-		// （见 test/contract/diff_system.py 用例 1），Python 端全部返回"无效认证"。
+		// （见 scripts/contract/diff_system.py 用例 1），Python 端全部返回"无效认证"。
 		{"结构非法：三段但解不开", "not.a.jwt", secret, true, TokenErrInvalid, "无效认证，请重新登录"},
 		{"结构非法：单段", "abc", secret, true, TokenErrInvalid, "无效认证，请重新登录"},
 		{"结构非法：两段", "a.b", secret, true, TokenErrInvalid, "无效认证，请重新登录"},

@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
 
-import { cn } from '@vben-core/shared/utils';
+import { cn } from '@walnut-core/shared/utils';
 import { useCallback, useRef, useState } from 'react';
 
-export interface VbenTooltipProps {
+export interface WalnutTooltipProps {
   /** 提示内容 */
   children?: ReactNode;
   contentClass?: string;
@@ -14,7 +14,7 @@ export interface VbenTooltipProps {
   trigger?: ReactNode;
 }
 
-const sideClass: Record<NonNullable<VbenTooltipProps['side']>, string> = {
+const sideClass: Record<NonNullable<WalnutTooltipProps['side']>, string> = {
   bottom: 'left-1/2 top-full mt-1 -translate-x-1/2',
   left: 'right-full top-1/2 mr-1 -translate-y-1/2',
   right: 'left-full top-1/2 ml-1 -translate-y-1/2',
@@ -26,16 +26,16 @@ const sideClass: Record<NonNullable<VbenTooltipProps['side']>, string> = {
  *
  * PoC 用轻量自绘实现（hover 延迟 + 绝对定位气泡），不引入 Radix：
  * 默认态只渲染 trigger，气泡仅在 hover 后出现，因此不影响像素回归门禁的默认截图。
- * 气泡样式沿用 Vben 的 `bg-accent text-popover-foreground rounded-md`。
+ * 气泡样式沿用 Walnut 的 `bg-accent text-popover-foreground rounded-md`。
  */
-export function VbenTooltip({
+export function WalnutTooltip({
   children,
   contentClass,
   delayDuration = 0,
   disabled = false,
   side = 'right',
   trigger,
-}: VbenTooltipProps) {
+}: WalnutTooltipProps) {
   const [open, setOpen] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 

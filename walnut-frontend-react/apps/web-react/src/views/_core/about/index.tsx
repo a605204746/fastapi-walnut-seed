@@ -1,10 +1,11 @@
 import { Card, Descriptions, Tag } from 'antd';
-import { usePreferences } from '@vben/preferences';
+import { usePreferences } from '@walnut/preferences';
+import { $t } from '@/locales';
 export default function AboutPage() {
   const { preferences } = usePreferences();
   return (
     <div className="p-5">
-      <Card title="关于项目">
+      <Card title={$t('demos.walnut.about')}>
         <p className="mb-4">
           {preferences.app.name} 是基于 FastAPI、React、TypeScript 与 Ant Design
           的开源后台管理模板。

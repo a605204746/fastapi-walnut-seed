@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { DEFAULT_TIME_ZONE_OPTIONS } from '@vben-core/preferences';
-import { getCurrentTimezone, setCurrentTimezone } from '@vben-core/shared/utils';
+import { DEFAULT_TIME_ZONE_OPTIONS } from '@walnut-core/preferences';
+import { getCurrentTimezone, setCurrentTimezone } from '@walnut-core/shared/utils';
 interface TimezoneHandler {
   getTimezone?: () => Promise<string | null | undefined>;
   setTimezone?: (timezone: string) => Promise<void>;

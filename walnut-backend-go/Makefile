@@ -124,33 +124,39 @@ seed: ## 写入种子数据（幂等）
 .PHONY: schema-parity
 schema-parity: ## 校验本端 schema 与 Python 库逐字段一致（计划 R13 验收，需中间件在跑）
 	cd ../walnut-backend-python && \
-		PYTHONIOENCODING=utf-8 .venv/Scripts/python ../walnut-backend-go/scripts/verify_schema_parity.py
+		PYTHONIOENCODING=utf-8 .venv/Scripts/python ../scripts/verify_schema_parity.py
 
 .PHONY: key-pairing
 key-pairing: ## 校验 Vue/React 两个前端的 env 与 Python/Go 后端、docker 编排的 RSA 密钥配对关系
 	cd ../walnut-backend-python && \
-		PYTHONIOENCODING=utf-8 .venv/Scripts/python ../walnut-backend-go/scripts/verify_key_pairing.py
+		PYTHONIOENCODING=utf-8 .venv/Scripts/python ../scripts/verify_key_pairing.py
 
 ## ---------- 契约 ----------
 
+.PHONY: routes
+routes: ## 导出全局路由清单到 docs/go/路由清单.md（纯静态，不依赖中间件）
+	go run . routes
+
 .PHONY: contract-export
-contract-export: ## 从 Python 端导出 golden 契约（无需启动服务，直接调 create_app()）
+# 历史参照复现用：契约事实源已冻结于 api/golden/（2026-11-20，Go 自有基线）。
+# 本目标仅从 Python 端重新导出到 api/openapi/ 作对照，不再更新冻结基线。
+contract-export: ## 从 Python 端导出契约到 api/openapi（历史参照复现；事实源为 api/golden）
 	cd ../walnut-backend-python && \
 		ENVIRONMENT=dev PYTHONIOENCODING=utf-8 PYTHONUTF8=1 \
-		../walnut-backend-python/.venv/Scripts/python ../walnut-backend-go/scripts/export_contract.py
-	@echo "已导出 -> api/openapi/{contract.json,routes.txt,modules.json}"
+		../walnut-backend-python/.venv/Scripts/python ../scripts/export_contract.py
+	@echo "已导出 -> api/openapi/{contract.json,routes.txt,modules.json}（历史参照；事实源为 api/golden）"
 
 .PHONY: contract-diff
 contract-diff: ## 双后端响应 diff 跑分（需先启动 Go:8011 与 Python:8012）
-	python test/contract/diff_contract.py --py $(PY_BASE) --go $(GO_BASE)
+	python ../scripts/contract/diff_contract.py --py $(PY_BASE) --go $(GO_BASE)
 
 .PHONY: cryptointerop
 cryptointerop: ## Python↔Go 加解密互通全链路（生成向量 → Go 测试 → Python 反向校验）
 	cd ../walnut-backend-python && PYTHONIOENCODING=utf-8 \
-		.venv/Scripts/python ../walnut-backend-go/test/cryptointerop/gen_vectors.py
+		.venv/Scripts/python ../scripts/cryptointerop/gen_vectors.py
 	go test ./test/cryptointerop/ -v -count=1
 	cd ../walnut-backend-python && PYTHONIOENCODING=utf-8 \
-		.venv/Scripts/python ../walnut-backend-go/test/cryptointerop/verify_go_output.py
+		.venv/Scripts/python ../scripts/cryptointerop/verify_go_output.py
 
 .PHONY: smoke
 smoke: ## 全端点冒烟（对应 Python 端 scripts/smoke_all.py；SMOKE_BASE 非空时打在线服务，否则自动起 18091）

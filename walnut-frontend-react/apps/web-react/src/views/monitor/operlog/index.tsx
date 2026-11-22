@@ -3,7 +3,7 @@ import { useRef } from 'react';
 import type { PageQuery } from '@/api/common';
 import type { OperationLog } from '@/api/monitor/operlog/model';
 
-import { $t } from '@vben/locales';
+import { $t } from '@walnut/locales';
 import { Button, Space } from 'antd';
 
 import { addSortParams, useGrid, vxeCheckboxChecked } from '@/adapter/grid';

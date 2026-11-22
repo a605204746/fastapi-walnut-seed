@@ -18,6 +18,10 @@ import (
 // envName 由 --env 全局旗标注入（dev / prod）。
 var envName string
 
+// ContractSpec 由 main.go 注入（go:embed api/golden/contract.json），
+// 供 run 命令装配 /docs 文档端点；migrate/seed 等命令不需要。
+var ContractSpec []byte
+
 var rootCmd = &cobra.Command{
 	Use:   "walnut-seed-go",
 	Short: "WalnutSeed Go 后端（与 Python/Java 端同接口契约）",

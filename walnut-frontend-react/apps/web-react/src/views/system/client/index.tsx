@@ -2,8 +2,8 @@ import { useRef } from 'react';
 
 import type { Client } from '@/api/system/client/model';
 
-import { $t } from '@vben/locales';
-import { DEFAULT_CLIENT_ID, EnableStatus } from '@vben/constants';
+import { $t } from '@walnut/locales';
+import { DEFAULT_CLIENT_ID, EnableStatus } from '@walnut/constants';
 import { Button, Popconfirm, Space } from 'antd';
 
 import { useGrid, vxeCheckboxChecked } from '@/adapter/grid';
@@ -128,13 +128,13 @@ export default function ClientPage() {
                   {$t('pages.common.edit')}
                 </Button>
               </Access>
-              <Popconfirm
-                disabled={(row as Client).id === 1}
-                onConfirm={() => handleDelete(row as Client)}
-                placement="left"
-                title="确认删除？"
-              >
-                <Access code={['system:client:remove']}>
+              <Access code={['system:client:remove']}>
+                <Popconfirm
+                  disabled={(row as Client).id === 1}
+                  onConfirm={() => handleDelete(row as Client)}
+                  placement="left"
+                  title="确认删除？"
+                >
                   <Button
                     danger
                     disabled={(row as Client).id === 1}
@@ -144,8 +144,8 @@ export default function ClientPage() {
                   >
                     {$t('pages.common.delete')}
                   </Button>
-                </Access>
-              </Popconfirm>
+                </Popconfirm>
+              </Access>
             </Space>
           ),
           status: ({ row }) => (

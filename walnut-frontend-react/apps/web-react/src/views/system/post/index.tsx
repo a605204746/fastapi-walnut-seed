@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 
 import type { Post } from '@/api/system/post/model';
 
-import { $t } from '@vben/locales';
+import { $t } from '@walnut/locales';
 import { Button, Popconfirm, Space } from 'antd';
 
 import { useGrid, vxeCheckboxChecked } from '@/adapter/grid';
@@ -153,12 +153,12 @@ export default function PostPage() {
                   {$t('pages.common.edit')}
                 </Button>
               </Access>
-              <Popconfirm
-                onConfirm={() => handleDelete(row)}
-                placement="left"
-                title="确认删除？"
-              >
-                <Access code={['system:post:remove']}>
+              <Access code={['system:post:remove']}>
+                <Popconfirm
+                  onConfirm={() => handleDelete(row)}
+                  placement="left"
+                  title="确认删除？"
+                >
                   <Button
                     danger
                     onClick={(e) => e.stopPropagation()}
@@ -167,8 +167,8 @@ export default function PostPage() {
                   >
                     {$t('pages.common.delete')}
                   </Button>
-                </Access>
-              </Popconfirm>
+                </Popconfirm>
+              </Access>
             </Space>
           ),
         }}

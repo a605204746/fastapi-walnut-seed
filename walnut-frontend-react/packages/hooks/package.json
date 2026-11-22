@@ -1,5 +1,5 @@
 {
-  "name": "@vben/hooks",
+  "name": "@walnut/hooks",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
@@ -14,12 +14,12 @@
     "react": "catalog:"
   },
   "dependencies": {
-    "@vben-core/shared": "workspace:*",
-    "@vben/preferences": "workspace:*"
+    "@walnut-core/shared": "workspace:*",
+    "@walnut/preferences": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "catalog:",
-    "@vben/tsconfig": "workspace:*",
+    "@walnut/tsconfig": "workspace:*",
     "react": "catalog:"
   }
 }

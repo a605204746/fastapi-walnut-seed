@@ -2,7 +2,7 @@ import { useRef } from 'react';
 
 import type { SysConfig } from '@/api/system/config/model';
 
-import { $t } from '@vben/locales';
+import { $t } from '@walnut/locales';
 import { Button, Popconfirm, Space } from 'antd';
 
 import { useGrid, vxeCheckboxChecked } from '@/adapter/grid';
@@ -122,17 +122,17 @@ export default function ConfigPage() {
                   {$t('pages.common.edit')}
                 </Button>
               </Access>
-              <Popconfirm
-                onConfirm={() => handleDelete(row)}
-                placement="left"
-                title="确认删除？"
-              >
-                <Access code={['system:config:remove']}>
+              <Access code={['system:config:remove']}>
+                <Popconfirm
+                  onConfirm={() => handleDelete(row)}
+                  placement="left"
+                  title="确认删除？"
+                >
                   <Button danger onClick={(e) => e.stopPropagation()} size="small" type="link">
                     {$t('pages.common.delete')}
                   </Button>
-                </Access>
-              </Popconfirm>
+                </Popconfirm>
+              </Access>
             </Space>
           ),
         }}

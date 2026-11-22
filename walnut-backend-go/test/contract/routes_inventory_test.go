@@ -1,15 +1,15 @@
 // Package contract 承载 Go 与 Python 后端之间的契约一致性测试。
 //
 // 本文件实现计划 §4.1 的「路由清单 diff」：把 Go 的路由面与
-// api/openapi/routes.txt（Python 端导出的 golden 契约）对比。
+// api/golden/routes.txt（2026-11-20 冻结的 golden 契约，Go 自有事实源）对比。
 //
 // 两个方向的语义**不对称**，这是刻意设计：
 //
-//	Go 有、Python 没有  →  硬失败。私自新增接口就是契约漂移，必须挡住。
-//	Go 没有、Python 有  →  P0–P2 仅报告覆盖率；P3 起转为硬失败。
+//	Go 有、golden 没有  →  硬失败。私自新增接口就是契约漂移，必须挡住。
+//	Go 没有、golden 有  →  P0–P2 仅报告覆盖率；P3 起转为硬失败。
 //	                       因为迁移是增量的，未完成的路由不该让 CI 一直红。
 //
-// 响应体级别的逐字节比对在 diff_contract.py（需两端同时运行），
+// 响应体级别的逐字节比对在 scripts/contract/diff_contract.py（需两端同时运行），
 // 本文件只比路由清单，纯静态、无需启动服务，因此可以进每次 CI。
 package contract
 
@@ -26,30 +26,28 @@ import (
 	"walnut-seed-go/internal/config"
 )
 
-// routesFile 是 golden 路由清单，由 scripts/export_contract.py 从 Python 端导出。
-const routesFile = "../../api/openapi/routes.txt"
+// routesFile 是冻结的 golden 路由清单（api/golden/，2026-11-20 自 Python 导出
+// 快照冻结，字节一致）。Go 已是主后端，该基线为 Go 自有事实源，不再从活 Python
+// 再生成；api/openapi/ 仅作历史导出存档。变更须先经评审更新基线，见 api/golden/README.md。
+const routesFile = "../../api/golden/routes.txt"
 
 // exemptPythonRoutes 是 Python 有、但 Go **有意不实现**的路由。
 //
-// 列在这里的必须是有明确理由的缺口，不能为了「让测试变绿」随手加：
-//   - /docs、/docs/oauth2-redirect、/redoc：Swagger UI / ReDoc 页面，
-//     由 Python 的 register_docs() 提供。Go 端计划在 P5 用 swaggo 或托管
-//     同一套静态 Swagger 资源补齐。
+// 列在这里的必须是有明确理由的缺口，不能为了「让测试变绿」随手加。
+// 当前为空：/docs、/docs/oauth2-redirect、/redoc 已由 common/docs 模块托管
+// （Swagger UI / ReDoc + embed 冻结契约 spec），125 条路由全覆盖。
 //
-// ⚠️ 新增豁免项时必须同步更新 api/openapi/README.md 的说明。
-var exemptPythonRoutes = map[string]string{
-	"GET /docs":                 "P5 补齐 API 文档 UI",
-	"GET /docs/oauth2-redirect": "P5 补齐 API 文档 UI",
-	"GET /redoc":                "P5 补齐 API 文档 UI",
-}
+// ⚠️ 新增豁免项时必须同步更新 api/golden/README.md 的说明。
+var exemptPythonRoutes = map[string]string{}
 
 // inventedExemptions 是 Go 有、但 Python golden 契约（routes.txt）里**看不到**的路由。
 //
 // routes.txt 由 Python 的 openapi.json 导出，FastAPI 不把 WebSocket 路由
-// 包含在 OpenAPI schema 里，故 routes.txt 天然缺失。列在这里的必须是
-// 「Python 确实实现了但 OpenAPI 不导出」的路由，不能用来掩盖单端私自新增。
+// 包含在 OpenAPI schema 里，也不导出 /openapi.json 自身，故 routes.txt 天然缺失。
+// 列在这里的必须是「Python 确实实现了但 OpenAPI 不导出」的路由，不能用来掩盖单端私自新增。
 var inventedExemptions = map[string]string{
 	"GET /resource/websocket": "Python 有实现但 OpenAPI 不导出 WS 路由",
+	"GET /openapi.json":       "Python 有实现但 OpenAPI 不导出自身 spec 路由",
 }
 
 // ---- Python → Go 的路径归一化 ----
@@ -85,7 +83,7 @@ func loadPythonRoutes(t *testing.T) map[string]bool {
 	f, err := os.Open(routesFile)
 	if err != nil {
 		t.Fatalf("无法打开 golden 路由清单 %s: %v\n"+
-			"请先执行 make contract-export 从 Python 端导出", routesFile, err)
+			"该文件是冻结基线（api/golden/），请从版本库恢复，勿从活 Python 重新导出", routesFile, err)
 	}
 	defer f.Close()
 
@@ -153,7 +151,7 @@ func goRouteSet(t *testing.T) map[string]bool {
 	return out
 }
 
-// TestNoInventedRoutes 是**硬门禁**：Go 不得出现 Python 契约里没有的路由。
+// TestNoInventedRoutes 是**硬门禁**：Go 不得出现 golden 契约里没有的路由。
 //
 // 这是防漂移最关键的一条。三份实现最容易出问题的不是「少实现」，而是
 // 某一端擅自加了接口或改了路径——那样前端就要开始区分后端，同契约的前提就崩了。
@@ -170,8 +168,8 @@ func TestNoInventedRoutes(t *testing.T) {
 	sort.Strings(invented)
 
 	if len(invented) > 0 {
-		t.Errorf("Go 端存在 Python 契约中不存在的路由（%d 条），属于契约漂移：\n  %s\n"+
-			"若确实是新增需求，必须**先在 Python 端落地**并重新 make contract-export，"+
+		t.Errorf("Go 端存在 golden 契约中不存在的路由（%d 条），属于契约漂移：\n  %s\n"+
+			"若确实是新增需求，必须**先经评审更新 api/golden 冻结基线**，"+
 			"再在 Go 端实现——不能单端先行。",
 			len(invented), strings.Join(invented, "\n  "))
 	}
@@ -274,19 +272,19 @@ func TestNormalization(t *testing.T) {
 	}
 }
 
-// TestGoldenFileIsFresh 提示 golden 契约可能过期。
+// TestGoldenFileIsFresh 校验冻结基线的文件形态。
 //
-// 无法真正判断新鲜度（那需要访问 Python 端），但可以校验文件形态是否合法，
+// 基线冻结后不再对活 Python 端追「新鲜度」，这里只校验文件形态是否合法，
 // 避免有人手工编辑出一个格式错误的清单导致 diff 全线失真。
 func TestGoldenFileIsFresh(t *testing.T) {
 	python := loadPythonRoutes(t)
 
-	// routes.txt 当前应为 125 条（2026-11-02 导出）。数量大幅偏离说明导出有问题
-	// 或 Python 端路由面发生了变更——两种情况都需要人工确认，而不是让测试静默通过。
+	// routes.txt 当前应为 125 条（2026-11-02 导出，2026-11-20 冻结进 api/golden）。
+	// 数量大幅偏离说明基线被改动或文件损坏——两种情况都需要人工确认，而不是让测试静默通过。
 	const expectedAtExport = 125
 	if len(python) != expectedAtExport {
-		t.Logf("⚠️ golden 路由数为 %d，导出时为 %d。若 Python 端确有增删，"+
-			"请重新 make contract-export 并同步更新本常量与 api/openapi/README.md",
+		t.Logf("⚠️ golden 路由数为 %d，冻结时为 %d。若契约确有经评审的增删，"+
+			"请同步更新本常量与 api/golden/README.md",
 			len(python), expectedAtExport)
 	}
 
@@ -324,7 +322,7 @@ func modulePrefix(path string) string {
 }
 
 // TestGoldenFileLocation 确保测试能从自身位置找到 golden 文件。
-// go test 的工作目录是包目录，故用相对路径 ../../api/openapi/routes.txt。
+// go test 的工作目录是包目录，故用相对路径 ../../api/golden/routes.txt。
 func TestGoldenFileLocation(t *testing.T) {
 	abs, err := filepath.Abs(routesFile)
 	if err != nil {

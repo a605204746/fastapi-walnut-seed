@@ -3,9 +3,9 @@ import type {
   ExAppRouteObject,
   MenuRecordRaw,
   RouteMeta,
-} from '@vben-core/typings';
+} from '@walnut-core/typings';
 
-import { filterTree, mapTree, sortTree } from '@vben-core/shared/utils';
+import { filterTree, mapTree, sortTree } from '@walnut-core/shared/utils';
 
 /**
  * 根据 routes 生成菜单列表。

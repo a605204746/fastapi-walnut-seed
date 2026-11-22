@@ -4,8 +4,8 @@ import type { DescriptionsProps } from 'antd';
 
 import type { LoginLog } from '@/api/monitor/logininfo/model';
 
-import { useVbenModal } from '@vben-core/popup-ui';
-import { DictEnum } from '@vben/constants';
+import { useWalnutModal } from '@walnut-core/popup-ui';
+import { DictEnum } from '@walnut/constants';
 import { Descriptions } from 'antd';
 
 import { useDictStore } from '@/store/dict';
@@ -22,7 +22,7 @@ export interface LoginInfoModalHandle {
 /**
  * 登录日志详情弹窗（对应 Vue 侧 monitor/logininfor/login-info-modal.vue）。
  *
- * `footer: false` + `fullscreenButton: false` 走 useVbenModal 的 options
+ * `footer: false` + `fullscreenButton: false` 走 useWalnutModal 的 options
  * （React 侧 ModalRendererProps 只暴露 title/width/class，其余状态在 ModalState 里）。
  * Descriptions 的 item 字段名与 antdv-next 不同：Vue 用 `content`，antd React 用 `children`。
  */
@@ -32,7 +32,7 @@ export const LoginInfoModal = forwardRef<LoginInfoModalHandle>(
     useDictStore((state) => state.map);
     const [loginInfo, setLoginInfo] = useState<LoginLog | undefined>();
 
-    const [BasicModal, modalApi] = useVbenModal({
+    const [BasicModal, modalApi] = useWalnutModal({
       footer: false,
       fullscreenButton: false,
       onClosed: () => setLoginInfo(undefined),

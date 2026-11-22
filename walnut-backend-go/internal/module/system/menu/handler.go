@@ -21,9 +21,7 @@ import (
 	"walnut-seed-go/internal/pkg/envelope"
 	"walnut-seed-go/internal/pkg/errs"
 	"walnut-seed-go/internal/pkg/idempotentx"
-	"walnut-seed-go/internal/pkg/modelx"
 	"walnut-seed-go/internal/pkg/permguard"
-	"walnut-seed-go/internal/pkg/routex"
 )
 
 // Handler 菜单域端点。
@@ -37,54 +35,6 @@ type Handler struct {
 // NewHandler 构造 handler。perm / idem 可为 nil（仅单测）。
 func NewHandler(db *gorm.DB, eh *errs.Handler, perm *permguard.Guard, idem *idempotentx.Guard) *Handler {
 	return &Handler{db: db, errs: eh, perm: perm, idem: idem}
-}
-
-// Mount 注册菜单路由。挂载点是 /system/menu（由 bootstrap 决定）。
-//
-// ⚠️ 动态段 /:menu_id 必须注册在所有静态路由与 /cascade/:menu_ids 之后。
-func (h *Handler) Mount(b routex.Binder) {
-	require, requireSuper, repeat := h.guards()
-
-	b.GET("/getRouters", h.GetRouters)
-	b.GET("/list", requireSuper("system:menu:list"), h.List)
-	b.GET("/treeselect", require("system:menu:query"), h.TreeSelect)
-	b.GET("/roleMenuTreeselect/:role_id", require("system:menu:query"), h.RoleMenuTreeSelect)
-	b.GET("/:menu_id", requireSuper("system:menu:query"), h.GetByID)
-	b.POST("", requireSuper("system:menu:add"), repeat(), h.Add)
-	b.PUT("", requireSuper("system:menu:edit"), repeat(), h.Update)
-	b.DELETE("/cascade/:menu_ids", requireSuper("system:menu:remove"), h.DeleteCascade)
-	b.DELETE("/:menu_id", requireSuper("system:menu:remove"), h.Delete)
-}
-
-// guards 返回「权限守卫」「权限+超管角色守卫」「防重提交」三个中间件工厂。
-//
-// requireSuper 对应 Python 端 AuthPermission(permissions=[...], roles=[SUPER_ADMIN])：
-// 角色校验先于权限校验，非超管即使持有权限串也必须 403（NotRole）。
-// treeselect / roleMenuTreeselect 在 Python 端是 MenuQueryAuth（无角色要求），用 require。
-func (h *Handler) guards() (func(string) gin.HandlerFunc, func(string) gin.HandlerFunc, func() gin.HandlerFunc) {
-	pass := func(c *gin.Context) { c.Next() }
-	require := func(perm string) gin.HandlerFunc {
-		if h.perm == nil {
-			return pass
-		}
-		return h.perm.Require(perm)
-	}
-	requireSuper := func(perm string) gin.HandlerFunc {
-		if h.perm == nil {
-			return pass
-		}
-		return h.perm.Check(permguard.Rule{
-			Permissions: []string{perm},
-			Roles:       []string{modelx.SuperAdminRoleKey},
-		})
-	}
-	repeat := func() gin.HandlerFunc {
-		if h.idem == nil {
-			return pass
-		}
-		return h.idem.Default()
-	}
-	return require, requireSuper, repeat
 }
 
 // service 取出当前请求的业务层。
@@ -198,7 +148,7 @@ func (h *Handler) GetByID(c *gin.Context) {
 //
 // ⚠️ 三道前置校验的顺序与文案照抄：名称唯一 → 外链地址 http(s) → 路由配置唯一。
 func (h *Handler) Add(c *gin.Context) {
-	in, err := DecodeCreate(readBody(c))
+	in, err := DecodeCreate(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -244,7 +194,7 @@ func (h *Handler) Add(c *gin.Context) {
 
 // Update PUT /system/menu
 func (h *Handler) Update(c *gin.Context) {
-	in, err := DecodeUpdate(readBody(c))
+	in, err := DecodeUpdate(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -307,7 +257,7 @@ func (h *Handler) DeleteCascade(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	hasChild, err := svc.repo.HasChildByMenuIDs(ctx, ids)
+	hasChild, err := svc.HasChildByMenuIDs(ctx, ids)
 	if err != nil {
 		h.errs.Abort(c, errs.Wrap(err, errs.MsgDBFailed))
 		return
@@ -335,7 +285,7 @@ func (h *Handler) Delete(c *gin.Context) {
 		return
 	}
 	ctx := c.Request.Context()
-	hasChild, err := svc.repo.HasChildByMenuID(ctx, id)
+	hasChild, err := svc.HasChildByMenuID(ctx, id)
 	if err != nil {
 		h.errs.Abort(c, errs.Wrap(err, errs.MsgDBFailed))
 		return
@@ -344,7 +294,7 @@ func (h *Handler) Delete(c *gin.Context) {
 		envelope.Warn(c, nil, "存在子菜单,不允许删除")
 		return
 	}
-	assigned, err := svc.repo.CheckMenuExistRole(ctx, id)
+	assigned, err := svc.CheckMenuExistRole(ctx, id)
 	if err != nil {
 		h.errs.Abort(c, errs.Wrap(err, errs.MsgDBFailed))
 		return

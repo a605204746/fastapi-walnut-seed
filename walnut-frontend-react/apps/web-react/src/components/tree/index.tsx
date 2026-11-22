@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Alert, Button, Checkbox, Input, Space, Table, Tag } from 'antd';
-import { $t } from '@vben/locales';
+import { $t } from '@walnut/locales';
+import { usePreferences } from '@walnut/preferences';
 import type { MenuOption } from '@/api/system/menu/model';
 import { allKeys, togglePermission, type PermissionKey } from './permission-keys';
 
@@ -18,6 +19,8 @@ export function MenuSelectTable({
   association?: boolean;
   onAssociationChange?: (associated: boolean) => void;
 }) {
+  // 订阅偏好：locale 变化时重译展开/折叠文案
+  usePreferences();
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<PermissionKey[] | null>(null);
   const keys = useMemo(() => allKeys(menus), [menus]);
@@ -94,7 +97,7 @@ export function MenuSelectTable({
           全选
         </Checkbox>
         <Button size="small" onClick={() => setExpanded((expanded ?? keys).length ? [] : keys)}>
-          展开/折叠
+          {$t('pages.common.expand')}/{$t('pages.common.collapse')}
         </Button>
       </Space>
       <Table

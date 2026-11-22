@@ -2,7 +2,7 @@ import type { FormSchemaGetter } from '@/adapter/form';
 
 import type { GridColumn } from '@/adapter/grid';
 
-import { DictEnum } from '@vben/constants';
+import { DictEnum } from '@walnut/constants';
 
 import { getDictOptions } from '@/utils/dict';
 import {

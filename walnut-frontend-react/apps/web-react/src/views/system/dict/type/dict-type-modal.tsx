@@ -2,10 +2,10 @@ import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 
 import type { DictType } from '@/api/system/dict/dict-type-model';
 
-import { $t } from '@vben/locales';
-import { useVbenForm, type FormSchema } from '@vben-core/form-ui';
-import { useVbenModal } from '@vben-core/popup-ui';
-import { cloneDeep } from '@vben-core/shared/utils';
+import { $t } from '@walnut/locales';
+import { useWalnutForm, type FormSchema } from '@walnut-core/form-ui';
+import { useWalnutModal } from '@walnut-core/popup-ui';
+import { cloneDeep } from '@walnut-core/shared/utils';
 
 import {
   dictTypeAdd,
@@ -41,7 +41,7 @@ export const DictTypeModal = forwardRef<
     setIsUpdate(value);
   }
 
-  const [BasicForm, formApi] = useVbenForm({
+  const [BasicForm, formApi] = useWalnutForm({
     commonConfig: { labelWidth: 100 },
     layout: 'vertical',
     schema: modalSchema() as FormSchema[],
@@ -54,7 +54,7 @@ export const DictTypeModal = forwardRef<
       initializedGetter: defaultFormValueGetter(formApi),
     });
 
-  const [BasicModal, modalApi] = useVbenModal({
+  const [BasicModal, modalApi] = useWalnutModal({
     fullscreenButton: false,
     onBeforeClose,
     onClosed: handleClosed,

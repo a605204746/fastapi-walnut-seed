@@ -1,5 +1,5 @@
 {
-  "name": "@vben-core/shared",
+  "name": "@walnut-core/shared",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
@@ -31,6 +31,6 @@
   "devDependencies": {
     "@types/lodash.clonedeep": "catalog:",
     "@types/nprogress": "catalog:",
-    "@vben/tsconfig": "workspace:*"
+    "@walnut/tsconfig": "workspace:*"
   }
 }

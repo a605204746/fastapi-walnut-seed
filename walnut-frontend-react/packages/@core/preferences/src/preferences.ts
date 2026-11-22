@@ -1,4 +1,4 @@
-import type { DeepPartial } from '@vben-core/typings';
+import type { DeepPartial } from '@walnut-core/typings';
 
 import type {
   CustomPreferencesField,
@@ -8,8 +8,8 @@ import type {
   PreferencesExtension,
 } from './types';
 
-import { MemoryStorageDriver, StorageManager } from '@vben-core/shared/cache';
-import { isMacOs, merge } from '@vben-core/shared/utils';
+import { MemoryStorageDriver, StorageManager } from '@walnut-core/shared/cache';
+import { isMacOs, merge } from '@walnut-core/shared/utils';
 import { createStore } from 'zustand/vanilla';
 
 import { defaultPreferences } from './config';

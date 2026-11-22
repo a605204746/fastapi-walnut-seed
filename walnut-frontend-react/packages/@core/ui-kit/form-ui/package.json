@@ -1,5 +1,5 @@
 {
-  "name": "@vben-core/form-ui",
+  "name": "@walnut-core/form-ui",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
@@ -14,14 +14,14 @@
     "react": "catalog:"
   },
   "dependencies": {
-    "@vben-core/shared": "workspace:*",
+    "@walnut-core/shared": "workspace:*",
     "clsx": "catalog:",
     "dayjs": "catalog:",
     "tailwind-merge": "catalog:"
   },
   "devDependencies": {
     "@types/react": "catalog:",
-    "@vben/tsconfig": "workspace:*",
+    "@walnut/tsconfig": "workspace:*",
     "react": "catalog:"
   }
 }

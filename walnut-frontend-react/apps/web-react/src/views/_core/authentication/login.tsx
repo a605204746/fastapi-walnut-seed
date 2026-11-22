@@ -1,4 +1,4 @@
-import type { FormSchema } from '@vben-core/form-ui';
+import type { FormSchema } from '@walnut-core/form-ui';
 
 import type { AuthenticationLoginHandle } from './AuthenticationLogin';
 
@@ -7,10 +7,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CaptchaResponse } from '@/api/core/captcha';
 import type { TenantResp } from '@/api/core/auth';
 
-import { DEFAULT_TENANT_ID } from '@vben/constants';
-import { $t } from '@vben/locales';
-import { useUserStore } from '@vben/stores';
-import { getPreferences } from '@vben/preferences';
+import { DEFAULT_TENANT_ID } from '@walnut/constants';
+import { $t } from '@walnut/locales';
+import { useUserStore } from '@walnut/stores';
+import { getPreferences } from '@walnut/preferences';
 import { Input, Select } from 'antd';
 import { useNavigate, useSearchParams } from 'react-router';
 

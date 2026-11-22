@@ -9,18 +9,18 @@ import { ModalRenderer } from './modal';
 import { ModalApi as ModalApiClass } from './modal-api';
 
 /**
- * 对应 Vue 侧 `use-modal.ts`：保留 `useVbenModal(options) → [Modal, modalApi]` 签名。
+ * 对应 Vue 侧 `use-modal.ts`：保留 `useWalnutModal(options) → [Modal, modalApi]` 签名。
  *
  * PoC 说明：Vue 侧的 `connectedComponent` 父子挂载机制在 React 下改由
- * 「弹窗组件自持 useVbenModal + useVbenForm，父组件通过 ref 命令式打开」实现，
+ * 「弹窗组件自持 useWalnutModal + useWalnutForm，父组件通过 ref 命令式打开」实现，
  * 因此这里的 `connectedComponent` 选项被接受但忽略。
  */
 /** 对外暴露的 Modal 组件 props（api 由 hook 内部注入） */
-export type VbenModalComponentProps = Omit<ModalRendererProps, 'api'>;
+export type WalnutModalComponentProps = Omit<ModalRendererProps, 'api'>;
 
-export function useVbenModal(
+export function useWalnutModal(
   options: ModalApiOptions = {},
-): [ComponentType<VbenModalComponentProps>, ModalApi] {
+): [ComponentType<WalnutModalComponentProps>, ModalApi] {
   const apiRef = useRef<ModalApi | undefined>(undefined);
   if (!apiRef.current) {
     apiRef.current = new ModalApiClass(options);
@@ -30,7 +30,7 @@ export function useVbenModal(
   const api = apiRef.current;
 
   const Modal = useCallback(
-    (props: VbenModalComponentProps) => (
+    (props: WalnutModalComponentProps) => (
       <ModalRenderer {...props} api={api} />
     ),
     [api],

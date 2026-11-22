@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 
-import { LOGIN_PATH } from '@vben/constants';
-import { usePreferences } from '@vben/preferences';
-import { useAccessStore } from '@vben/stores';
+import { LOGIN_PATH } from '@walnut/constants';
+import { usePreferences } from '@walnut/preferences';
+import { useAccessStore } from '@walnut/stores';
 
 import { Button, Result, Spin } from 'antd';
 import { Navigate, useLocation } from 'react-router';

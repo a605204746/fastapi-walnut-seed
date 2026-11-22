@@ -20,7 +20,6 @@ import (
 	"walnut-seed-go/internal/pkg/errs"
 	"walnut-seed-go/internal/pkg/idempotentx"
 	"walnut-seed-go/internal/pkg/permguard"
-	"walnut-seed-go/internal/pkg/routex"
 )
 
 // defaultDeptID 默认部门，不允许删除，对应 SystemConstants.DEFAULT_DEPT_ID。
@@ -37,41 +36,6 @@ type Handler struct {
 // NewHandler 构造 handler。perm / idem 可为 nil（此时不施加守卫，仅用于单测）。
 func NewHandler(db *gorm.DB, eh *errs.Handler, perm *permguard.Guard, idem *idempotentx.Guard) *Handler {
 	return &Handler{db: db, errs: eh, perm: perm, idem: idem}
-}
-
-// Mount 注册部门路由。挂载点是 /system/dept（由 bootstrap 决定）。
-//
-// ⚠️ 权限串与 Python 端 AuthPermission(permissions=[...]) 逐条对应。
-// ⚠️ 动态段路由（/:dept_id、/list/exclude/:dept_id）必须注册在静态路由之后。
-func (h *Handler) Mount(b routex.Binder) {
-	require, repeat := h.guards()
-
-	b.GET("/list", require("system:dept:list"), h.List)
-	b.GET("/list/exclude/:dept_id", require("system:dept:list"), h.ListExclude)
-	b.GET("/treeselect", require("system:dept:query"), h.TreeSelect)
-	b.GET("/optionselect", require("system:dept:query"), h.OptionSelect)
-	b.GET("/:dept_id", require("system:dept:query"), h.GetByID)
-	b.POST("", require("system:dept:add"), repeat(), h.Add)
-	b.PUT("", require("system:dept:edit"), repeat(), h.Update)
-	b.DELETE("/:dept_id", require("system:dept:remove"), h.Delete)
-}
-
-// guards 返回「权限守卫」与「防重提交」两个中间件工厂（同 post/handler.go）。
-func (h *Handler) guards() (func(string) gin.HandlerFunc, func() gin.HandlerFunc) {
-	pass := func(c *gin.Context) { c.Next() }
-	require := func(perm string) gin.HandlerFunc {
-		if h.perm == nil {
-			return pass
-		}
-		return h.perm.Require(perm)
-	}
-	repeat := func() gin.HandlerFunc {
-		if h.idem == nil {
-			return pass
-		}
-		return h.idem.Default()
-	}
-	return require, repeat
 }
 
 // service 取出当前请求的业务层。ok=false 表示路由未挂认证中间件（编程错误）。
@@ -200,7 +164,7 @@ func (h *Handler) GetByID(c *gin.Context) {
 
 // Add POST /system/dept
 func (h *Handler) Add(c *gin.Context) {
-	in, err := DecodeCreate(readBody(c))
+	in, err := DecodeCreate(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -231,7 +195,7 @@ func (h *Handler) Add(c *gin.Context) {
 //
 // ⚠️ 校验顺序照抄 Python：数据权限 → 名称唯一 → 上级是自己 → 停用前置两道。
 func (h *Handler) Update(c *gin.Context) {
-	in, err := DecodeUpdate(readBody(c))
+	in, err := DecodeUpdate(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return

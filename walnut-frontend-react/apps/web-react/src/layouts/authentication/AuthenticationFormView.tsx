@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { cn } from '@vben-core/shared/utils';
+import { cn } from '@walnut-core/shared/utils';
 
 export interface AuthenticationFormViewProps {
   children?: ReactNode;

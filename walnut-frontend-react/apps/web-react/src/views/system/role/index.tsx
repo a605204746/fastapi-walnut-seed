@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button, Popconfirm, Space } from 'antd';
 import { useNavigate } from 'react-router';
-import { ADMIN_ROLE_KEY, SUPERADMIN_ROLE_ID, SUPERADMIN_ROLE_KEY } from '@vben/constants';
+import { ADMIN_ROLE_KEY, SUPERADMIN_ROLE_ID, SUPERADMIN_ROLE_KEY } from '@walnut/constants';
 import { useGrid, vxeCheckboxChecked } from '@/adapter/grid';
 import { roleChangeStatus, roleExport, roleList, roleRemove } from '@/api/system/role';
 import { Access, useAccess } from '@/components/access/Access';

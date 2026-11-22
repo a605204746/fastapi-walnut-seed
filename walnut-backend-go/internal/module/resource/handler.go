@@ -20,7 +20,6 @@ import (
 	"walnut-seed-go/internal/pkg/cryptox"
 	"walnut-seed-go/internal/pkg/envelope"
 	"walnut-seed-go/internal/pkg/errs"
-	"walnut-seed-go/internal/pkg/routex"
 	"walnut-seed-go/internal/pkg/ssex"
 	"walnut-seed-go/internal/pkg/wsx"
 )
@@ -38,14 +37,6 @@ type Handler struct {
 // NewHandler 构造资源 handler。
 func NewHandler(sse *ssex.Manager, ws *wsx.Manager, cache *cachex.Client, cfg *config.Config, eh *errs.Handler, log *slog.Logger) *Handler {
 	return &Handler{sse: sse, ws: ws, cache: cache, cfg: cfg, err: eh, log: log}
-}
-
-// Mount 注册资源路由。/sse 需要登录，/sse/close 在白名单内无需登录。
-// /websocket 在白名单内（浏览器 WebSocket 无法设自定义头）。
-func (h *Handler) Mount(protected routex.Binder, public routex.Binder) {
-	protected.GET("/sse", h.SSEConnect)
-	public.GET("/sse/close", h.SSEClose)
-	public.GET("/websocket", h.WebSocket)
 }
 
 // WebSocket GET /resource/websocket — WebSocket 连接。

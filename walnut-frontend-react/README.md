@@ -1,6 +1,6 @@
 # walnut-frontend-react
 
-WalnutSeed 的 **React 版前端**，与 `walnut-frontend`（Vue 3 / Vben 5）并存，共用同一套后端接口契约。
+WalnutSeed 的 **React 版前端**（默认前端），与 `walnut-frontend`（Vue 3 基线，已冻结作对比参照）并存，共用同一套后端接口契约。
 
 > **2026-11-19：现有 Vue 前端功能迁移完成（100% 实施覆盖）**。后端菜单契约组件 **14/14**，不再有迁移占位页；角色、公告、双仪表盘、隐藏授权页及原有管理页均已接通。
 > 七种布局、主题/半暗、页签缓存/刷新、搜索、锁屏、通知、租户切换、会话失效弹窗、头像裁剪和富文本已实现。
@@ -17,7 +17,7 @@ WalnutSeed 的 **React 版前端**，与 `walnut-frontend`（Vue 3 / Vben 5）�
 | 样式 | Tailwind 4 + CSS 变量设计令牌 | 同 |
 | 状态 | Zustand（vanilla store + React 绑定） | Pinia |
 | 命令式 API | `@tanstack/react-store` | `@tanstack/vue-store` |
-| HTTP | axios（`@vben/request`，原样搬运） | alova + `@alova/adapter-axios` |
+| HTTP | axios（`@walnut/request`，原样搬运） | alova + `@alova/adapter-axios` |
 | 加解密 | crypto-js + jsencrypt（原样搬运） | 同 |
 | 国际化 | i18next | vue-i18n |
 | 打包 | tsdown（仅 `internal/*`）+ rolldown 分包 | 同 |
@@ -30,12 +30,12 @@ walnut-frontend-react/
   apps/web-react/          # React 管理应用
     src/__fixtures__/      # 从运行中后端抓取的真实契约样本
   packages/
-    @core/shared/          # ← @vben-core/shared       纯 TS，原样搬运
-    @core/typings/         # ← @vben-core/typings      类型契约
-    @core/design/          # ← @vben-core/design       CSS 变量设计令牌 + Tailwind 入口
-    @core/preferences/     # ← @vben-core/preferences  偏好/主题（Zustand 重写）
-    preferences/           # ← @vben/preferences       应用层覆盖入口
-    hooks/                 # ← @vben/hooks             useAntdDesignTokens
+    @core/shared/          # @walnut-core/shared       纯 TS，原样搬运
+    @core/typings/         # @walnut-core/typings      类型契约
+    @core/design/          # @walnut-core/design       CSS 变量设计令牌 + Tailwind 入口
+    @core/preferences/     # @walnut-core/preferences  偏好/主题（Zustand 重写）
+    preferences/           # @walnut/preferences       应用层覆盖入口
+    hooks/                 # @walnut/hooks             useAntdDesignTokens
     constants/  types/     # 常量与类型
     locales/               # i18next 实现 + 与 Vue 侧共用的词典 JSON
     utils/                 # RSA/AES/SM2/SM4 加密 + tree/mitt/uuid 等
@@ -70,9 +70,9 @@ API 经 Vite 代理 `/api` → `http://localhost:8011`（三后端任选其一�
 
 `pnpm dev` 打开 http://localhost:8020 是一个自检面板，覆盖：
 
-1. **工作区内核解析** —— `@vben/request`、`@vben/constants`、`@vben-core/shared`、`@vben/utils`、`@vben-core/design` 在浏览器 bundle 里全部可用
+1. **工作区内核解析** —— `@walnut/request`、`@walnut/constants`、`@walnut-core/shared`、`@walnut/utils`、`@walnut-core/design` 在浏览器 bundle 里全部可用
 2. **浏览器内加解密** —— AES-ECB/PKCS7 往返一致；用真实开发环境公钥做 RSA 加密得到 172 字符的 `encrypt-key`（1024-bit 预期值）
-3. **设计令牌** —— `--primary` 等 CSS 变量随 `@vben-core/design/tokens` 注入并生效
+3. **设计令牌** —— `--primary` 等 CSS 变量随 `@walnut-core/design/tokens` 注入并生效
 4. **`.env` 契约** —— `VITE_GLOB_*` 变量名与 Vue 侧完全一致
 5. **国际化** —— i18next 加载与 Vue 侧**逐字节相同**的词典 JSON，`{0}` 占位符在加载时转成 `{{0}}`
 6. **真实后端链路** —— `POST /auth/login` → `GET /system/user/getInfo` → `GET /system/menu/getRouters`，响应信封 `{code,msg,data}` 由 `defaultResponseInterceptor` 拆包
@@ -83,9 +83,9 @@ API 经 Vite 代理 `/api` → `http://localhost:8011`（三后端任选其一�
 
 自检面板新增第 5 张卡片「主题系统」，覆盖：
 
-1. **`internal/vite-config` 全链路** —— `_app-config-*.js` 运行时配置注入（`window._VBEN_ADMIN_PRO_APP_CONF_`，含 RSA 密钥与加密开关）、`inject-app-loading` 首屏加载与暗色预判、HTML 压缩、license、archiver（`dist.zip`）、gzip/brotli 压缩
-2. **rolldown 分包** —— `framework`(219 kB) / `antd-theme`(125 kB) / `vben-core`(187 kB) / `vben-request`(111 kB) / `vben-locale`(91 kB) / `antd-overlay`(86 kB) 等按组拆分
-3. **Tailwind 4** —— `@vben/tailwind-config/theme` 经 `@vben-core/design` 根入口生效，`.text-3xl → font-size: 30px` 实测通过（面板里有自动校验）
+1. **`internal/vite-config` 全链路** —— `_app-config-*.js` 运行时配置注入（`window._WALNUT_ADMIN_PRO_APP_CONF_`，含 RSA 密钥与加密开关）、`inject-app-loading` 首屏加载与暗色预判、HTML 压缩、license、archiver（`dist.zip`）、gzip/brotli 压缩
+2. **rolldown 分包** —— `framework`(219 kB) / `antd-theme`(125 kB) / `walnut-core`(187 kB) / `walnut-request`(111 kB) / `walnut-locale`(91 kB) / `antd-overlay`(86 kB) 等按组拆分
+3. **Tailwind 4** —— `@walnut/tailwind-config/theme` 经 `@walnut-core/design` 根入口生效，`.text-3xl → font-size: 30px` 实测通过（面板里有自动校验）
 4. **preferences → Zustand** —— `updatePreferences` 驱动状态、`localStorage` 持久化（命名空间 `walnut-seed-admin`，与 Vue 侧同 key 方案）、刷新后恢复、`<html class="dark">` 与 `data-theme` 同步
 5. **CSS 变量 → antd 6 单向数据流** —— `useAntdDesignTokens()` 把 `--primary`/`--background`/`--radius` 等读回来喂 `ConfigProvider`；实测明暗两种模式下 antd 主按钮渲染色与 `--primary` **精确相等**（`rgb(20, 118, 255)`），`borderRadius` 由 `radius: '0.375'` rem 正确换算成 6px
 
@@ -176,7 +176,7 @@ return decrypted.toString(CryptoJS.enc.Utf8);  // ← 乱码不是合法 UTF-8 �
 
 ### 7. `sideEffects` 字段会让整条 CSS 链被摇掉（阶段 ① 埋的雷）
 
-给 `@vben-core/design` 加上 `"sideEffects": ["**/*.css"]` 后，因为入口是
+给 `@walnut-core/design` 加上 `"sideEffects": ["**/*.css"]` 后，因为入口是
 `src/index.ts`（一个只做 `import './xxx.css'` 的 TS 文件），打包器认为它无副作用而整体丢弃，
 连带 design-tokens / transition / nprogress / ui 全部 CSS 都不进产物。
 
@@ -241,20 +241,20 @@ React 版 `getPreferences()` 返回不可变快照，这三条立刻暴露，已
 
 | 项 | 说明 |
 | --- | --- |
-| 包名仍是 `@vben/*` / `@vben-core/*` | 让 ~50 个搬运文件的内部 import 零改动。改名是一次纯机械 codemod，留待后续 |
+| 包名统一为 `@walnut/*` / `@walnut-core/*` | 2026-11-22 完成标识符级改名（包 scope、API 名、CSS 类、运行时配置键）；跨仓引用统一称「Vue 基线」 |
 | 业务包 `exports` 直指 `src/*.ts` | 不跑 tsdown 预构建，Vite/vitest 直接消费 TS 源码 |
 | `internal/*` 例外，仍用 tsdown 构建 | Vite 加载配置文件时会 externalize 裸导入，Node ESM 无法解析无扩展名的目录导入，必须产出 `dist/index.mjs`。类型走 `src`、运行时走 `dist` |
-| `@vben/locales` 用 i18next 重写 | 词典 JSON 与 Vue 侧共用；`{0}` → `{{0}}` 在加载时转换 |
+| `@walnut/locales` 用 i18next 重写 | 词典 JSON 与 Vue 侧共用；`{0}` → `{{0}}` 在加载时转换 |
 | `usePreferences()` 返回普通值而非 `ComputedRef` | 键名与 Vue 版逐一对应，搬调用点时去掉 `.value` 即可 |
 | `getPreferences()` 返回不可变快照 | 命令式代码（请求拦截器等）每次调用取最新值；**组件里必须用 `usePreferences()`**，快照不会触发重渲染。`preferences` 那个导出做成了实时 Proxy 以兼容旧写法，但同样不触发重渲染 |
 | `useAntdDesignTokens` 用 `convertToRgb` 归一化 | 修掉 Vue 侧直传 `hsl(H S% L%)` 导致的色差，见发现 11 |
 | vite-config 裁掉 `importmap` / `nitro-mock` / `vxe-table` / library 构建 | 分别对应：CDN externals（未用）、mock 服务（有真后端）、vxe-table（换 ProTable）、包构建（源码直出） |
-| 暂未搬运 | `generate-routes-*` / `generate-menus` / `reset-routes`（依赖 vue-router 类型，属阶段 ③④）、`typings/tabs.ts`（依赖 `RouteLocationNormalized`，属阶段 ⑥）、`@vben/hooks` 其余 8 个 hook |
+| 暂未搬运 | `generate-routes-*` / `generate-menus` / `reset-routes`（依赖 vue-router 类型，属阶段 ③④）、`typings/tabs.ts`（依赖 `RouteLocationNormalized`，属阶段 ⑥）、`@walnut/hooks` 其余 8 个 hook |
 
 ## 下一步（阶段 ③）
 
-1. `@vben/stores`：Pinia → Zustand（access / user / tabbar / timezone），沿用 `secure-ls` 生产加密存储
-2. `utils/http`：alova → axios，把 RSA+AES 装配、`*WithMsg` 变体、401 登出接到 `@vben/request`
+1. `@walnut/stores`：Pinia → Zustand（access / user / tabbar / timezone），沿用 `secure-ls` 生产加密存储
+2. `utils/http`：alova → axios，把 RSA+AES 装配、`*WithMsg` 变体、401 登出接到 `@walnut/request`
 3. SSE/WebSocket 通知提到组件外的 service 单例（为阶段 ⑥ 的 `<Activity>` 页签缓存铺路）
 4. lint 体系：eslint/oxlint 的 `react.ts` 替代 `vue.ts`，接入 turbo
 5. 补齐阶段 ①/② 跳过的 `generate-routes-*`、`generate-menus`（改为输出 React Router `RouteObject`）

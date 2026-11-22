@@ -2,7 +2,7 @@ import type {
   AppRouteObject,
   ComponentRecordType,
   RouteRecordStringComponent,
-} from '@vben-core/typings';
+} from '@walnut-core/typings';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 

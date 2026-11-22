@@ -141,7 +141,7 @@ services:
       #   API_DECRYPT_PRIVATE_KEY 解前端请求 —— 对应前端 VITE_GLOB_RSA_PUBLIC_KEY
       #   API_DECRYPT_PUBLIC_KEY  加后端响应 —— 对应前端 VITE_GLOB_RSA_PRIVATE_KEY
       # 开发密钥对直接取自 walnut-backend-go/env/.env.dev（已与前两端 dev 环境三方配对，
-      # 可用 walnut-backend-go/scripts/verify_key_pairing.py 校验）。生产必须整体替换。
+      # 可用 scripts/verify_key_pairing.py 校验）。生产必须整体替换。
       API_DECRYPT_ENABLED: ${API_DECRYPT_ENABLED:-true}
       API_DECRYPT_HEADER_FLAG: ${API_DECRYPT_HEADER_FLAG:-encrypt-key}
       API_DECRYPT_PUBLIC_KEY: ${API_DECRYPT_PUBLIC_KEY:-}

@@ -1,5 +1,7 @@
 import { Input, Space } from 'antd';
 
+import { $t } from '@/locales';
+
 import './InputCaptcha.css';
 
 export interface InputCaptchaProps {
@@ -21,7 +23,7 @@ export function InputCaptcha({
   loading = false,
   onChange,
   onCaptchaClick,
-  placeholder = '请输入验证码',
+  placeholder = $t('authentication.code'),
   value = '',
 }: InputCaptchaProps) {
   return (

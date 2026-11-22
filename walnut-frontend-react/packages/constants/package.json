@@ -1,5 +1,5 @@
 {
-  "name": "@vben/constants",
+  "name": "@walnut/constants",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
@@ -11,9 +11,9 @@
     "typecheck": "tsc --noEmit --skipLibCheck"
   },
   "dependencies": {
-    "@vben-core/shared": "workspace:*"
+    "@walnut-core/shared": "workspace:*"
   },
   "devDependencies": {
-    "@vben/tsconfig": "workspace:*"
+    "@walnut/tsconfig": "workspace:*"
   }
 }

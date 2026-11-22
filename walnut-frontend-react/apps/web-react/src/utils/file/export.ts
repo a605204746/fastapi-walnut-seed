@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import { $t } from '@vben/locales';
+import { $t } from '@walnut/locales';
 import dayjs from 'dayjs';
 
 export interface ExportBlobFuncOptions {

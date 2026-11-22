@@ -20,9 +20,29 @@ import (
 // 从而断言 FillCreate / FillUpdate 写入的 create_time / update_time。
 var nowFunc = time.Now
 
+// postRepo 是 service 消费的数据访问能力（consumer-side 接口，定义在消费方）。
+// 只列 service 实际调用的方法；*Repo 满足它，单测以 mock 替换。
+type postRepo interface {
+	Page(ctx context.Context, page crudx.Page, conds []crudx.Cond) ([]SysPost, int64, error)
+	ListAll(ctx context.Context, conds ...crudx.Cond) ([]SysPost, error)
+	Get(ctx context.Context, id int64) (*SysPost, error)
+	ExistsByName(ctx context.Context, name string, deptID int64, excludeID *int64) (bool, error)
+	ExistsByCode(ctx context.Context, code string, excludeID *int64) (bool, error)
+	CountUserPost(ctx context.Context, postID int64) (int64, error)
+	CountByDeptID(ctx context.Context, deptID int64) (int64, error)
+	ListOptionByIDs(ctx context.Context, ids []int64) ([]SysPost, error)
+	ListByUserID(ctx context.Context, userID int64) ([]SysPost, error)
+	Create(ctx context.Context, row *SysPost) error
+	Update(ctx context.Context, row *SysPost) error
+	DeleteBatch(ctx context.Context, ids []int64) (int64, error)
+	DeptAndChildIDs(ctx context.Context, deptID int64) ([]int64, error)
+	DeptNameMap(ctx context.Context, deptIDs []int64) (map[int64]*string, error)
+	DeptTree(ctx context.Context, conds []crudx.Cond) ([]DeptNode, error)
+}
+
 // Service 岗位业务层。与 Python 端一样持有**请求级**认证上下文（审计填充要用）。
 type Service struct {
-	repo *Repo
+	repo postRepo
 	auth authctx.Context
 }
 

@@ -1,5 +1,5 @@
 {
-  "name": "@vben-core/design",
+  "name": "@walnut-core/design",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
@@ -11,10 +11,10 @@
     "./tokens": "./src/design-tokens/index.ts"
   },
   "dependencies": {
-    "@vben/tailwind-config": "workspace:*"
+    "@walnut/tailwind-config": "workspace:*"
   },
   "devDependencies": {
-    "@vben/tsconfig": "workspace:*",
+    "@walnut/tsconfig": "workspace:*",
     "sass": "^1.99.0"
   }
 }

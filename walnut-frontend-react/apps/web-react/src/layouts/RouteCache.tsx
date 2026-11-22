@@ -1,7 +1,7 @@
 import { Activity, useContext, useRef } from 'react';
 import { useLocation, useMatches, useOutlet, UNSAFE_LocationContext } from 'react-router';
-import { getTabKey, useTabbarStore } from '@vben/stores';
-import { usePreferences } from '@vben/preferences';
+import { getTabKey, useTabbarStore } from '@walnut/stores';
+import { usePreferences } from '@walnut/preferences';
 import { mergeMatchMeta } from '@/router/route-tree';
 import { useUiStore } from '@/store/ui';
 

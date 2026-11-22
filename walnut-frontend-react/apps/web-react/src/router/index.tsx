@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react';
 
-import { getPreferences } from '@vben/preferences';
-import { useUserStore } from '@vben/stores';
+import { getPreferences } from '@walnut/preferences';
+import { useUserStore } from '@walnut/stores';
 import { createBrowserRouter, Navigate } from 'react-router';
 
 import { AuthLayout } from '@/layouts/AuthLayout';

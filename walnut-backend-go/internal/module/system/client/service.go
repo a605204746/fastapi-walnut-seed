@@ -30,9 +30,22 @@ const (
 	defaultTimeout       = 604800
 )
 
+// clientRepo 是 service 消费的数据访问能力（consumer-side 接口，定义在消费方）。
+// 只列 service 实际调用的方法；*Repo 满足它，单测以 mock 替换。
+type clientRepo interface {
+	Page(ctx context.Context, page crudx.Page, conds []crudx.Cond) ([]SysClient, int64, error)
+	ListAll(ctx context.Context, conds ...crudx.Cond) ([]SysClient, error)
+	Get(ctx context.Context, id int64) (*SysClient, error)
+	ExistsByKey(ctx context.Context, key string, excludeID *int64) (bool, error)
+	Create(ctx context.Context, row *SysClient) error
+	Update(ctx context.Context, row *SysClient) error
+	UpdateStatusByClientID(ctx context.Context, clientID, status string, uid int64, now time.Time) (int64, error)
+	LogicalDeleteBatch(ctx context.Context, ids []int64, uid int64, now time.Time) (int64, error)
+}
+
 // Service 客户端业务层。
 type Service struct {
-	repo *Repo
+	repo clientRepo
 	auth authctx.Context
 }
 

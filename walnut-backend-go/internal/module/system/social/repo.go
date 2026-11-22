@@ -21,7 +21,7 @@ func NewRepo(db *gorm.DB) *Repo { return &Repo{db: db} }
 
 // ListByUserID 按用户 ID 查询授权列表（del_flag 过滤、不排序）。
 func (r *Repo) ListByUserID(ctx context.Context, userID int64) ([]SysSocial, error) {
-	return crudx.ListAll[SysSocial](ctx, r.db,
+	return crudx.ListAll[SysSocial](ctx, crudx.DB(ctx, r.db),
 		crudx.Eq("user_id", userID),
 		crudx.Eq("del_flag", modelx.Normal))
 }

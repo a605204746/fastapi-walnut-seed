@@ -1,37 +1,37 @@
 /** 页签栏总高包含底边框；chrome 外观覆盖必须高于 antd 的 card 规则。 */
-.vben-tabs .ant-tabs-nav {
+.walnut-tabs .ant-tabs-nav {
   height: calc(var(--tabbar-height) - 1px);
   margin: 0;
 }
 
-.vben-tabs .ant-tabs-nav::before {
+.walnut-tabs .ant-tabs-nav::before {
   border-bottom: none;
 }
 
-.vben-tabs .ant-tabs-content-holder {
+.walnut-tabs .ant-tabs-content-holder {
   display: none;
 }
 
-.vben-tabs .ant-tabs-tab {
+.walnut-tabs .ant-tabs-tab {
   height: calc(var(--tabbar-height) - 5px);
   padding-top: 0;
   padding-bottom: 0;
 }
 
 /* The chrome preset uses the same primary tint and lower curved corners as Vue. */
-.vben-tabs--chrome .ant-tabs-nav-list { padding-inline: 7px; align-items: flex-end; }
-.vben-tabs--chrome { --tab-active-bg: hsl(var(--primary) / 0.15); }
-.dark .vben-tabs--chrome { --tab-active-bg: hsl(var(--accent)); }
-.vben-tabs.vben-tabs--chrome .ant-tabs.ant-tabs-card .ant-tabs-tab {
+.walnut-tabs--chrome .ant-tabs-nav-list { padding-inline: 7px; align-items: flex-end; }
+.walnut-tabs--chrome { --tab-active-bg: hsl(var(--primary) / 0.15); }
+.dark .walnut-tabs--chrome { --tab-active-bg: hsl(var(--accent)); }
+.walnut-tabs.walnut-tabs--chrome .ant-tabs.ant-tabs-card .ant-tabs-tab {
   position: relative;
   border: none;
   background: transparent;
   border-radius: 7px 7px 0 0;
   padding-inline: 16px;
 }
-.vben-tabs.vben-tabs--chrome .ant-tabs.ant-tabs-card .ant-tabs-tab-active { background: var(--tab-active-bg); }
-.vben-tabs.vben-tabs--chrome .ant-tabs.ant-tabs-card .ant-tabs-tab-active::before,
-.vben-tabs.vben-tabs--chrome .ant-tabs.ant-tabs-card .ant-tabs-tab-active::after {
+.walnut-tabs.walnut-tabs--chrome .ant-tabs.ant-tabs-card .ant-tabs-tab-active { background: var(--tab-active-bg); }
+.walnut-tabs.walnut-tabs--chrome .ant-tabs.ant-tabs-card .ant-tabs-tab-active::before,
+.walnut-tabs.walnut-tabs--chrome .ant-tabs.ant-tabs-card .ant-tabs-tab-active::after {
   content: '';
   position: absolute;
   bottom: 0;
@@ -39,11 +39,11 @@
   height: 7px;
   pointer-events: none;
 }
-.vben-tabs.vben-tabs--chrome .ant-tabs.ant-tabs-card .ant-tabs-tab-active::before {
+.walnut-tabs.walnut-tabs--chrome .ant-tabs.ant-tabs-card .ant-tabs-tab-active::before {
   left: -7px;
   background: radial-gradient(circle at 0 0, transparent 7px, var(--tab-active-bg) 7px);
 }
-.vben-tabs.vben-tabs--chrome .ant-tabs.ant-tabs-card .ant-tabs-tab-active::after {
+.walnut-tabs.walnut-tabs--chrome .ant-tabs.ant-tabs-card .ant-tabs-tab-active::after {
   right: -7px;
   background: radial-gradient(circle at 100% 0, transparent 7px, var(--tab-active-bg) 7px);
 }

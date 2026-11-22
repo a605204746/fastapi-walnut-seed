@@ -2,10 +2,10 @@ import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 
 import type { Client } from '@/api/system/client/model';
 
-import { $t } from '@vben/locales';
-import { useVbenForm, type FormSchema } from '@vben-core/form-ui';
-import { useVbenDrawer } from '@vben-core/popup-ui';
-import { cloneDeep } from '@vben-core/shared/utils';
+import { $t } from '@walnut/locales';
+import { useWalnutForm, type FormSchema } from '@walnut-core/form-ui';
+import { useWalnutDrawer } from '@walnut-core/popup-ui';
+import { cloneDeep } from '@walnut-core/shared/utils';
 
 import { clientAdd, clientInfo, clientUpdate } from '@/api/system/client';
 import { useDictStore } from '@/store/dict';
@@ -42,7 +42,7 @@ export const ClientDrawer = forwardRef<ClientDrawerHandle, ClientDrawerProps>(
       setIsUpdate(value);
     }
 
-    const [BasicForm, formApi] = useVbenForm({
+    const [BasicForm, formApi] = useWalnutForm({
       commonConfig: {
         componentProps: { className: 'w-full' },
         formItemClass: 'col-span-2',
@@ -84,7 +84,7 @@ export const ClientDrawer = forwardRef<ClientDrawerHandle, ClientDrawerProps>(
         initializedGetter: defaultFormValueGetter(formApi),
       });
 
-    const [BasicDrawer, drawerApi] = useVbenDrawer({
+    const [BasicDrawer, drawerApi] = useWalnutDrawer({
       onBeforeClose,
       onClosed: handleClosed,
       onConfirm: handleConfirm,

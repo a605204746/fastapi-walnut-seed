@@ -1,8 +1,8 @@
-import type { AppRouteObject } from '@vben-core/typings';
+import type { AppRouteObject } from '@walnut-core/typings';
 
 import { lazy } from 'react';
 
-import { $t } from '@vben/locales';
+import { $t } from '@walnut/locales';
 
 /**
  * 个人中心路由（对应 Vue 侧 router/routes/modules/profile.ts）。

@@ -20,7 +20,7 @@ class IndexedDBDriver implements IStorageDriver {
   private storeName: string;
 
   constructor({
-    dbName = 'vben-storage',
+    dbName = 'walnut-storage',
     dbVersion = 1,
     storeName = 'kv-store',
   }: IndexedDBDriverOptions = {}) {

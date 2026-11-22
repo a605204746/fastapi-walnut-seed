@@ -1,6 +1,6 @@
-import type { SupportedLanguagesType } from '@vben/locales';
+import type { SupportedLanguagesType } from '@walnut/locales';
 
-import { loadLocalesMapFromDir } from '@vben/locales';
+import { loadLocalesMapFromDir } from '@walnut/locales';
 
 /**
  * 应用级语言包加载（对应 Vue 侧 apps/web-antd/src/locales/index.ts）。
@@ -21,4 +21,4 @@ export async function loadAppMessages(lang: SupportedLanguagesType) {
   return appLocaleMessages?.default ?? {};
 }
 
-export { $t } from '@vben/locales';
+export { $t } from '@walnut/locales';

@@ -1,4 +1,4 @@
-import { $t } from '@vben/locales';
+import { $t } from '@walnut/locales';
 import { Col, Row, Tooltip } from 'antd';
 
 import { accountBindList, handleAuthBinding } from '../oauth-common';

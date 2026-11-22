@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
-import { usePreferences } from '@vben/preferences';
-import { cn } from '@vben-core/shared/utils';
+import { usePreferences } from '@walnut/preferences';
+import { cn } from '@walnut-core/shared/utils';
 
 import { WalnutSlogan } from '@/components/walnut-slogan/WalnutSlogan';
 

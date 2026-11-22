@@ -2,7 +2,7 @@ import type { DeptTree as DeptTreeNode } from '@/api/system/user/model';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { cloneDeep, listToTree, treeToList } from '@vben/utils';
+import { cloneDeep, listToTree, treeToList } from '@walnut/utils';
 import { SyncOutlined } from '@ant-design/icons';
 import { Button, Empty, Input, Skeleton, Space, Tree } from 'antd';
 

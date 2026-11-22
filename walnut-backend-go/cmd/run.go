@@ -42,7 +42,7 @@ func runServer() error {
 		return fmt.Errorf("配置装载失败: %w", err)
 	}
 
-	app, err := bootstrap.New(cfg)
+	app, err := bootstrap.New(cfg, bootstrap.WithContractSpec(ContractSpec))
 	if err != nil {
 		// 安全校验失败、路由审计失败等致命问题在此拦截，服务不对外暴露
 		return err

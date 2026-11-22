@@ -4,8 +4,8 @@ import type { DescriptionsProps } from 'antd';
 
 import type { ResetPwdParam, User } from '@/api/system/user/model';
 
-import { useVbenForm, type FormSchema } from '@vben-core/form-ui';
-import { useVbenModal } from '@vben-core/popup-ui';
+import { useWalnutForm, type FormSchema } from '@walnut-core/form-ui';
+import { useWalnutModal } from '@walnut-core/popup-ui';
 import { Descriptions } from 'antd';
 
 import { userResetPassword } from '@/api/system/user';
@@ -43,7 +43,7 @@ export const UserResetPwdModal = forwardRef<
 >(function UserResetPwdModal({ onReload }, ref) {
   const [currentUser, setCurrentUser] = useState<null | User>(null);
 
-  const [BasicForm, formApi] = useVbenForm({
+  const [BasicForm, formApi] = useWalnutForm({
     commonConfig: { labelWidth: 80 },
     schema: [
       {
@@ -69,7 +69,7 @@ export const UserResetPwdModal = forwardRef<
     showDefaultActions: false,
   });
 
-  const [BasicModal, modalApi] = useVbenModal({
+  const [BasicModal, modalApi] = useWalnutModal({
     closeOnClickModal: false,
     fullscreenButton: false,
     onClosed: handleClosed,

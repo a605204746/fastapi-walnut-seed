@@ -59,7 +59,7 @@ up.sql 写 CREATE/ALTER，down.sql 写反向 DROP。
 
 ## 3. 与 Python 端 Schema 一致性
 
-`scripts/verify_schema_parity.py` 比对两端数据库 schema（表/列/索引/约束），确保逐条一致：
+仓库根 `scripts/verify_schema_parity.py` 比对两端数据库 schema（表/列/索引/约束），确保逐条一致：
 
 ```bash
 python scripts/verify_schema_parity.py

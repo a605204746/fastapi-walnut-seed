@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { usePreferences } from '@vben/preferences';
+import { usePreferences } from '@walnut/preferences';
 import { Spin } from 'antd';
 import { useLocation } from 'react-router';
 
@@ -31,7 +31,7 @@ export function RouteFeedback() {
 
   return (
     <>
-      {progress ? <div className="vben-progress-bar" /> : null}
+      {progress ? <div className="walnut-progress-bar" /> : null}
       {loading ? (
         <div className="bg-background/60 absolute inset-0 z-50 flex items-center justify-center">
           <Spin />

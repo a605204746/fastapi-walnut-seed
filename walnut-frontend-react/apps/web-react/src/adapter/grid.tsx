@@ -3,15 +3,16 @@ import { GridPagination } from './pagination';
 import './grid.css';
 import type { ComponentType, ReactNode } from 'react';
 
-import type { FormProps, FormSchema } from '@vben-core/form-ui';
+import type { FormProps, FormSchema } from '@walnut-core/form-ui';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { $t } from '@vben/locales';
-import { listToTree } from '@vben/utils';
-import { useVbenForm } from '@vben-core/form-ui';
-import { Store, useStore } from '@vben-core/shared/store';
-import { cn } from '@vben-core/shared/utils';
+import { $t } from '@walnut/locales';
+import { usePreferences } from '@walnut/preferences';
+import { listToTree } from '@walnut/utils';
+import { useWalnutForm } from '@walnut-core/form-ui';
+import { Store, useStore } from '@walnut-core/shared/store';
+import { cn } from '@walnut-core/shared/utils';
 import { Button, Checkbox, Empty, Popover, Table } from 'antd';
 import type { TableProps } from 'antd';
 import {
@@ -94,6 +95,13 @@ export interface GridOptions {
       /** 查询成功后的回调（对应 vxe 的 `proxyConfig.ajax.querySuccess`） */
       querySuccess?: (rows: any[]) => void;
     };
+    /**
+     * 是否在挂载时自动查询（对应 vxe 的 `proxyConfig.autoLoad`，默认 true）。
+     * Vue 侧弹窗内的表格随弹窗内容懒挂载，首次自动查询发生在打开之后；
+     * React 侧 useGrid 的 effect 在页面挂载时就跑，弹窗内表格需置 false
+     * 并在 onOpened 里手动 reload，否则首查携带的筛选参数（如 dictType）还是空。
+     */
+    autoLoad?: boolean;
   };
   rowConfig?: { keyField?: string };
   /** 行 class（对应 vxe 的 rowClassName），可以是字符串或按行计算的函数 */
@@ -149,7 +157,7 @@ interface GridState {
 }
 
 export interface GridApi {
-  formApi?: ReturnType<typeof useVbenForm>[1];
+  formApi?: ReturnType<typeof useWalnutForm>[1];
   grid: {
     clearCheckboxRow: () => void;
     /** 当前展示的数据（树形表格下为组树后的结果，对应 vxe 的 grid.getData()） */
@@ -219,9 +227,9 @@ function collectParentKeys(nodes: any[], keyField: string): Key[] {
 
 /**
  * vxe-grid → antd Table 适配层（对应 Vue 侧 plugins/vxe-table/use-vxe-grid.vue +
- * adapter/vxe-table.ts）。保留 `useVbenVxeGrid(options) → [Grid, gridApi]` 签名。
+ * adapter/vxe-table.ts）。保留 `useWalnutVxeGrid(options) → [Grid, gridApi]` 签名。
  *
- * 架构：表格状态放在 TanStack Store（与 Vben 一致），返回的 Grid 组件身份稳定，
+ * 架构：表格状态放在 TanStack Store（与 Walnut 一致），返回的 Grid 组件身份稳定，
  * 通过 useStore 订阅 → 避免每次渲染重挂载子树，同时让工具栏能响应选中态变化。
  *
  * ⚠️ 像素保真（方案 C 最大风险点）：vxe-table 与 antd Table 的行高/边框/表头底色/
@@ -234,7 +242,7 @@ export function useGrid(
   const { formOptions, gridOptions } = options;
   const keyField = gridOptions.rowConfig?.keyField ?? 'id';
 
-  const [Form, formApi] = useVbenForm({
+  const [Form, formApi] = useWalnutForm({
     ...(formOptions ?? { schema: [] as FormSchema[] }),
     // 查询表单用紧凑模式（对应 Vue 侧 useTableForm 的 compact: true）
     compact: true,
@@ -307,6 +315,7 @@ export function useGrid(
   runQueryRef.current = runQuery;
 
   useEffect(() => {
+    if (latest.current.gridOptions.proxyConfig?.autoLoad === false) return;
     void runQuery(1, 10);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -358,7 +367,7 @@ export function useGrid(
     return gridOptions.columns
       .filter((col) => col.type !== 'checkbox')
       .map((col) => ({
-        // ⚠️ vxe 的全局配置是 `align: 'center'`（见 Vue 侧 setupVbenVxeTable），
+        // ⚠️ vxe 的全局配置是 `align: 'center'`（见 Vue 基线 vxe 表格 setup），
         // 即「未显式声明对齐方式的列一律居中」。antd Table 默认左对齐，
         // 不补这个默认值会导致所有表格与 Vue 端肉眼可见地不一致。
         align: col.align ?? 'center',
@@ -447,7 +456,7 @@ interface GridViewProps extends GridComponentProps {
   store: Store<GridState>;
 }
 
-type FormApi2 = ReturnType<typeof useVbenForm>[1];
+type FormApi2 = ReturnType<typeof useWalnutForm>[1];
 
 function GridView({
   antdColumns,
@@ -473,6 +482,8 @@ function GridView({
   tableTitleHelp,
   toolbarTools,
 }: GridViewProps) {
+  // 订阅偏好：locale 变化时重译工具栏/展开收起文案
+  usePreferences();
   const {
     current,
     dataSource,
@@ -624,10 +635,10 @@ function GridView({
   }
 
   return (
-    <div className={cn('h-full rounded-md bg-card vben-grid', className)} style={maximized ? { position: 'fixed', inset: 0, zIndex: 1100 } : undefined}>
+    <div className={cn('h-full rounded-md bg-card walnut-grid', className)} style={maximized ? { position: 'fixed', inset: 0, zIndex: 1100 } : undefined}>
       <div className="flex h-full flex-col p-2">
         {formApi ? (
-          <div className="vben-grid-query relative rounded-sm py-3 pb-8" hidden={!showSearchForm}>
+          <div className="walnut-grid-query relative rounded-sm py-3 pb-8" hidden={!showSearchForm}>
             <Form />
             <div className="mt-2 flex justify-end gap-2">
               <Button
@@ -657,7 +668,7 @@ function GridView({
                 }
                 type="link"
               >
-                {showSearchForm ? '收起' : '展开'}{showSearchForm ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+                {showSearchForm ? $t('pages.common.collapse') : $t('pages.common.expand')}{showSearchForm ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
               </Button>
             </div>
             <div className="bg-background-deep absolute -left-2 bottom-1 z-100 h-2 w-[calc(100%+1rem)] overflow-hidden md:bottom-2 md:h-3"></div>
@@ -665,10 +676,10 @@ function GridView({
         ) : null}
 
         {tableTitle || toolbarTools ? (
-          <div className="vben-grid-toolbar mb-2 flex items-center justify-between">
+          <div className="walnut-grid-toolbar mb-2 flex items-center justify-between">
             <div className="flex-center gap-1 text-[1rem] font-bold">
               {tableTitle}
-              {!showSearchForm && <Button type="link" size="small" onClick={() => store.setState(prev => ({ ...prev, showSearchForm: true }))}>展开搜索</Button>}
+              {!showSearchForm && <Button type="link" size="small" onClick={() => store.setState(prev => ({ ...prev, showSearchForm: true }))}>{$t('component.grid.expandSearch')}</Button>}
               {tableTitleHelp ? (
                 <span className="text-muted-foreground text-xs font-normal">
                   {tableTitleHelp}
@@ -686,14 +697,14 @@ function GridView({
                 shape="circle"
               />
               <Button aria-label="maximize-table" icon={<FullscreenOutlined />} shape="circle" onClick={() => setMaximized(!maximized)} />
-              <Popover trigger="click" placement="bottomRight" title="列设置" content={<div className="flex flex-col gap-2">{(antdColumns ?? []).map((column: any) => <Checkbox key={column.key} checked={!hiddenColumns.includes(String(column.key))} onChange={event => setHiddenColumns(event.target.checked ? hiddenColumns.filter(key => key !== String(column.key)) : [...hiddenColumns, String(column.key)])}>{column.title}</Checkbox>)}</div>}><Button aria-label="table-columns" icon={<SettingOutlined />} shape="circle" /></Popover>
+              <Popover trigger="click" placement="bottomRight" title={$t('component.grid.columnSettings')} content={<div className="flex flex-col gap-2">{(antdColumns ?? []).map((column: any) => <Checkbox key={column.key} checked={!hiddenColumns.includes(String(column.key))} onChange={event => setHiddenColumns(event.target.checked ? hiddenColumns.filter(key => key !== String(column.key)) : [...hiddenColumns, String(column.key)])}>{column.title}</Checkbox>)}</div>}><Button aria-label="table-columns" icon={<SettingOutlined />} shape="circle" /></Popover>
             </div>
           </div>
         ) : null}
 
         <div
           ref={setTableElement}
-          className="vben-grid-table min-h-0 flex-1"
+          className="walnut-grid-table min-h-0 flex-1"
           style={minHeight === undefined ? undefined : { minHeight }}
         >
           <Table
@@ -731,7 +742,7 @@ function GridView({
 }
 
 /** 保留 Vue 侧同名导出，便于调用点零改动 */
-export const useVbenVxeGrid = useGrid;
+export const useWalnutVxeGrid = useGrid;
 
 /** 是否有勾选行（对应 adapter/vxe-table.ts 的 vxeCheckboxChecked） */
 export function vxeCheckboxChecked(gridApi: GridApi): boolean {

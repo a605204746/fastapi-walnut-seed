@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { updatePreferences } from '@vben/preferences';
+import { updatePreferences } from '@walnut/preferences';
 export function useIsMobile() {
   const [mobile, setMobile] = useState(() => window.matchMedia('(max-width: 767px)').matches);
   useEffect(() => {

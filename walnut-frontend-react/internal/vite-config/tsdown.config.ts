@@ -10,7 +10,7 @@ const loadingAssets = ['default-loading-antd.html', 'default-loading.html'];
 export default defineConfig({
   clean: true,
   deps: {
-    neverBundle: ['@vben/node-utils'],
+    neverBundle: ['@walnut/node-utils'],
     skipNodeModulesBundle: true,
   },
   // 不生成 d.ts：postcss 的类型在 rolldown dts 解析下会报 MISSING_EXPORT。

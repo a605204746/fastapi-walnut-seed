@@ -23,6 +23,21 @@
     "title": "消息",
     "received": "收到新消息"
   },
+  "grid": {
+    "expandSearch": "展开搜索",
+    "columnSettings": "列设置"
+  },
+  "pager": {
+    "total": "共 {0} 条记录",
+    "pagesize": "{0}条/页",
+    "homePage": "首页",
+    "prevPage": "上一页",
+    "nextPage": "下一页",
+    "prevJump": "向上跳页",
+    "nextJump": "向下跳页",
+    "endPage": "末页",
+    "pageClassifier": "页"
+  },
   "upload": {
     "save": "保存",
     "upload": "上传",

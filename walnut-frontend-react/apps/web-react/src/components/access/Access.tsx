@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { useAccessStore, useUserStore } from '@vben/stores';
+import { useAccessStore, useUserStore } from '@walnut/stores';
 
 export interface AccessProps {
   /** 权限码，OR 语义（对应 v-access:code） */
@@ -14,7 +14,7 @@ const SUPER_ROLE = 'superadmin';
 const ALL_CODES = '*:*:*';
 
 /**
- * 权限判断 hook（对应 Vue 侧 `@vben/access` 的 `useAccess()`）。
+ * 权限判断 hook（对应 Vue 基线 access 包的 `useAccess()`）。
  *
  * `<Access>` 组件只能做「显隐」，但有些场景需要在逻辑里判断权限
  * （例如客户端管理页：非超管或无 `system:client:edit` 时，状态开关要 disabled

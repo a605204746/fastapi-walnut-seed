@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"walnut-seed-go/internal/config"
+	"walnut-seed-go/internal/module/common/docs"
 	"walnut-seed-go/internal/module/common/file"
 	"walnut-seed-go/internal/module/common/health"
 	"walnut-seed-go/internal/module/resource"
@@ -26,6 +28,7 @@ import (
 	"walnut-seed-go/internal/module/system/social"
 	"walnut-seed-go/internal/module/system/user"
 	"walnut-seed-go/internal/module/web/auth"
+	"walnut-seed-go/internal/pkg/authctx"
 	"walnut-seed-go/internal/pkg/errs"
 	"walnut-seed-go/internal/pkg/idempotentx"
 	"walnut-seed-go/internal/pkg/middleware"
@@ -294,7 +297,7 @@ func (a *App) buildEngine() error {
 // 目标顺序（从外到内，与 Python 端 MIDDLEWARE_LIST 一致）：
 //
 //	HTTPSRedirect → TrustedHost → CORS → Locale → ApiDecrypt → XSS
-//	  → OperLog → RequestLog → GZip → CorrelationId → 业务路由
+//	  → RequestLog → GZip → OperLog → CorrelationId → 业务路由
 //
 // ⚠️ Gin 的 Use() 调用顺序**就是**执行顺序，与 FastAPI 的「逆序叠加」相反，
 // 移植时不要照抄 Python 的 [::-1]。
@@ -310,8 +313,8 @@ func (a *App) registerMiddleware(engine *gin.Engine) {
 	// 客户端会收到裸 500 空响应而非信封体
 	engine.Use(a.errHandler.Recovery())
 
-	// 查询串分号兼容（Go net/url 拒绝 ';' 会丢光全部查询参数，Starlette 视其为字面字符）
-	engine.Use(middleware.QuerySemicolonCompat())
+	// 查询串/表单兼容（分号字面字符 + 重复键取末值，对齐 Starlette multidict）
+	engine.Use(middleware.QueryCompat())
 
 	// TODO: HTTPSRedirect（仅 prod 且 HTTPS_REDIRECT=true，需真实 TLS 环境）
 	// TODO: TrustedHost（仅 prod，校验 ALLOWED_HOSTS，需真实 TLS 环境）
@@ -352,11 +355,6 @@ func (a *App) registerMiddleware(engine *gin.Engine) {
 		}))
 	}
 
-	// 操作日志异步采集（在 XSS 之后，采集的是清洗后的请求体）
-	if a.operlog != nil {
-		engine.Use(a.operlog.Middleware())
-	}
-
 	engine.Use(middleware.RequestLog(middleware.RequestLogConfig{
 		Logger: a.log,
 		// 健康探针跳过：compose 每 2-10s 探一次，记下来会淹没真实流量
@@ -368,6 +366,12 @@ func (a *App) registerMiddleware(engine *gin.Engine) {
 		MinSize:       a.cfg.GzipMinSize,
 		CompressLevel: a.cfg.GzipCompressLevel,
 	}))
+
+	// 操作日志采集在 GZip **之内**：Python 端 operlog 由路由类在端点响应处
+	// 采集（gzip 之前），Go 若放在 gzip 之外会录到压缩后的字节。
+	if a.operlog != nil {
+		engine.Use(a.operlog.Middleware())
+	}
 
 	// CorrelationId 在链的**最内层**（紧邻业务路由），与 Python 端一致。
 	// 因此外层中间件记日志时可能还没有关联 ID——这是两端一致的既有行为，
@@ -388,6 +392,9 @@ func (a *App) registerRoutes(b *Builder) {
 		// 这里必须保持同样形状，不能改成信封。
 		c.JSON(http.StatusOK, "欢迎使用 WalnutSeed 后台管理框架，请通过前端地址访问。")
 	})
+
+	// ---- /docs /redoc /openapi.json：API 文档 UI（公开白名单内，spec 来自冻结契约）----
+	docs.NewHandler(a.contractSpec).Mount(b.Public("").Binder())
 
 	// ---- /common/health/{check,live,ready} ----
 	// 经 Group 包装注册（而非把 *gin.RouterGroup 直接交给 health 模块），
@@ -430,14 +437,92 @@ func (a *App) registerRoutes(b *Builder) {
 //
 // 用 routex.Binder 的闭包适配把 bootstrap.Group 的链式方法转成无返回值函数，
 // 避免 auth 包反向依赖 bootstrap 形成导入环（详见 routex.Binder 的注释）。
+//
+// auth 的跨域只读查询已归还各域 repo（consumer-side 窄接口见 auth/provider.go）：
+// 这里用适配器闭包绑定各域 repo 的方法注入。user 域复用与原 auth 查询语义
+// 完全一致的 FindByUserName；其余域为 SQL 逐字迁入的新方法。
 func (a *App) mountAuthRoutes(b *Builder) {
 	var limiter *ratelimitx.Limiter
 	if a.cache != nil {
 		limiter = ratelimitx.New(a.cache.Client, a.cache.Prefix(), a.log)
 	}
 
-	h := auth.NewHandler(a.db, a.cache, a.cfg, limiter, a.errHandler)
+	userRepo := user.NewRepo(a.db)
+	clientRepo := client.NewRepo(a.db)
+	configRepo := sysconfig.NewRepo(a.db)
+	deptRepo := dept.NewRepo(a.db)
+	roleRepo := role.NewRepo(a.db)
+	menuRepo := menu.NewRepo(a.db)
+
+	h := auth.NewHandler(a.db, a.cache, a.cfg, limiter, a.errHandler, auth.Deps{
+		Users:   authUserProvider{findByUsername: userRepo.FindByUserName},
+		Clients: authClientProvider{findByClientID: clientRepo.FindByClientID},
+		Configs: authConfigProvider{getValue: configRepo.GetValueByKey},
+		Depts:   authDeptProvider{findByID: deptRepo.FindByID},
+		Roles:   authRoleProvider{findActiveByUserID: roleRepo.FindActiveByUserID},
+		Menus: authMenuProvider{
+			findByRoleIDs: menuRepo.FindByRoleIDs,
+			allActiveIDs:  menuRepo.AllActiveIDs,
+		},
+	})
 	h.Mount(b.Public("/auth").Binder())
+}
+
+// ---- auth 跨域 provider 适配器 ----
+// 仅做方法名映射（auth 侧接口名 → 各域 repo 方法），无任何业务逻辑；
+// func 字段在 mountAuthRoutes 里直接绑定各域 repo 的方法值（闭包）。
+
+type authUserProvider struct {
+	findByUsername func(ctx context.Context, username string) (*user.SysUser, error)
+}
+
+func (p authUserProvider) FindByUsername(ctx context.Context, username string) (*user.SysUser, error) {
+	return p.findByUsername(ctx, username)
+}
+
+type authClientProvider struct {
+	findByClientID func(ctx context.Context, clientID string) (*client.SysClient, error)
+}
+
+func (p authClientProvider) FindByClientID(ctx context.Context, clientID string) (*client.SysClient, error) {
+	return p.findByClientID(ctx, clientID)
+}
+
+type authConfigProvider struct {
+	getValue func(ctx context.Context, key string) (string, bool, error)
+}
+
+func (p authConfigProvider) GetValue(ctx context.Context, key string) (string, bool, error) {
+	return p.getValue(ctx, key)
+}
+
+type authDeptProvider struct {
+	findByID func(ctx context.Context, deptID int64) (*dept.SysDept, error)
+}
+
+func (p authDeptProvider) FindByID(ctx context.Context, deptID int64) (*dept.SysDept, error) {
+	return p.findByID(ctx, deptID)
+}
+
+type authRoleProvider struct {
+	findActiveByUserID func(ctx context.Context, userID int64) ([]role.SysRole, error)
+}
+
+func (p authRoleProvider) FindActiveByUserID(ctx context.Context, userID int64) ([]role.SysRole, error) {
+	return p.findActiveByUserID(ctx, userID)
+}
+
+type authMenuProvider struct {
+	findByRoleIDs func(ctx context.Context, roleIDs []int64) ([]menu.SysMenu, error)
+	allActiveIDs  func(ctx context.Context) ([]int64, error)
+}
+
+func (p authMenuProvider) FindByRoleIDs(ctx context.Context, roleIDs []int64) ([]menu.SysMenu, error) {
+	return p.findByRoleIDs(ctx, roleIDs)
+}
+
+func (p authMenuProvider) AllActiveIDs(ctx context.Context) ([]int64, error) {
+	return p.allActiveIDs(ctx)
 }
 
 // mountSystemRoutes 装配 /system 下的受保护端点。
@@ -458,7 +543,12 @@ func (a *App) mountSystemRoutes(b *Builder) {
 		idem = idempotentx.New(a.cache, a.errHandler, middleware.LocaleFrom)
 	}
 
-	user.NewHandler(a.db, a.errHandler, perm, idem, a.storage).Mount(system.Group("/user").Binder())
+	user.NewHandler(a.db, a.errHandler, perm, idem, user.Deps{
+		Storage:  a.storage,
+		NewPosts: func(ac authctx.Context) user.PostProvider { return post.NewService(a.db, ac) },
+		NewRoles: func(ac authctx.Context) user.RoleProvider { return role.NewService(a.db, ac, role.Deps{}) },
+		NewDepts: func(ac authctx.Context) user.DeptProvider { return dept.NewService(a.db, ac) },
+	}).Mount(system.Group("/user").Binder())
 	menu.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/menu").Binder())
 	post.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/post").Binder())
 	dept.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/dept").Binder())
@@ -467,7 +557,7 @@ func (a *App) mountSystemRoutes(b *Builder) {
 	notice.NewHandler(a.db, a.errHandler, perm, idem, a.sse).Mount(system.Group("/notice").Binder())
 	client.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/client").Binder())
 	social.NewHandler(a.db, a.errHandler).Mount(system.Group("/social").Binder())
-	role.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/role").Binder())
+	role.NewHandler(a.db, a.errHandler, perm, idem, func(ac authctx.Context) role.DeptProvider { return dept.NewService(a.db, ac) }).Mount(system.Group("/role").Binder())
 }
 
 func (a *App) mountMonitorRoutes(b *Builder) {

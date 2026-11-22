@@ -1,5 +1,5 @@
 {
-  "name": "@vben/node-utils",
+  "name": "@walnut/node-utils",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
@@ -33,7 +33,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "@vben/tsconfig": "workspace:*",
+    "@walnut/tsconfig": "workspace:*",
     "tsdown": "catalog:",
     "typescript": "catalog:"
   }

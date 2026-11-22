@@ -4,8 +4,8 @@ import type { DescriptionsProps } from 'antd';
 
 import type { OperationLog } from '@/api/monitor/operlog/model';
 
-import { useVbenDrawer } from '@vben-core/popup-ui';
-import { DictEnum } from '@vben/constants';
+import { useWalnutDrawer } from '@walnut-core/popup-ui';
+import { DictEnum } from '@walnut/constants';
 import { Descriptions, Tag } from 'antd';
 
 import { useDictStore } from '@/store/dict';
@@ -35,7 +35,7 @@ export const OperationPreviewDrawer =
       useDictStore((state) => state.map);
       const [currentLog, setCurrentLog] = useState<null | OperationLog>(null);
 
-      const [BasicDrawer, drawerApi] = useVbenDrawer({
+      const [BasicDrawer, drawerApi] = useWalnutDrawer({
         footer: false,
         onClosed: () => setCurrentLog(null),
         onOpenChange: (isOpen) => {

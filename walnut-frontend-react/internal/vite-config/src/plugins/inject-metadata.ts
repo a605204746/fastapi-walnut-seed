@@ -5,7 +5,7 @@ import {
   findMonorepoRoot,
   getPackages,
   readPackageJSON,
-} from '@vben/node-utils';
+} from '@walnut/node-utils';
 
 import { readWorkspaceManifest } from '@pnpm/workspace.read-manifest';
 
@@ -87,7 +87,7 @@ async function viteMetadataPlugin(
 
       return {
         define: {
-          __VBEN_ADMIN_METADATA__: JSON.stringify({
+          __WALNUT_ADMIN_METADATA__: JSON.stringify({
             authorEmail,
             authorName,
             authorUrl,

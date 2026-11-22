@@ -3,8 +3,8 @@ import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 import type { DictData } from '@/api/system/dict/dict-data-model';
 import type { DictType } from '@/api/system/dict/dict-type-model';
 
-import { $t } from '@vben/locales';
-import { useVbenModal } from '@vben-core/popup-ui';
+import { $t } from '@walnut/locales';
+import { useWalnutModal } from '@walnut-core/popup-ui';
 import { Button, Popconfirm, Space } from 'antd';
 
 import { useGrid, vxeCheckboxChecked } from '@/adapter/grid';
@@ -35,8 +35,10 @@ export interface DictDataModalHandle {
  * 由字典类型表格的行点击触发（见 `../type/index.tsx`），弹窗内嵌一张表格 +
  * 新增/编辑弹窗，形成「类型 → 数据 → 单条」三层嵌套。
  *
- * `isFirstOpen` 的语义与 Vue 侧一致：首次打开时表格随 `proxyConfig` 自动加载，
- * 第二次及以后打开需要手动 `reload()`（因为切换了字典类型）。
+ * 加载时序与 Vue 侧的差异：Vue 的表格随弹窗内容懒挂载，首次自动查询
+ * 发生在 open() 设好 dictType 之后；React 侧 useGrid 的首查 effect 在页面
+ * 挂载时就跑（那时 dictType 还是空），故置 `autoLoad: false`，每次打开
+ * 都在 onOpened 里手动 reload。
  */
 export const DictDataModal = forwardRef<DictDataModalHandle>(
   function DictDataModal(_props, ref) {
@@ -45,7 +47,6 @@ export const DictDataModal = forwardRef<DictDataModalHandle>(
     const [dictName, setDictName] = useState('');
     /** dictType 用 ref 存：查询闭包要读到最新值，state 更新是异步的 */
     const dictTypeRef = useRef('');
-    const isFirstOpenRef = useRef(true);
 
     const formOptions = {
       commonConfig: {
@@ -68,6 +69,8 @@ export const DictDataModal = forwardRef<DictDataModalHandle>(
       minHeight: 300,
       pagerConfig: {},
       proxyConfig: {
+        // 页面挂载时不首查（dictType 尚未选定），打开弹窗时再 reload
+        autoLoad: false,
         ajax: {
           query: async (
             { page }: { page: { currentPage: number; pageSize: number } },
@@ -87,14 +90,10 @@ export const DictDataModal = forwardRef<DictDataModalHandle>(
 
     const [BasicTable, tableApi] = useGrid({ formOptions, gridOptions });
 
-    const [BasicModal, modalApi] = useVbenModal({
+    const [BasicModal, modalApi] = useWalnutModal({
       fullscreenButton: true,
       onOpened: async () => {
-        if (isFirstOpenRef.current) {
-          isFirstOpenRef.current = false;
-          return;
-        }
-        // 切换了字典类型，重新加载数据
+        // 每次打开都按当前 dictType 重新加载（含首次）
         await tableApi.reload();
       },
     });
@@ -172,12 +171,12 @@ export const DictDataModal = forwardRef<DictDataModalHandle>(
                     {$t('pages.common.edit')}
                   </Button>
                 </Access>
-                <Popconfirm
-                  onConfirm={() => handleDelete(row as DictData)}
-                  placement="left"
-                  title="确认删除？"
-                >
-                  <Access code={['system:dict:remove']}>
+                <Access code={['system:dict:remove']}>
+                  <Popconfirm
+                    onConfirm={() => handleDelete(row as DictData)}
+                    placement="left"
+                    title="确认删除？"
+                  >
                     <Button
                       danger
                       onClick={(e) => e.stopPropagation()}
@@ -186,8 +185,8 @@ export const DictDataModal = forwardRef<DictDataModalHandle>(
                     >
                       {$t('pages.common.delete')}
                     </Button>
-                  </Access>
-                </Popconfirm>
+                  </Popconfirm>
+                </Access>
               </Space>
             ),
           }}

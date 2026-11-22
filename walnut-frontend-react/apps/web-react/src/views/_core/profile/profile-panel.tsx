@@ -2,7 +2,7 @@ import type { DescriptionsProps } from 'antd';
 
 import type { UserProfile } from '@/api/system/profile/model';
 
-import { usePreferences } from '@vben/preferences';
+import { usePreferences } from '@walnut/preferences';
 import { Card, Descriptions, Tag, Tooltip } from 'antd';
 
 import { CropperAvatar } from '@/components/cropper';

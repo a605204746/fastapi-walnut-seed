@@ -1,7 +1,7 @@
-import type { FormSchema } from '@vben-core/form-ui';
+import type { FormSchema } from '@walnut-core/form-ui';
 import type { GridColumn } from '@/adapter/grid';
-import { DictEnum } from '@vben/constants';
-import { getPopupContainer } from '@vben/utils';
+import { DictEnum } from '@walnut/constants';
+import { getPopupContainer } from '@walnut/utils';
 
 import { getDictOptions } from '@/utils/dict';
 import { renderDict } from '@/utils/render';

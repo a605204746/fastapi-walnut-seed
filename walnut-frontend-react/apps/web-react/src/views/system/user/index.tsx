@@ -4,9 +4,9 @@ import type { MenuProps } from 'antd';
 
 import type { User } from '@/api/system/user/model';
 
-import { $t } from '@vben/locales';
-import { EnableStatus, SUPERADMIN_USER_ID } from '@vben/constants';
-import { usePreferences } from '@vben/preferences';
+import { $t } from '@walnut/locales';
+import { EnableStatus, SUPERADMIN_USER_ID } from '@walnut/constants';
+import { usePreferences } from '@walnut/preferences';
 import { Avatar, Button, Dropdown, Popconfirm, Space } from 'antd';
 
 import { useGrid, vxeCheckboxChecked } from '@/adapter/grid';
@@ -225,12 +225,12 @@ export default function UserPage() {
                         {$t('pages.common.edit')}
                       </Button>
                     </Access>
-                    <Popconfirm
-                      onConfirm={() => handleDelete(row as User)}
-                      placement="left"
-                      title="确认删除？"
-                    >
-                      <Access code={['system:user:remove']}>
+                    <Access code={['system:user:remove']}>
+                      <Popconfirm
+                        onConfirm={() => handleDelete(row as User)}
+                        placement="left"
+                        title="确认删除？"
+                      >
                         <Button
                           danger
                           onClick={(e) => e.stopPropagation()}
@@ -239,8 +239,8 @@ export default function UserPage() {
                         >
                           {$t('pages.common.delete')}
                         </Button>
-                      </Access>
-                    </Popconfirm>
+                      </Popconfirm>
+                    </Access>
                   </Space>
                   <Dropdown
                     menu={{

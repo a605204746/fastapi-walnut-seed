@@ -15,11 +15,15 @@ cd walnut-backend-go && go run . run --env dev
 
 ```
 walnut-backend-go/internal/module/blog/article/
-├── model.go      # GORM 实体
-├── dto.go        # 入参/出参
-├── repo.go       # 数据访问
-├── service.go    # 业务逻辑
-└── handler.go    # HTTP 端点
+├── routes.go           # 路由声明（Mount + 权限/防重守卫）
+├── handler.go          # HTTP 端点处理（bind → 调 service → envelope）
+├── service.go          # 业务逻辑 + consumer-side repo 接口
+├── service_test.go     # mock repo 单测
+├── req.go              # 入参/查询绑定（解码辅助走 bindx）
+├── resp.go             # 出参形状与映射
+├── dto_decode_test.go  # 特征测试（钉住契约文案与错误序）
+├── model.go            # GORM 实体
+└── repo.go             # 数据访问
 ```
 
 ## 2. model.go
@@ -46,7 +50,7 @@ func (Article) TableName() string { return "blog_article" }
 - NOT NULL 列用值类型
 - 显式 `TableName()`
 
-## 3. dto.go
+## 3. req.go / resp.go
 
 ```go
 package article
@@ -82,9 +86,11 @@ func DecodeCreate(body []byte) (CreateIn, error) {
 ```
 
 要点：
-- 出参 camelCase，指针 + 无 omitempty（null 恒定出现）
+- 出参放 resp.go、入参/查询放 req.go；出参 camelCase，指针 + 无 omitempty（null 恒定出现）
 - 整数字段走 `idtype.JSInt`（条件序列化）
-- 入参解码复刻 Pydantic 校验消息（`Field required` 等原文）
+- **JSON body 入参用 tag 范式**：请求结构体 `validate` + `label` tag，`Decode*(ctx, body)` 内 `bindx.BindJSON` 绑定后映射到 service 消费的 In 结构；自定义规则 `bindx.RegisterTag`。活样板：`internal/module/system/client`
+- query/form 绑定仍走 crudx/bindx 查询 cluster（BindQueryParam 形态）
+- **特征测试先行**：dto_decode_test.go 钉住 Decode* 输出（结构语义冻结，文案按 i18n 策略）
 
 ## 4. repo.go
 
@@ -114,14 +120,21 @@ func (r *Repo) Page(ctx context.Context, page crudx.Page, conds []crudx.Cond) ([
 - count 和 fetch 各建一个 query（GORM 语句复用陷阱）
 - `crudx.Apply` 追加条件
 - `HasLimit()` 控制分页
+- 跨模块模型引用直接 import 模块根（如 dept.SysDept）；包名冲突用别名（如 sysconfig）
 
 ## 5. service.go
 
 ```go
 package article
 
+// articleRepo consumer-side 接口：只列 service 实际调用的方法
+type articleRepo interface {
+    Page(ctx context.Context, page crudx.Page, conds []crudx.Cond) ([]Article, int64, error)
+    Create(ctx context.Context, row *Article) error
+}
+
 type Service struct {
-    repo *Repo
+    repo articleRepo
     auth authctx.Context
 }
 
@@ -145,20 +158,18 @@ func (s *Service) Insert(ctx context.Context, in CreateIn) (bool, error) {
 
 要点：
 - Service 持有请求级 `authctx.Context`
+- repo 依赖是 consumer-side 接口；mock 单测用「嵌入接口 + 覆盖被测方法」模式（见 user/service_test.go）
+- 跨模块能力经 Provider 工厂注入（见 user.Deps 与 bootstrap 接线），**禁止直接 NewService 其他模块**
 - `crudx.FillCreate` 填充审计字段
 - 删除前校验关联数据
 
-## 6. handler.go
+## 6. handler.go 与 routes.go
+
+路由声明与请求处理分两个文件：routes.go 放 Mount 与守卫工厂，handler.go 只放端点处理函数。
 
 ```go
+// routes.go
 package article
-
-type Handler struct {
-    db   *gorm.DB
-    errs *errs.Handler
-    perm *permguard.Guard
-    idem *idempotentx.Guard
-}
 
 func (h *Handler) Mount(b routex.Binder) {
     require, repeat := h.guards()
@@ -166,6 +177,18 @@ func (h *Handler) Mount(b routex.Binder) {
     b.POST("", require("blog:article:add"), repeat(), h.Add)
     b.PUT("", require("blog:article:edit"), repeat(), h.Update)
     b.DELETE("/:ids", require("blog:article:remove"), h.Delete)
+}
+```
+
+```go
+// handler.go
+package article
+
+type Handler struct {
+    db   *gorm.DB
+    errs *errs.Handler
+    perm *permguard.Guard
+    idem *idempotentx.Guard
 }
 ```
 
@@ -185,15 +208,18 @@ article.NewHandler(a.db, a.errHandler, perm, idem).Mount(system.Group("/article"
 go build ./...
 go vet ./...
 go test ./test/contract/ -run TestNoInventedRoutes  # 不应有 Python 没有的路由
+go run . routes                                     # 重新生成全局路由清单
 ```
 
 ## 9. 检查清单
 
 - [ ] model.go 有显式 `TableName()`
-- [ ] dto.go 出参字段顺序与 Python Pydantic 声明序一致
-- [ ] dto.go 入参解码复刻 Pydantic 校验消息
+- [ ] resp.go 出参字段顺序与 Python Pydantic 声明序一致
+- [ ] req.go 入参解码复刻 Pydantic 校验消息（bindx 变体选择正确）
+- [ ] dto_decode_test.go 特征测试钉住 Decode* 行为
 - [ ] repo.go count 和 fetch 各建 query
-- [ ] service.go 使用 `crudx.FillCreate` / `FillUpdate`
-- [ ] handler.go 每个端点都挂了 `permguard.Require`
+- [ ] service.go 定义 consumer-side repo 接口 + mock 单测；使用 `crudx.FillCreate` / `FillUpdate`
+- [ ] 跨模块能力经 Provider 注入，无直接 NewService 其他模块
+- [ ] routes.go 每个端点都挂了 `permguard.Require`
 - [ ] 写操作挂了 `repeat()`（防重提交）
 - [ ] router.go 挂载在 `b.Protected` 分组下

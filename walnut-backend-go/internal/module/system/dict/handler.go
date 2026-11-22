@@ -23,7 +23,6 @@ import (
 	"walnut-seed-go/internal/pkg/errs"
 	"walnut-seed-go/internal/pkg/excelx"
 	"walnut-seed-go/internal/pkg/permguard"
-	"walnut-seed-go/internal/pkg/routex"
 )
 
 // Handler 字典域端点。
@@ -37,35 +36,6 @@ type Handler struct {
 // NewHandler 构造 handler。perm 可为 nil（不施加守卫，仅单测）；cache 可为 nil（降级查库）。
 func NewHandler(db *gorm.DB, eh *errs.Handler, perm *permguard.Guard, cache *cachex.Client) *Handler {
 	return &Handler{db: db, errs: eh, perm: perm, cache: cache}
-}
-
-// Mount 注册字典路由。挂载点是 /system/dict（由 bootstrap 决定）。
-//
-// ⚠️ 动态段（/type/:dict_id 等）必须注册在同方法静态路由之后。
-func (h *Handler) Mount(b routex.Binder) {
-	require := func(perm string) gin.HandlerFunc {
-		if h.perm == nil {
-			return func(c *gin.Context) { c.Next() }
-		}
-		return h.perm.Require(perm)
-	}
-
-	b.GET("/type/list", require("system:dict:list"), h.TypeList)
-	b.POST("/type/export", require("system:dict:export"), h.TypeExport)
-	b.GET("/type/optionselect", h.TypeOptionSelect)
-	b.DELETE("/type/refreshCache", require("system:dict:remove"), h.RefreshCache)
-	b.GET("/type/:dict_id", require("system:dict:query"), h.TypeGet)
-	b.POST("/type", require("system:dict:add"), h.TypeAdd)
-	b.PUT("/type", require("system:dict:edit"), h.TypeUpdate)
-	b.DELETE("/type/:dict_ids", require("system:dict:remove"), h.TypeDelete)
-
-	b.GET("/data/list", require("system:dict:list"), h.DataList)
-	b.POST("/data/export", require("system:dict:export"), h.DataExport)
-	b.GET("/data/type/:dict_type", h.DataByType)
-	b.GET("/data/:dict_code", require("system:dict:query"), h.DataGet)
-	b.POST("/data", require("system:dict:add"), h.DataAdd)
-	b.PUT("/data", require("system:dict:edit"), h.DataUpdate)
-	b.DELETE("/data/:dict_codes", require("system:dict:remove"), h.DataDelete)
 }
 
 // service 取出当前请求的业务层。ok=false 表示路由未挂认证中间件（编程错误）。
@@ -168,7 +138,7 @@ func (h *Handler) TypeGet(c *gin.Context) {
 
 // TypeAdd POST /system/dict/type
 func (h *Handler) TypeAdd(c *gin.Context) {
-	in, err := DecodeTypeCreate(readBody(c))
+	in, err := DecodeTypeCreate(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -195,7 +165,7 @@ func (h *Handler) TypeAdd(c *gin.Context) {
 
 // TypeUpdate PUT /system/dict/type
 func (h *Handler) TypeUpdate(c *gin.Context) {
-	in, err := DecodeTypeUpdate(readBody(c))
+	in, err := DecodeTypeUpdate(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -322,7 +292,7 @@ func (h *Handler) DataGet(c *gin.Context) {
 
 // DataAdd POST /system/dict/data
 func (h *Handler) DataAdd(c *gin.Context) {
-	in, err := DecodeDataCreate(readBody(c))
+	in, err := DecodeDataCreate(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -349,7 +319,7 @@ func (h *Handler) DataAdd(c *gin.Context) {
 
 // DataUpdate PUT /system/dict/data
 func (h *Handler) DataUpdate(c *gin.Context) {
-	in, err := DecodeDataUpdate(readBody(c))
+	in, err := DecodeDataUpdate(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return

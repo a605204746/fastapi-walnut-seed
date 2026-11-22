@@ -1,6 +1,6 @@
 import type { FileCallBack, UpdatePasswordParam, UserProfile } from './model';
 
-import { buildUUID } from '@vben/utils';
+import { buildUUID } from '@walnut/utils';
 
 import { request } from '@/lib/request';
 

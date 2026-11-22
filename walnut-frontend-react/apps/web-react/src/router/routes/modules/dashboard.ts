@@ -1,5 +1,5 @@
 import { lazy } from 'react';
-import type { AppRouteObject } from '@vben-core/typings';
+import type { AppRouteObject } from '@walnut-core/typings';
 import { $t } from '@/locales';
 const routes: AppRouteObject[] = [
   {

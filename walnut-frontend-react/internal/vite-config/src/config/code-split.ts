@@ -107,27 +107,27 @@ const matchFrameworkChunk = createChunkMatcher([
 ]);
 
 // ---------- 工作区内核 ----------
-const matchVbenCoreChunk = createChunkMatcher([
+const matchWalnutCoreChunk = createChunkMatcher([
   "/packages/@core/design/",
   "/packages/@core/shared/",
   "/packages/@core/typings/",
   "/packages/constants/",
   "/packages/types/",
   "/packages/utils/",
-  "/node_modules/@vben-core/design/",
-  "/node_modules/@vben-core/shared/",
-  "/node_modules/@vben-core/typings/",
-  "/node_modules/@vben/constants/",
-  "/node_modules/@vben/types/",
-  "/node_modules/@vben/utils/",
+  "/node_modules/@walnut-core/design/",
+  "/node_modules/@walnut-core/shared/",
+  "/node_modules/@walnut-core/typings/",
+  "/node_modules/@walnut/constants/",
+  "/node_modules/@walnut/types/",
+  "/node_modules/@walnut/utils/",
 ]);
-const matchVbenRequestChunk = createChunkMatcher([
+const matchWalnutRequestChunk = createChunkMatcher([
   "/packages/request/",
-  "/node_modules/@vben/request/",
+  "/node_modules/@walnut/request/",
 ]);
-const matchVbenLocaleChunk = createChunkMatcher([
+const matchWalnutLocaleChunk = createChunkMatcher([
   "/packages/locales/",
-  "/node_modules/@vben/locales/",
+  "/node_modules/@walnut/locales/",
 ]);
 
 // ---------- 第三方 ----------
@@ -236,9 +236,9 @@ function createApplicationCodeSplitting() {
       { name: "antd-data", priority: 43, test: matchAntdDataChunk },
       { name: "antd-layout", priority: 42, test: matchAntdLayoutChunk },
       { name: "antd", priority: 40, test: matchAntdChunk },
-      { name: "vben-core", priority: 14, test: matchVbenCoreChunk },
-      { name: "vben-locale", priority: 13, test: matchVbenLocaleChunk },
-      { name: "vben-request", priority: 12, test: matchVbenRequestChunk },
+      { name: "walnut-core", priority: 14, test: matchWalnutCoreChunk },
+      { name: "walnut-locale", priority: 13, test: matchWalnutLocaleChunk },
+      { name: "walnut-request", priority: 12, test: matchWalnutRequestChunk },
       { name: "ui-vendor", priority: 10, test: matchUiVendorChunk },
       { name: "utils-vendor", priority: 5, test: matchUtilsVendorChunk },
       { name: "app-auth", priority: 4, test: matchAppAuthChunk },

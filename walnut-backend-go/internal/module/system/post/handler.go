@@ -20,7 +20,7 @@
 // **不属于此缺陷，不要一起改**。判据是看 rows 的来源：
 // 经 model_dump(by_alias=True) 的必须配驼峰表头，手工 dict 则看它自己写的键。
 //
-// 验证：test/contract/diff_post.py 第 8 组比对导出响应头与解析后的单元格内容。
+// 验证：scripts/contract/diff_post.py 第 8 组比对导出响应头与解析后的单元格内容。
 
 package post
 
@@ -32,15 +32,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"walnut-seed-go/internal/module/system/dept"
 	"walnut-seed-go/internal/pkg/authctx"
+	"walnut-seed-go/internal/pkg/bindx"
 	"walnut-seed-go/internal/pkg/crudx"
 	"walnut-seed-go/internal/pkg/envelope"
 	"walnut-seed-go/internal/pkg/errs"
 	"walnut-seed-go/internal/pkg/excelx"
 	"walnut-seed-go/internal/pkg/idempotentx"
 	"walnut-seed-go/internal/pkg/permguard"
-	"walnut-seed-go/internal/pkg/routex"
 )
 
 // sheetName 是导出工作表名，同时决定默认文件名（{sheetName}_{时间}.xlsx）。
@@ -57,47 +56,6 @@ type Handler struct {
 // NewHandler 构造 handler。perm / idem 可为 nil（此时不施加守卫，仅用于单测）。
 func NewHandler(db *gorm.DB, eh *errs.Handler, perm *permguard.Guard, idem *idempotentx.Guard) *Handler {
 	return &Handler{db: db, errs: eh, perm: perm, idem: idem}
-}
-
-// Mount 注册岗位路由。挂载点是 /system/post（由 bootstrap 决定）。
-//
-// ⚠️ 每个端点都必须挂权限守卫：前端隐藏按钮不是权限控制。
-// 权限串与 Python 端 AuthPermission(permissions=[...]) 逐条对应。
-//
-// 动态段路由（/:post_id）必须注册在全部静态路由之后，避免 gin 路由树冲突。
-func (h *Handler) Mount(b routex.Binder) {
-	require, repeat := h.guards()
-
-	b.GET("/list", require("system:post:list"), h.List)
-	b.POST("/export", require("system:post:export"), h.Export)
-	b.GET("/optionselect", require("system:post:query"), h.OptionSelect)
-	b.GET("/deptTree", require("system:post:list"), h.DeptTree)
-	b.GET("/:post_id", require("system:post:query"), h.GetByID)
-	b.POST("", require("system:post:add"), repeat(), h.Add)
-	b.PUT("", require("system:post:edit"), repeat(), h.Update)
-	b.DELETE("/:post_ids", require("system:post:remove"), h.Delete)
-}
-
-// guards 返回「权限守卫」与「防重提交」两个中间件工厂。
-//
-// 依赖为 nil 时返回放行中间件，让 handler 能脱离 bootstrap 做单元测试。
-// ⚠️ 生产装配路径上两者都非 nil（见 bootstrap.mountSystemRoutes）；
-// 若这里静默放行掩盖了装配遗漏，契约 diff 的 403 用例会立刻暴露。
-func (h *Handler) guards() (func(string) gin.HandlerFunc, func() gin.HandlerFunc) {
-	pass := func(c *gin.Context) { c.Next() }
-	require := func(perm string) gin.HandlerFunc {
-		if h.perm == nil {
-			return pass
-		}
-		return h.perm.Require(perm)
-	}
-	repeat := func() gin.HandlerFunc {
-		if h.idem == nil {
-			return pass
-		}
-		return h.idem.Default()
-	}
-	return require, repeat
 }
 
 // service 取出当前请求的业务层。ok=false 表示路由未挂认证中间件（编程错误）。
@@ -179,7 +137,7 @@ func (h *Handler) OptionSelect(c *gin.Context) {
 	}
 	var deptID *int64
 	if raw, ok := c.GetQuery("deptId"); ok {
-		n, valid := dept.ParsePyQueryInt(raw)
+		n, valid := bindx.PyQueryInt(raw)
 		if !valid {
 			h.errs.Abort(c, errs.BadRequest(msgValidInt))
 			return
@@ -223,7 +181,7 @@ func (h *Handler) DeptTree(c *gin.Context) {
 // 两条唯一性校验的**文案里都用 req.post_name**（包括编码重复那条），
 // 这是 Python 端的既有写法，照抄不"修正"。
 func (h *Handler) Add(c *gin.Context) {
-	in, err := DecodeCreate(readBody(c))
+	in, err := DecodeCreate(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -267,7 +225,7 @@ func (h *Handler) Add(c *gin.Context) {
 
 // Update PUT /system/post
 func (h *Handler) Update(c *gin.Context) {
-	in, err := DecodeUpdate(readBody(c))
+	in, err := DecodeUpdate(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -353,7 +311,7 @@ func (h *Handler) Delete(c *gin.Context) {
 // ⚠️ 请求体是 **form**（不是 JSON）：Python 端 `form = await request.form()`，
 // **只取 form、不看 query**（实测：query 带非法 deptId 而 form 为空仍导出成功），
 // 过滤空值后 `data.pop("pageSize")`（导出不分页），再手工 model_validate——
-// 校验失败透传 **ValidationError 原文**（见 dto.go bindExportForm 注释）。
+// 校验失败透传 **ValidationError 原文**（见 req.go bindExportForm 注释）。
 func (h *Handler) Export(c *gin.Context) {
 	// starlette request.form() 同时支持 urlencoded 与 multipart：
 	// ParseForm 只解析 urlencoded；multipart 需再跑 ParseMultipartForm（值并入 PostForm）

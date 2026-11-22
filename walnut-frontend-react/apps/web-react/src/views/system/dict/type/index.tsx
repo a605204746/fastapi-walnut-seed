@@ -2,7 +2,7 @@ import { useRef } from 'react';
 
 import type { DictType } from '@/api/system/dict/dict-type-model';
 
-import { $t } from '@vben/locales';
+import { $t } from '@walnut/locales';
 import { Button, Popconfirm, Space } from 'antd';
 
 import { useGrid, vxeCheckboxChecked } from '@/adapter/grid';
@@ -136,12 +136,12 @@ export function DictTypePanel({ className }: { className?: string }) {
                   {$t('pages.common.edit')}
                 </Button>
               </Access>
-              <Popconfirm
-                onConfirm={() => handleDelete(row as DictType)}
-                placement="left"
-                title="确认删除？"
-              >
-                <Access code={['system:dict:remove']}>
+              <Access code={['system:dict:remove']}>
+                <Popconfirm
+                  onConfirm={() => handleDelete(row as DictType)}
+                  placement="left"
+                  title="确认删除？"
+                >
                   <Button
                     danger
                     onClick={(e) => e.stopPropagation()}
@@ -150,8 +150,8 @@ export function DictTypePanel({ className }: { className?: string }) {
                   >
                     {$t('pages.common.delete')}
                   </Button>
-                </Access>
-              </Popconfirm>
+                </Popconfirm>
+              </Access>
             </Space>
           ),
         }}

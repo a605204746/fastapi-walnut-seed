@@ -2,7 +2,7 @@ import type { AxiosInstance, AxiosResponse } from 'axios';
 
 import type { RequestClientConfig, RequestClientOptions } from './types';
 
-import { bindMethods, isString, merge } from '@vben/utils';
+import { bindMethods, isString, merge } from '@walnut/utils';
 
 import axios from 'axios';
 import qs from 'qs';

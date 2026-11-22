@@ -1,4 +1,4 @@
-import type { AxiosRequestConfig } from '@vben/request';
+import type { AxiosRequestConfig } from '@walnut/request';
 
 import { request } from '@/lib/request';
 import { ContentTypeEnum } from '@/api/helper';

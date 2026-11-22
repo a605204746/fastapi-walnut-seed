@@ -1,13 +1,13 @@
 import type { MenuProps } from 'antd';
 import type { WheelEvent as ReactWheelEvent } from 'react';
 
-import type { RouteHandle, TabDefinition } from '@vben-core/typings';
+import type { RouteHandle, TabDefinition } from '@walnut-core/typings';
 
 import { useEffect, useRef } from 'react';
 
-import { usePreferences } from '@vben/preferences';
-import { getTabKey, useTabbarStore } from '@vben/stores';
-import { VbenIcon, VbenIconButton } from '@vben-core/shadcn-ui';
+import { usePreferences } from '@walnut/preferences';
+import { getTabKey, useTabbarStore } from '@walnut/stores';
+import { WalnutIcon, WalnutIconButton } from '@walnut-core/shadcn-ui';
 import { Dropdown, Tabs } from 'antd';
 import { Ellipsis, Maximize2, Minimize2, RotateCw, Pin } from 'lucide-react';
 import { useLocation, useMatches, useNavigate } from 'react-router';
@@ -54,7 +54,7 @@ function tabTitle(tab: TabDefinition): string {
  * 多页签栏：支持缓存刷新、固定、拖拽、滚轮、中键关闭和右键菜单。
  * store 管理打开顺序及访问历史，RouteCache 管理页面实例的生命周期。
  */
-export function VbenTabs() {
+export function WalnutTabs() {
   const navigate = useNavigate();
   const { preferences } = usePreferences();
   const currentTab = useCurrentTab();
@@ -224,7 +224,7 @@ export function VbenTabs() {
 
   return (
     <div
-      className={`vben-tabs vben-tabs--${preferences.tabbar.styleType} bg-header border-border flex shrink-0 items-center border-b`}
+      className={`walnut-tabs walnut-tabs--${preferences.tabbar.styleType} bg-header border-border flex shrink-0 items-center border-b`}
       onWheel={handleWheel}
       ref={navRef}
       style={{ '--tabbar-height': `${preferences.tabbar.height}px`, height: preferences.tabbar.height } as never}
@@ -262,7 +262,7 @@ export function VbenTabs() {
                   }}
                 >
                   {preferences.tabbar.showIcon && tab.meta?.icon ? (
-                    <VbenIcon className="size-3.5" icon={tab.meta.icon} />
+                    <WalnutIcon className="size-3.5" icon={tab.meta.icon} />
                   ) : null}
                   <span>{tabTitle(tab)}</span>{affix ? <Pin className="size-3" /> : null}
                 </span>
@@ -288,9 +288,9 @@ export function VbenTabs() {
       {/* 页签栏右侧工具：刷新 / 更多 / 最大化（tabbar.showRefresh / showMore / showMaximize） */}
       <div className="flex shrink-0 items-center gap-0.5 px-1.5">
         {preferences.tabbar.showRefresh ? (
-          <VbenIconButton onClick={refresh}>
+          <WalnutIconButton onClick={refresh}>
             <RotateCw className="size-4" />
-          </VbenIconButton>
+          </WalnutIconButton>
         ) : null}
         {preferences.tabbar.showMore ? (
           <Dropdown
@@ -316,19 +316,19 @@ export function VbenTabs() {
             }}
             trigger={['click']}
           >
-            <VbenIconButton>
+            <WalnutIconButton>
               <Ellipsis className="size-4" />
-            </VbenIconButton>
+            </WalnutIconButton>
           </Dropdown>
         ) : null}
         {preferences.tabbar.showMaximize ? (
-          <VbenIconButton aria-label="maximize-content" onClick={toggleMaximized}>
+          <WalnutIconButton aria-label="maximize-content" onClick={toggleMaximized}>
             {maximized ? (
               <Minimize2 className="size-4" />
             ) : (
               <Maximize2 className="size-4" />
             )}
-          </VbenIconButton>
+          </WalnutIconButton>
         ) : null}
       </div>
     </div>

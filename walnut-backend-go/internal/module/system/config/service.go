@@ -32,9 +32,23 @@ const cacheConfigKey = "sys_config:"
 // builtinYes 内置参数标记，对应 SystemConstants.YES。
 const builtinYes = "Y"
 
+// configRepo 是 service 消费的数据访问能力（consumer-side 接口，定义在消费方）。
+// 只列 service 实际调用的方法；*Repo 满足它，单测以 mock 替换。
+type configRepo interface {
+	Page(ctx context.Context, page crudx.Page, conds []crudx.Cond) ([]SysConfig, int64, error)
+	ListAll(ctx context.Context, conds ...crudx.Cond) ([]SysConfig, error)
+	Get(ctx context.Context, id int64) (*SysConfig, error)
+	GetByKey(ctx context.Context, key string) (*SysConfig, error)
+	ExistsByKey(ctx context.Context, key string, excludeID *int64) (bool, error)
+	Create(ctx context.Context, row *SysConfig) error
+	Update(ctx context.Context, row *SysConfig) error
+	UpdateByKeyBulk(ctx context.Context, key string, values map[string]any, uid int64, now time.Time) (int64, error)
+	DeleteBatch(ctx context.Context, ids []int64) (int64, error)
+}
+
 // Service 参数配置业务层。cache 可为 nil（降级查库）。
 type Service struct {
-	repo  *Repo
+	repo  configRepo
 	auth  authctx.Context
 	cache *cachex.Client
 }

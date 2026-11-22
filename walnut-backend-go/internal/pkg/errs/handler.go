@@ -150,8 +150,10 @@ func (h *Handler) NoRoute() gin.HandlerFunc {
 
 // NoMethod 处理方法不匹配：真实 HTTP 405 + 信封体。
 // 对齐 Python 端 http_exception_handler 的 405 分支（msg=str(exc.detail)）。
+// gin 会自动加 Allow 头，Starlette 的 405 没有——删掉保持头集合一致。
 func (h *Handler) NoMethod() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		c.Writer.Header().Del("Allow")
 		envelope.FailWith(c, http.StatusMethodNotAllowed, CodeBadMethod, http.StatusText(http.StatusMethodNotAllowed), nil)
 	}
 }

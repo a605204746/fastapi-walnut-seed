@@ -1,9 +1,9 @@
 import type { ComponentType, ReactNode } from 'react';
 
-import { cn } from '@vben-core/shared/utils';
+import { cn } from '@walnut-core/shared/utils';
 import { useEffect, useRef, useState } from 'react';
 
-export interface VbenDropdownMenuItem {
+export interface WalnutDropdownMenuItem {
   disabled?: boolean;
   handler?: (data: any) => void;
   /** 图标组件（React 组件类型） */
@@ -13,10 +13,10 @@ export interface VbenDropdownMenuItem {
   value: string;
 }
 
-export interface VbenDropdownRadioMenuProps {
+export interface WalnutDropdownRadioMenuProps {
   /** 触发元素（默认插槽） */
   children?: ReactNode;
-  menus: VbenDropdownMenuItem[];
+  menus: WalnutDropdownMenuItem[];
   modelValue?: string;
   'onUpdate:modelValue'?: (value: string) => void;
 }
@@ -29,12 +29,12 @@ export interface VbenDropdownRadioMenuProps {
  * item: `focus:bg-accent ... rounded-sm px-2 py-1.5 text-sm ...`
  * 默认态只渲染 trigger，不影响像素回归门禁。
  */
-export function VbenDropdownRadioMenu({
+export function WalnutDropdownRadioMenu({
   children,
   menus,
   modelValue,
   'onUpdate:modelValue': onUpdate,
-}: VbenDropdownRadioMenuProps) {
+}: WalnutDropdownRadioMenuProps) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 

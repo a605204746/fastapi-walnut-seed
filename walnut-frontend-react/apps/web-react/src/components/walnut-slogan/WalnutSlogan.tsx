@@ -1,4 +1,4 @@
-import { cn } from '@vben-core/shared/utils';
+import { cn } from '@walnut-core/shared/utils';
 
 import './walnut-slogan.css';
 

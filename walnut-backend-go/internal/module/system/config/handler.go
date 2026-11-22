@@ -22,7 +22,6 @@ import (
 	"walnut-seed-go/internal/pkg/errs"
 	"walnut-seed-go/internal/pkg/excelx"
 	"walnut-seed-go/internal/pkg/permguard"
-	"walnut-seed-go/internal/pkg/routex"
 )
 
 // Handler 参数配置域端点。
@@ -36,26 +35,6 @@ type Handler struct {
 // NewHandler 构造 handler。perm / cache 可为 nil。
 func NewHandler(db *gorm.DB, eh *errs.Handler, perm *permguard.Guard, cache *cachex.Client) *Handler {
 	return &Handler{db: db, errs: eh, perm: perm, cache: cache}
-}
-
-// Mount 注册参数配置路由。挂载点是 /system/config（由 bootstrap 决定）。
-func (h *Handler) Mount(b routex.Binder) {
-	require := func(perm string) gin.HandlerFunc {
-		if h.perm == nil {
-			return func(c *gin.Context) { c.Next() }
-		}
-		return h.perm.Require(perm)
-	}
-
-	b.GET("/list", require("system:config:list"), h.List)
-	b.POST("/export", require("system:config:export"), h.Export)
-	b.GET("/configKey/:config_key", h.GetByKey)
-	b.PUT("/updateByKey", require("system:config:edit"), h.UpdateByKey)
-	b.DELETE("/refreshCache", require("system:config:remove"), h.RefreshCache)
-	b.GET("/:config_id", require("system:config:query"), h.GetByID)
-	b.POST("", require("system:config:add"), h.Add)
-	b.PUT("", require("system:config:edit"), h.Update)
-	b.DELETE("/:config_ids", require("system:config:remove"), h.Delete)
 }
 
 // service 取出当前请求的业务层。
@@ -128,7 +107,7 @@ func (h *Handler) GetByKey(c *gin.Context) {
 
 // UpdateByKey PUT /system/config/updateByKey
 func (h *Handler) UpdateByKey(c *gin.Context) {
-	in, err := DecodeUpdateByKey(readBody(c))
+	in, err := DecodeUpdateByKey(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -176,7 +155,7 @@ func (h *Handler) GetByID(c *gin.Context) {
 
 // Add POST /system/config
 func (h *Handler) Add(c *gin.Context) {
-	in, err := DecodeCreate(readBody(c))
+	in, err := DecodeCreate(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -203,7 +182,7 @@ func (h *Handler) Add(c *gin.Context) {
 
 // Update PUT /system/config
 func (h *Handler) Update(c *gin.Context) {
-	in, err := DecodeUpdate(readBody(c))
+	in, err := DecodeUpdate(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return

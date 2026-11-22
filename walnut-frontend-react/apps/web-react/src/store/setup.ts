@@ -1,4 +1,4 @@
-import { getStoreStorage } from '@vben/stores';
+import { getStoreStorage } from '@walnut/stores';
 import { createJSONStorage } from 'zustand/middleware';
 import { useNotifyStore } from './notify';
 import { useTenantStore } from './tenant';

@@ -425,7 +425,7 @@
     @apply outline-primary top-0 left-0 h-full w-full p-1 opacity-100;
   }
 
-  .vben-link {
+  .walnut-link {
     @apply text-primary hover:text-primary-hover active:text-primary-active cursor-pointer;
   }
 

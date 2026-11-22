@@ -1,4 +1,4 @@
-import { defineOverridesPreferences } from '@vben/preferences';
+import { defineOverridesPreferences } from '@walnut/preferences';
 
 /**
  * @description 项目配置文件
@@ -55,7 +55,7 @@ export const overridesPreferences = defineOverridesPreferences({
   },
   copyright: {
     /**
-     * 版权信息展示 WalnutSeed 品牌，替换 vben 默认
+     * 版权信息展示 WalnutSeed 品牌，替换 walnut 默认
      */
     companyName: 'WalnutSeed',
     companySiteLink: 'https://github.com/a605204746/walnut-seed',

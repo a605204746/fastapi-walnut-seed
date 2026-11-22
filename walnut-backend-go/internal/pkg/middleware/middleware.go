@@ -15,21 +15,23 @@ package middleware
 
 import (
 	"crypto/rand"
-	"encoding/hex"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
-// CorrelationHeader 关联 ID 的请求/响应头名。
-// 必须出现在 CORS 的 expose headers 中，否则前端跨域读不到。
-const CorrelationHeader = "X-Request-ID"
+// CorrelationHeader 关联 ID 的请求/响应头名，与 Python CorrelationIdMiddleware
+// 的 "X-Correlation-ID" 逐字一致（注意 CORS expose 配置里写的是 X-Request-ID，
+// 那是 Python 配置自身的历史遗留，两端 expose 列表保持相同字符串即可）。
+const CorrelationHeader = "X-Correlation-ID"
 
 // ctxKeyCorrelation 存入 gin.Context 的键。
 const ctxKeyCorrelation = "correlation_id"
 
-// CorrelationID 为每个请求分配关联 ID：优先复用上游传入的 X-Request-ID，
-// 缺失时生成 16 字节随机十六进制串。回写到响应头供前端排障。
+// CorrelationID 为每个请求分配关联 ID：优先复用上游传入的同名头，
+// 缺失时生成 uuid4（与 Python str(uuid.uuid4()) 同形态）。回写响应头供前端排障。
 //
 // 对齐 Python 端 CorrelationIdMiddleware。注意它在链的**最内层**（紧邻业务路由），
 // 因此外层中间件记日志时可能还没有关联 ID——这一行为两端一致，不要"优化"顺序。
@@ -55,14 +57,16 @@ func CorrelationIDFrom(c *gin.Context) string {
 	return id
 }
 
-// newCorrelationID 生成 32 字符十六进制串。
-// 随机源失败时退化为时间戳形态，确保永不返回空 ID（空值会让日志检索失去抓手）。
+// newCorrelationID 生成 uuid4 字符串（36 字符含连字符），与 Python 端一致。
+// 随机源失败时退化为固定形态，确保永不返回空 ID（空值会让日志检索失去抓手）。
 func newCorrelationID() string {
 	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {
-		return "0000000000000000deadbeefdeadbeef"
+		return "00000000-0000-4000-8000-000000000000"
 	}
-	return hex.EncodeToString(buf)
+	buf[6] = (buf[6] & 0x0f) | 0x40 // version 4
+	buf[8] = (buf[8] & 0x3f) | 0x80 // variant 10
+	return fmt.Sprintf("%x-%x-%x-%x-%x", buf[0:4], buf[4:6], buf[6:8], buf[8:10], buf[10:16])
 }
 
 // CORSConfig CORS 参数，由 config.Config 映射而来。
@@ -81,18 +85,38 @@ type CORSConfig struct {
 	MaxAge           int
 }
 
-// CORS 实现跨域处理。
-//
-// 不用 gin-contrib/cors：该库对「AllowCredentials + 通配源」的组合处理与
-// Starlette 的 CORSMiddleware 存在差异（前者会拒绝，后者回显具体 Origin），
-// 而本项目 ALLOW_CREDENTIALS 默认 true、ALLOW_ORIGINS 默认 *，必须回显 Origin。
+// CORS 逐条复刻 starlette CORSMiddleware 的可观测行为：
+//   - 无 Origin → 完全不加 CORS 头，OPTIONS 也交给路由（405 信封）；
+//   - 预检 = OPTIONS + Origin + Access-Control-Request-Method 三者齐备，
+//     响应 200 "OK"（text/plain），失败 400 "Disallowed CORS ..."；
+//   - AllowMethods 含 "*" 展开为 ALL_METHODS 显式列表；AllowHeaders 含 "*"
+//     时回显请求的 Access-Control-Request-Headers（通配符在 credentials 模式下
+//     不被浏览器接受，必须回显）；
+//   - 简单响应只加 ACAO/ACAC/Expose/Vary:Origin，**不加 Max-Age**。
 func CORS(cfg CORSConfig) gin.HandlerFunc {
-	allowMethods := joinOr(cfg.AllowMethods, "*")
-	allowHeaders := joinOr(cfg.AllowHeaders, "*")
-	exposeHeaders := joinOr(cfg.ExposeHeaders, "")
-	maxAge := cfg.MaxAge
-	if maxAge <= 0 {
-		maxAge = 1800
+	methods := cfg.AllowMethods
+	for _, m := range methods {
+		if m == "*" {
+			methods = []string{"DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"}
+			break
+		}
+	}
+	allowMethods := strings.Join(methods, ", ")
+	methodSet := make(map[string]struct{}, len(methods))
+	for _, m := range methods {
+		methodSet[m] = struct{}{}
+	}
+	allowAllHeaders := false
+	for _, h := range cfg.AllowHeaders {
+		if h == "*" {
+			allowAllHeaders = true
+		}
+	}
+	allowHeaders := strings.Join(cfg.AllowHeaders, ", ")
+	exposeHeaders := strings.Join(cfg.ExposeHeaders, ", ")
+	maxAge := itoa(cfg.MaxAge)
+	if cfg.MaxAge <= 0 {
+		maxAge = "1800"
 	}
 	originSet := make(map[string]struct{}, len(cfg.AllowOrigins))
 	for _, o := range cfg.AllowOrigins {
@@ -103,30 +127,85 @@ func CORS(cfg CORSConfig) gin.HandlerFunc {
 
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
-		if origin != "" {
-			if allowedOrigin(origin, cfg.AllowAllOrigins, originSet) {
-				// 回显具体 Origin 而非 "*"：这是 credentials 模式下的唯一合法写法
-				c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
-				c.Writer.Header().Add("Vary", "Origin")
-				if cfg.AllowCredentials {
-					c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-				}
-				if exposeHeaders != "" {
-					c.Writer.Header().Set("Access-Control-Expose-Headers", exposeHeaders)
-				}
-				c.Writer.Header().Set("Access-Control-Max-Age", itoa(maxAge))
+		if origin == "" {
+			c.Next()
+			return
+		}
+		h := c.Writer.Header()
+		allowed := allowedOrigin(origin, cfg.AllowAllOrigins, originSet)
+
+		// 预检请求
+		if c.Request.Method == http.MethodOptions && c.Request.Header.Get("Access-Control-Request-Method") != "" {
+			h.Set("Vary", "Origin")
+			h.Set("Access-Control-Allow-Methods", allowMethods)
+			h.Set("Access-Control-Max-Age", maxAge)
+			if cfg.AllowCredentials {
+				h.Set("Access-Control-Allow-Credentials", "true")
 			}
+			var failures []string
+			if allowed {
+				h.Set("Access-Control-Allow-Origin", origin)
+			} else {
+				failures = append(failures, "origin")
+			}
+			reqMethod := c.Request.Header.Get("Access-Control-Request-Method")
+			if _, ok := methodSet[reqMethod]; !ok {
+				failures = append(failures, "method")
+			}
+			reqHeaders := c.Request.Header.Get("Access-Control-Request-Headers")
+			if allowAllHeaders {
+				if reqHeaders != "" {
+					h.Set("Access-Control-Allow-Headers", reqHeaders)
+				}
+			} else if reqHeaders != "" {
+				h.Set("Access-Control-Allow-Headers", allowHeaders)
+				for _, rh := range strings.Split(reqHeaders, ",") {
+					if !headerAllowed(strings.TrimSpace(strings.ToLower(rh)), cfg.AllowHeaders) {
+						failures = append(failures, "headers")
+						break
+					}
+				}
+			}
+			if c.Request.Header.Get("Access-Control-Request-Private-Network") != "" {
+				failures = append(failures, "private-network")
+			}
+			if len(failures) > 0 {
+				c.Data(http.StatusBadRequest, "text/plain; charset=utf-8", []byte("Disallowed CORS "+strings.Join(failures, ", ")))
+				c.Abort()
+				return
+			}
+			c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte("OK"))
+			c.Abort()
+			return
 		}
 
-		// 预检请求直接短路返回 204，与 Starlette 行为一致
-		if c.Request.Method == http.MethodOptions {
-			c.Writer.Header().Set("Access-Control-Allow-Methods", allowMethods)
-			c.Writer.Header().Set("Access-Control-Allow-Headers", allowHeaders)
-			c.AbortWithStatus(http.StatusNoContent)
-			return
+		// 简单响应：回显具体 Origin（credentials 模式唯一合法写法）
+		if allowed {
+			h.Set("Access-Control-Allow-Origin", origin)
+			h.Add("Vary", "Origin")
+			if cfg.AllowCredentials {
+				h.Set("Access-Control-Allow-Credentials", "true")
+			}
+			if exposeHeaders != "" {
+				h.Set("Access-Control-Expose-Headers", exposeHeaders)
+			}
 		}
 		c.Next()
 	}
+}
+
+// headerAllowed 非通配模式下校验请求头是否在允许列表（含 starlette 安全列表头）。
+func headerAllowed(h string, allow []string) bool {
+	switch h {
+	case "accept", "accept-language", "content-language", "content-type":
+		return true
+	}
+	for _, a := range allow {
+		if strings.ToLower(a) == h {
+			return true
+		}
+	}
+	return false
 }
 
 // allowedOrigin 判断源是否放行。

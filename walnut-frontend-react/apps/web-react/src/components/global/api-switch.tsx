@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { $t } from '@vben/locales';
+import { $t } from '@walnut/locales';
 import { Modal, Switch } from 'antd';
 
 import { getMessageApi } from '@/services/message';

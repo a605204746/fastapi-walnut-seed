@@ -2,7 +2,9 @@ import type { ReactNode } from 'react';
 
 import type { ModalApi } from './modal-api';
 
-import { useStore } from '@vben-core/shared/store';
+import { useEffect } from 'react';
+
+import { useStore } from '@walnut-core/shared/store';
 import { Modal } from 'antd';
 
 export interface ModalRendererProps {
@@ -36,6 +38,12 @@ export function ModalRenderer({
   const state = useStore(api.store);
   const mergedClass = classProp ?? className;
   const modalWidth = width ?? parseWidthFromClass(mergedClass) ?? 520;
+
+  // antd Modal 没有 Drawer 的 afterOpenChange，用 isOpen 副作用补上 onOpened
+  // 回调（字典数据面板靠它在每次打开时按 dictType 重新加载）。
+  useEffect(() => {
+    if (state.isOpen) api.onOpened();
+  }, [api, state.isOpen]);
 
   return (
     <Modal

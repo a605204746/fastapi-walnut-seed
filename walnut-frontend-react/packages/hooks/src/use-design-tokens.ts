@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 
-import { convertToRgb } from '@vben-core/shared/color';
-import { usePreferences } from '@vben/preferences';
+import { convertToRgb } from '@walnut-core/shared/color';
+import { usePreferences } from '@walnut/preferences';
 
 /**
  * 把设计系统的 CSS 变量读回来，转成 antd 的 design token。
@@ -89,7 +89,8 @@ export function useAntdComponentTokens() {
         bodyBg: readColor('--background-deep'),
         headerBg: readColor('--header'),
         headerPadding: '0 12px',
-        headerLineHeight: 'normal',
+        // antd 6 已移除 headerLineHeight token，header 行高固定取 headerHeight（64px）；
+        // 实际行高由外壳 Header 的 inline lineHeight（= header.height）覆盖
         siderBg: readColor('--sidebar'),
         triggerBg: readColor('--sidebar-deep'),
         triggerColor: readColor('--foreground'),

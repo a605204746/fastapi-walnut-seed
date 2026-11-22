@@ -1,16 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
+import { flushSync } from 'react-dom';
 
 import {
   COLOR_PRESETS,
   updatePreferences,
   usePreferences,
-} from '@vben/preferences';
-import { SUPPORT_LANGUAGES } from '@vben/constants';
-import { loadLocaleMessages } from '@vben/locales';
+} from '@walnut/preferences';
+import { SUPPORT_LANGUAGES } from '@walnut/constants';
+import { $t, loadLocaleMessages } from '@walnut/locales';
 import {
-  VbenDropdownRadioMenu,
-  VbenIconButton,
-} from '@vben-core/shadcn-ui';
+  WalnutDropdownRadioMenu,
+  WalnutIconButton,
+} from '@walnut-core/shadcn-ui';
 import {
   InspectionPanel,
   Languages,
@@ -28,12 +29,58 @@ function ThemeButton() {
   const { isDark } = usePreferences();
   const theme = isDark ? 'light' : 'dark';
 
-  function toggleTheme() {
-    updatePreferences({ theme: { mode: isDark ? 'light' : 'dark' } });
+  /**
+   * 1:1 复刻 Vue toggleTheme：支持 View Transition 时从点击点做 450ms 圆形扩散
+   * （切暗收缩旧快照 old(root)，切亮扩张新快照 new(root)）；
+   * 不支持或 prefers-reduced-motion 时直接切换。
+   */
+  function toggleTheme(event: MouseEvent<HTMLButtonElement>) {
+    const nextDark = !isDark;
+    const apply = () =>
+      updatePreferences({ theme: { mode: nextDark ? 'dark' : 'light' } });
+    // 运行时能力检测：旧浏览器没有 startViewTransition，直接切换
+    const isAppearanceTransition =
+      typeof document.startViewTransition === 'function' &&
+      !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!isAppearanceTransition) {
+      apply();
+      return;
+    }
+    const x = event.clientX;
+    const y = event.clientY;
+    const endRadius = Math.hypot(
+      Math.max(x, window.innerWidth - x),
+      Math.max(y, window.innerHeight - y),
+    );
+    // flushSync 等价 Vue nextTick：确保新主题 DOM 已提交后再截新快照
+    const transition = document.startViewTransition(() => {
+      flushSync(apply);
+    });
+    transition.ready.then(() => {
+      const clipPath = [
+        `circle(0px at ${x}px ${y}px)`,
+        `circle(${endRadius}px at ${x}px ${y}px)`,
+      ];
+      const animate = document.documentElement.animate(
+        {
+          clipPath: nextDark ? [...clipPath].reverse() : clipPath,
+        },
+        {
+          duration: 450,
+          easing: 'ease-in',
+          pseudoElement: nextDark
+            ? '::view-transition-old(root)'
+            : '::view-transition-new(root)',
+        },
+      );
+      animate.onfinish = () => {
+        transition.skipTransition();
+      };
+    });
   }
 
   return (
-    <VbenIconButton
+    <WalnutIconButton
       aria-label={theme}
       aria-live="polite"
       class={`theme-toggle is-${theme} cursor-pointer border-none bg-none hover:animate-[shrink_0.3s_ease-in-out] rounded-full`}
@@ -65,7 +112,7 @@ function ThemeButton() {
           <line x1="18.36" x2="19.78" y1="5.64" y2="4.22" />
         </g>
       </svg>
-    </VbenIconButton>
+    </WalnutIconButton>
   );
 }
 
@@ -81,7 +128,7 @@ export function AuthenticationColorToggle() {
     <div className="group relative flex items-center overflow-hidden">
       <div className="flex w-0 overflow-hidden transition-all duration-500 ease-out group-hover:w-60">
         {COLOR_PRESETS.map((preset) => (
-          <VbenIconButton
+          <WalnutIconButton
             class="flex-center shrink-0"
             key={preset.color}
             onClick={() => handleUpdate(preset.color, preset.type)}
@@ -106,12 +153,12 @@ export function AuthenticationColorToggle() {
                 </svg>
               ) : null}
             </div>
-          </VbenIconButton>
+          </WalnutIconButton>
         ))}
       </div>
-      <VbenIconButton>
+      <WalnutIconButton>
         <Palette className="size-4 text-primary" />
-      </VbenIconButton>
+      </WalnutIconButton>
     </div>
   );
 }
@@ -122,9 +169,9 @@ export function AuthenticationLayoutToggle() {
     usePreferences();
 
   const menus = [
-    { icon: PanelLeft, label: '左对齐', value: 'panel-left' },
-    { icon: InspectionPanel, label: '居中', value: 'panel-center' },
-    { icon: PanelRight, label: '右对齐', value: 'panel-right' },
+    { icon: PanelLeft, label: $t('authentication.layout.alignLeft'), value: 'panel-left' },
+    { icon: InspectionPanel, label: $t('authentication.layout.center'), value: 'panel-center' },
+    { icon: PanelRight, label: $t('authentication.layout.alignRight'), value: 'panel-right' },
   ];
 
   function handleUpdate(value: string) {
@@ -132,17 +179,17 @@ export function AuthenticationLayoutToggle() {
   }
 
   return (
-    <VbenDropdownRadioMenu
+    <WalnutDropdownRadioMenu
       menus={menus}
       modelValue={preferences.app.authPageLayout}
       onUpdate:modelValue={handleUpdate}
     >
-      <VbenIconButton>
+      <WalnutIconButton>
         {authPanelRight ? <PanelRight className="size-4" /> : null}
         {authPanelLeft ? <PanelLeft className="size-4" /> : null}
         {authPanelCenter ? <InspectionPanel className="size-4" /> : null}
-      </VbenIconButton>
-    </VbenDropdownRadioMenu>
+      </WalnutIconButton>
+    </WalnutDropdownRadioMenu>
   );
 }
 
@@ -151,8 +198,11 @@ export function LanguageToggle() {
   const { preferences } = usePreferences();
 
   async function handleUpdate(value: string) {
-    updatePreferences({ app: { locale: value as any } });
+    // 先加载语言包再更新偏好：i18next 非响应式，只有偏好变化触发的
+    // 重渲染才能读到新语言（Vue 侧 vue-i18n 响应式，顺序无关紧要）。
+    // 旧顺序会导致页签/菜单等 $t 文案停留在旧语言。
     await loadLocaleMessages(value as any);
+    updatePreferences({ app: { locale: value as any } });
   }
 
   const menus = SUPPORT_LANGUAGES.map((item) => ({
@@ -161,15 +211,15 @@ export function LanguageToggle() {
   }));
 
   return (
-    <VbenDropdownRadioMenu
+    <WalnutDropdownRadioMenu
       menus={menus}
       modelValue={preferences.app.locale}
       onUpdate:modelValue={handleUpdate}
     >
-      <VbenIconButton class="hover:animate-[shrink_0.3s_ease-in-out]">
+      <WalnutIconButton class="hover:animate-[shrink_0.3s_ease-in-out]">
         <Languages className="size-4 text-foreground" />
-      </VbenIconButton>
-    </VbenDropdownRadioMenu>
+      </WalnutIconButton>
+    </WalnutDropdownRadioMenu>
   );
 }
 
@@ -200,12 +250,12 @@ export function FullscreenToggle() {
   }
 
   return (
-    <VbenIconButton onClick={toggle}>
+    <WalnutIconButton onClick={toggle}>
       {isFullscreen ? (
         <Minimize className="size-4" />
       ) : (
         <Maximize className="size-4" />
       )}
-    </VbenIconButton>
+    </WalnutIconButton>
   );
 }

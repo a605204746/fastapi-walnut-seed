@@ -4,18 +4,18 @@ import {
   BUSINESS_SUCCESS_CODE,
   LOGIN_PATH,
   UNAUTHORIZED_CODE,
-} from '@vben/constants';
-import { $t } from '@vben/locales';
-import { getPreferences } from '@vben/preferences';
-import { RequestClient, stringify } from '@vben/request';
-import { resetAllStores, useAccessStore } from '@vben/stores';
+} from '@walnut/constants';
+import { $t } from '@walnut/locales';
+import { getPreferences } from '@walnut/preferences';
+import { RequestClient, stringify } from '@walnut/request';
+import { resetAllStores, useAccessStore } from '@walnut/stores';
 import {
   AesEncryption,
   decodeBase64,
   encodeBase64,
   randomStr,
   RsaEncryption,
-} from '@vben/utils';
+} from '@walnut/utils';
 import { message as staticMessage } from 'antd';
 
 import { getMessageApi } from '../services/message';

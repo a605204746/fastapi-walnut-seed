@@ -2,10 +2,10 @@ import type { FormSchemaGetter } from '@/adapter/form';
 
 import type { GridColumn } from '@/adapter/grid';
 
-import { VbenIcon } from '@vben-core/shadcn-ui';
-import { $t } from '@vben/locales';
-import { DictEnum } from '@vben/constants';
-import { getPopupContainer } from '@vben/utils';
+import { WalnutIcon } from '@walnut-core/shadcn-ui';
+import { $t } from '@walnut/locales';
+import { DictEnum } from '@walnut/constants';
+import { getPopupContainer } from '@walnut/utils';
 import { Input } from 'antd';
 
 import { getDictOptions } from '@/utils/dict';
@@ -18,7 +18,7 @@ import { renderDict } from '@/utils/render';
  * 与 Vue 版的三处差异：
  * 1. **图标类名 → Iconify 名**。Vue 用 UnoCSS 的 `Iconify(material-symbols--menu)`
  *    类名（`<span class="...">`），React 侧两套 tailwind 配置都没装 iconify class
- *    插件，照抄会渲染成空 span，统一改为 `<VbenIcon icon="material-symbols:menu" />`。
+ *    插件，照抄会渲染成空 span，统一改为 `<WalnutIcon icon="material-symbols:menu" />`。
  * 2. **zod → validator**。`path` / `component` 两个字段的校验规则随 `isFrame`
  *    和其它字段动态变化，Vue 用 `dependencies.rules` 返回 zod schema，
  *    React 侧返回等价的 `FormItemRule[]`。
@@ -96,7 +96,7 @@ export const columns: GridColumn[] = [
         }
         return (
           <span className="flex justify-center">
-            <VbenIcon icon={row.icon} />
+            <WalnutIcon icon={row.icon} />
           </span>
         );
       },
@@ -119,7 +119,7 @@ export const columns: GridColumn[] = [
         }
         return (
           <span className="flex items-center justify-center gap-1">
-            <VbenIcon icon={current.icon} />
+            <WalnutIcon icon={current.icon} />
             <span>{current.value}</span>
           </span>
         );

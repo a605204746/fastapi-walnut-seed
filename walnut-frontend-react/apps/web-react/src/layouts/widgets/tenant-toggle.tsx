@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Select } from 'antd';
-import { useTabbarStore } from '@vben/stores';
+import { usePreferences } from '@walnut/preferences';
+import { useTabbarStore } from '@walnut/stores';
+import { $t } from '@/locales';
 import { tenantList, type TenantOption } from '@/api/core/auth';
 import { useAccess } from '@/components/access/Access';
 import { request } from '@/lib/request';
 import { useDictStore } from '@/store/dict';
 import { useTenantStore } from '@/store/tenant';
 export function TenantToggle() {
+  // 订阅偏好：locale 变化时重译 placeholder
+  usePreferences();
   const { hasAccessByRoles } = useAccess();
   const superAdmin = hasAccessByRoles(['superadmin']);
   const [options, setOptions] = useState<TenantOption[]>([]);
@@ -46,7 +50,7 @@ export function TenantToggle() {
   }
   return enabled && superAdmin ? (
     <Select
-      aria-label="切换租户"
+      aria-label={$t('component.tenantToggle.placeholder')}
       className="mr-2 hidden md:block"
       style={{ width: 240 }}
       allowClear
@@ -57,7 +61,7 @@ export function TenantToggle() {
       options={options.map((item) => ({ label: item.companyName, value: item.tenantId }))}
       optionFilterProp="label"
       onChange={(value) => void change(value)}
-      placeholder="请选择租户"
+      placeholder={$t('component.tenantToggle.placeholder')}
     />
   ) : null;
 }

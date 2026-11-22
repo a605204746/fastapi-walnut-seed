@@ -2,11 +2,11 @@ import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 
 import type { Menu } from '@/api/system/menu/model';
 
-import { $t } from '@vben/locales';
-import { useVbenForm, type FormSchema } from '@vben-core/form-ui';
-import { useVbenDrawer } from '@vben-core/popup-ui';
-import { cloneDeep } from '@vben-core/shared/utils';
-import { addFullName, getPopupContainer, listToTree } from '@vben/utils';
+import { $t } from '@walnut/locales';
+import { useWalnutForm, type FormSchema } from '@walnut-core/form-ui';
+import { useWalnutDrawer } from '@walnut-core/popup-ui';
+import { cloneDeep } from '@walnut-core/shared/utils';
+import { addFullName, getPopupContainer, listToTree } from '@walnut/utils';
 import { Skeleton } from 'antd';
 
 import { pruneEmptyChildren } from '@/adapter/grid';
@@ -55,7 +55,7 @@ export const MenuDrawer = forwardRef<MenuDrawerHandle, MenuDrawerProps>(
       setIsUpdate(value);
     }
 
-    const [BasicForm, formApi] = useVbenForm({
+    const [BasicForm, formApi] = useWalnutForm({
       commonConfig: {
         componentProps: { className: 'w-full' },
         formItemClass: 'col-span-2',
@@ -123,7 +123,7 @@ export const MenuDrawer = forwardRef<MenuDrawerHandle, MenuDrawerProps>(
         initializedGetter: defaultFormValueGetter(formApi),
       });
 
-    const [BasicDrawer, drawerApi] = useVbenDrawer({
+    const [BasicDrawer, drawerApi] = useWalnutDrawer({
       onBeforeClose,
       onClosed: handleClosed,
       onConfirm: handleConfirm,

@@ -11,7 +11,6 @@ import (
 	"walnut-seed-go/internal/config"
 	"walnut-seed-go/internal/pkg/envelope"
 	"walnut-seed-go/internal/pkg/errs"
-	"walnut-seed-go/internal/pkg/routex"
 	"walnut-seed-go/internal/pkg/storagex"
 )
 
@@ -25,13 +24,6 @@ type Handler struct {
 // NewHandler 构造文件 handler。
 func NewHandler(storage storagex.Service, cfg *config.Config, eh *errs.Handler) *Handler {
 	return &Handler{storage: storage, cfg: cfg, errs: eh}
-}
-
-// Mount 注册文件路由。挂载点是 /common/file。
-func (h *Handler) Mount(b routex.Binder) {
-	b.POST("/upload", h.Upload)
-	b.GET("/download", h.Download)
-	b.DELETE("/delete", h.Delete)
 }
 
 // Upload POST /common/file/upload

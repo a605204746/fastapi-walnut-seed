@@ -4,7 +4,7 @@
  * 对应 Vue 侧 packages/effects/hooks/src/use-app-config.ts。
  * 开发读取 import.meta.env；生产优先读取 extra-app-config 插件注入的运行时配置。
  */
-const runtime = typeof window === 'undefined' ? {} : (window as unknown as { _VBEN_ADMIN_PRO_APP_CONF_?: Record<string, string> })._VBEN_ADMIN_PRO_APP_CONF_ ?? {};
+const runtime = typeof window === 'undefined' ? {} : (window as unknown as { _WALNUT_ADMIN_PRO_APP_CONF_?: Record<string, string> })._WALNUT_ADMIN_PRO_APP_CONF_ ?? {};
 const env = { ...import.meta.env, ...(import.meta.env.PROD ? runtime : {}) };
 
 function toBoolean(value: string | undefined): boolean {

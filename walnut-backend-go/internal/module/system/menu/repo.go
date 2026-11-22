@@ -33,7 +33,7 @@ func NewRepo(db *gorm.DB) *Repo { return &Repo{db: db} }
 //
 // ⚠️ sys_menu 没有 del_flag 列，故不追加逻辑删除条件（与 Python 端一致）。
 func (r *Repo) SelectMenuTreeByUserID(ctx context.Context, ac authctx.Context) ([]SysMenu, error) {
-	q := r.db.WithContext(ctx).Model(&SysMenu{}).
+	q := crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysMenu{}).
 		Where("menu_type IN ? AND status = ?", []string{TypeDir, TypeMenu}, modelx.Normal)
 
 	if !ac.User.IsSuperAdmin() {
@@ -50,13 +50,64 @@ func (r *Repo) SelectMenuTreeByUserID(ctx context.Context, ac authctx.Context) (
 	return menus, nil
 }
 
+// ==================== 认证会话查询（auth 跨域消费） ====================
+
+// FindByRoleIDs 查角色集合关联的有效菜单（auth 登录构建会话用）。
+//
+// SQL 自 auth/repo.go FindMenusByRoleIDs 逐字迁入：JOIN sys_role_menu +
+// role_id IN + status='0'，**不排序**（去重排序由调用方完成）。
+// roleIDs 为空时直接返回空切片——**不能**生成 `IN ()`，
+// 那是非法 SQL，MySQL 会报语法错误。
+func (r *Repo) FindByRoleIDs(ctx context.Context, roleIDs []int64) ([]SysMenu, error) {
+	if len(roleIDs) == 0 {
+		return []SysMenu{}, nil
+	}
+	var menus []SysMenu
+	err := crudx.DB(ctx, r.db).WithContext(ctx).
+		Table("sys_menu").
+		Select("sys_menu.*").
+		Joins("JOIN sys_role_menu ON sys_role_menu.menu_id = sys_menu.id").
+		Where("sys_role_menu.role_id IN ? AND sys_menu.status = ?", roleIDs, modelx.Normal).
+		Find(&menus).Error
+	if err != nil {
+		return nil, err
+	}
+	return menus, nil
+}
+
+// AllActiveIDs 查全部有效菜单 ID（auth 超管会话用）。
+//
+// SQL 自 auth/repo.go FindAllActiveMenuIDs 逐字迁入：status='0' + Pluck id，
+// 不排序（排序由调用方完成）。
+func (r *Repo) AllActiveIDs(ctx context.Context) ([]int64, error) {
+	var ids []int64
+	err := crudx.DB(ctx, r.db).WithContext(ctx).
+		Model(&SysMenu{}).
+		Where("status = ?", modelx.Normal).
+		Pluck("id", &ids).Error
+	if err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
 // ==================== 管理端查询（menu 模块 8 端点） ====================
+
+// Query 菜单列表/下拉树查询参数，对应 MenuQuerySchema（不分页）。
+// 定义在 repo 侧：SelectMenuList 的入参，BindQuery（req.go）负责绑定。
+type Query struct {
+	MenuName string
+	Visible  string
+	Status   string
+	MenuType string
+	ParentID *int64
+}
 
 // SelectMenuList 菜单列表，对应 MenuCrud.select_menu_list。
 //
 // ⚠️ 非超管按会话 menu_ids 收敛；排序 parent_id, order_num（**无 id 兜底**）。
 func (r *Repo) SelectMenuList(ctx context.Context, ac authctx.Context, q Query) ([]SysMenu, error) {
-	query := r.db.WithContext(ctx).Model(&SysMenu{})
+	query := crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysMenu{})
 	if !ac.User.IsSuperAdmin() {
 		query = query.Where("id IN ?", ac.MenuIDs)
 	}
@@ -85,7 +136,7 @@ func (r *Repo) SelectMenuList(ctx context.Context, ac authctx.Context, q Query) 
 // SelectMenuByID 按主键查询（sys_menu 无 del_flag）。
 func (r *Repo) SelectMenuByID(ctx context.Context, id int64) (*SysMenu, error) {
 	var row SysMenu
-	err := r.db.WithContext(ctx).Where("id = ?", id).First(&row).Error
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Where("id = ?", id).First(&row).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -98,7 +149,7 @@ func (r *Repo) SelectMenuByID(ctx context.Context, id int64) (*SysMenu, error) {
 // HasChildByMenuID 是否存在子菜单。
 func (r *Repo) HasChildByMenuID(ctx context.Context, id int64) (bool, error) {
 	var n int64
-	err := r.db.WithContext(ctx).Model(&SysMenu{}).Where("parent_id = ?", id).Count(&n).Error
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysMenu{}).Where("parent_id = ?", id).Count(&n).Error
 	return n > 0, err
 }
 
@@ -108,7 +159,7 @@ func (r *Repo) HasChildByMenuIDs(ctx context.Context, ids []int64) (bool, error)
 		return false, nil
 	}
 	var n int64
-	err := r.db.WithContext(ctx).Model(&SysMenu{}).
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysMenu{}).
 		Where("parent_id IN ? AND id NOT IN ?", ids, ids).Count(&n).Error
 	return n > 0, err
 }
@@ -116,7 +167,7 @@ func (r *Repo) HasChildByMenuIDs(ctx context.Context, ids []int64) (bool, error)
 // CheckMenuExistRole 菜单是否已分配给角色（sys_role_menu）。
 func (r *Repo) CheckMenuExistRole(ctx context.Context, id int64) (bool, error) {
 	var n int64
-	err := r.db.WithContext(ctx).Table("sys_role_menu").Where("menu_id = ?", id).Count(&n).Error
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Table("sys_role_menu").Where("menu_id = ?", id).Count(&n).Error
 	return n > 0, err
 }
 
@@ -128,23 +179,23 @@ func (r *Repo) MenuIDsByRoleID(ctx context.Context, roleID int64) ([]int64, erro
 	// ⚠️ 用 Pluck 取标量：GORM 的 First 不接受 *int 目的地（"model value required"，
 	// 与 notice 的 createByName 反查同一个坑，契约 diff 实测抓到）
 	flags := make([]int, 0, 1)
-	err := r.db.WithContext(ctx).Table("sys_role").Select("menu_check_strictly").
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Table("sys_role").Select("menu_check_strictly").
 		Where("id = ?", roleID).Limit(1).Pluck("menu_check_strictly", &flags).Error
 	if err != nil {
 		return nil, err
 	}
 	strictly := len(flags) > 0 && flags[0] != 0
-	assigned := r.db.WithContext(ctx).Table("sys_role_menu AS rm").
+	assigned := crudx.DB(ctx, r.db).WithContext(ctx).Table("sys_role_menu AS rm").
 		Select("rm.menu_id").
 		Joins("LEFT JOIN sys_role r ON r.id = rm.role_id").
 		Where("rm.role_id = ? AND r.status = ?", roleID, modelx.Normal)
 
 	ids := make([]int64, 0)
-	q := r.db.WithContext(ctx).Model(&SysMenu{}).Select("id").
+	q := crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysMenu{}).Select("id").
 		Where("id IN (?)", assigned).
 		Order("parent_id ASC, order_num ASC")
 	if strictly {
-		parents := r.db.WithContext(ctx).Model(&SysMenu{}).Select("parent_id").
+		parents := crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysMenu{}).Select("parent_id").
 			Where("id IN (?)", assigned)
 		q = q.Where("id NOT IN (?)", parents)
 	}
@@ -158,7 +209,7 @@ func (r *Repo) MenuIDsByRoleID(ctx context.Context, roleID int64) ([]int64, erro
 //
 // ⚠️ parent_id 为 None 时 Python 端生成 IS NULL，照抄。
 func (r *Repo) ExistsMenuName(ctx context.Context, name string, parentID, excludeID *int64) (bool, error) {
-	q := r.db.WithContext(ctx).Model(&SysMenu{}).Where("menu_name = ?", name)
+	q := crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysMenu{}).Where("menu_name = ?", name)
 	if parentID == nil {
 		q = q.Where("parent_id IS NULL")
 	} else {
@@ -177,7 +228,7 @@ func (r *Repo) ExistsMenuName(ctx context.Context, name string, parentID, exclud
 // RouteConflictCandidates 路由冲突候选（M/C 且 path 命中 path 或 routeName）。
 func (r *Repo) RouteConflictCandidates(ctx context.Context, path, routeName string) ([]SysMenu, error) {
 	var rows []SysMenu
-	err := r.db.WithContext(ctx).Model(&SysMenu{}).
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysMenu{}).
 		Where("menu_type IN ? AND (path = ? OR path = ?)", []string{TypeDir, TypeMenu}, path, routeName).
 		Find(&rows).Error
 	return rows, err
@@ -185,17 +236,17 @@ func (r *Repo) RouteConflictCandidates(ctx context.Context, path, routeName stri
 
 // Create 新增（审计字段由调用方 FillCreate）。
 func (r *Repo) Create(ctx context.Context, row *SysMenu) error {
-	return r.db.WithContext(ctx).Create(row).Error
+	return crudx.DB(ctx, r.db).WithContext(ctx).Create(row).Error
 }
 
 // Update 整体保存。
 func (r *Repo) Update(ctx context.Context, row *SysMenu) error {
-	return r.db.WithContext(ctx).Save(row).Error
+	return crudx.DB(ctx, r.db).WithContext(ctx).Save(row).Error
 }
 
 // Delete 物理删除单条（sys_menu 无 del_flag）。
 func (r *Repo) Delete(ctx context.Context, id int64) (bool, error) {
-	res := r.db.WithContext(ctx).Where("id = ?", id).Delete(&SysMenu{})
+	res := crudx.DB(ctx, r.db).WithContext(ctx).Where("id = ?", id).Delete(&SysMenu{})
 	if res.Error != nil {
 		return false, res.Error
 	}
@@ -207,7 +258,7 @@ func (r *Repo) DeleteBatch(ctx context.Context, ids []int64) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	res := r.db.WithContext(ctx).Where("id IN ?", ids).Delete(&SysMenu{})
+	res := crudx.DB(ctx, r.db).WithContext(ctx).Where("id IN ?", ids).Delete(&SysMenu{})
 	return res.RowsAffected, res.Error
 }
 
@@ -216,6 +267,6 @@ func (r *Repo) DeleteRoleMenuByMenuIDs(ctx context.Context, ids []int64) (int64,
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	res := r.db.WithContext(ctx).Table("sys_role_menu").Where("menu_id IN ?", ids).Delete(nil)
+	res := crudx.DB(ctx, r.db).WithContext(ctx).Table("sys_role_menu").Where("menu_id IN ?", ids).Delete(nil)
 	return res.RowsAffected, res.Error
 }

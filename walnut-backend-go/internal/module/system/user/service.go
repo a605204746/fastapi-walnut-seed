@@ -3,6 +3,8 @@ package user
 import (
 	"context"
 	"fmt"
+	"io"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -11,6 +13,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
+	"walnut-seed-go/internal/module/system/dept"
 	"walnut-seed-go/internal/module/system/post"
 	"walnut-seed-go/internal/module/system/role"
 	"walnut-seed-go/internal/pkg/authctx"
@@ -20,20 +23,89 @@ import (
 	"walnut-seed-go/internal/pkg/idtype"
 	"walnut-seed-go/internal/pkg/modelx"
 	"walnut-seed-go/internal/pkg/permx"
+	"walnut-seed-go/internal/pkg/storagex"
 )
 
 var nowFunc = time.Now
 
 const bcryptCost = 12
 
-type Service struct {
-	db   *gorm.DB
-	repo *Repo
-	auth authctx.Context
+// userRepo 是 service 消费的数据访问能力（consumer-side 接口，定义在消费方）。
+// 只列 service 实际调用的方法；*Repo 满足它，单测以 mock 替换。
+type userRepo interface {
+	Page(ctx context.Context, page crudx.Page, conds []crudx.Cond, scope permx.Scope) ([]SysUser, int64, error)
+	ListExport(ctx context.Context, conds []crudx.Cond, scope permx.Scope) ([]ExportRow, error)
+	FindByID(ctx context.Context, userID int64) (*SysUser, error)
+	FindByIDWithScope(ctx context.Context, userID int64, scope permx.Scope) (*SysUser, error)
+	CountByIDWithScope(ctx context.Context, userID int64, scope permx.Scope) (int64, error)
+	FindByUserName(ctx context.Context, userName string) (*SysUser, error)
+	ExistsByField(ctx context.Context, field, value string, excludeID *int64) (bool, error)
+	ListByDeptID(ctx context.Context, deptID int64) ([]SysUser, error)
+	ListOptionByIDs(ctx context.Context, ids []int64, deptID *int64) ([]SysUser, error)
+	Create(ctx context.Context, row *SysUser) error
+	Update(ctx context.Context, row *SysUser) error
+	UpdatePassword(ctx context.Context, userID int64, hashedPwd string) (int64, error)
+	UpdateStatus(ctx context.Context, userID int64, status string) (int64, error)
+	UpdateAvatar(ctx context.Context, userID int64, avatar string) (int64, error)
+	UpdateProfile(ctx context.Context, userID int64, nickName *string, phone *string, email *string, sex *string) (int64, error)
+	SoftDelete(ctx context.Context, ids []int64) (int64, error)
+	FindRoles(ctx context.Context, userID int64) ([]role.SysRole, error)
+	RoleIDsByUserID(ctx context.Context, userID int64) ([]int64, error)
+	DeleteUserRoles(ctx context.Context, userID int64) error
+	InsertUserRoles(ctx context.Context, userID int64, roleIDs []int64) error
+	DeleteUserRolesBatch(ctx context.Context, userIDs []int64) error
+	PostIDsByUserID(ctx context.Context, userID int64) ([]int64, error)
+	DeleteUserPosts(ctx context.Context, userID int64) error
+	InsertUserPosts(ctx context.Context, userID int64, postIDs []int64) error
+	DeleteUserPostsBatch(ctx context.Context, userIDs []int64) error
+	MapDeptNames(ctx context.Context, deptIDs []int64) (map[int64]*string, error)
+	DescendantAndSelfIDs(ctx context.Context, deptID int64) ([]int64, error)
+	RoleNameGroup(ctx context.Context, userID int64) (string, error)
+	PostNameGroup(ctx context.Context, userID int64) (string, error)
+	ConfigValueByKey(ctx context.Context, key string) (string, error)
 }
 
-func NewService(db *gorm.DB, ac authctx.Context) *Service {
-	return &Service{db: db, repo: NewRepo(db), auth: ac}
+// PostProvider / RoleProvider / DeptProvider 是 user 域消费的跨模块能力
+// （consumer-side 窄接口）：只列实际调用的方法，具体实现由 bootstrap 经
+// Deps 工厂注入，避免 user 直接构造 post/role/dept 的 Service。
+type PostProvider interface {
+	SelectList(ctx context.Context, q post.QueryParam) ([]post.Out, error)
+}
+
+type RoleProvider interface {
+	SelectList(ctx context.Context, q role.QueryParam) ([]role.SysRole, error)
+}
+
+type DeptProvider interface {
+	TreeSelectOut(ctx context.Context, q dept.QueryParam) ([]*dept.TreeNode, error)
+}
+
+// Deps user 模块依赖：对象存储 + 跨模块服务工厂（按请求 authctx 构造）。
+type Deps struct {
+	Storage  storagex.Service
+	NewPosts func(authctx.Context) PostProvider
+	NewRoles func(authctx.Context) RoleProvider
+	NewDepts func(authctx.Context) DeptProvider
+}
+
+type Service struct {
+	db      *gorm.DB
+	repo    userRepo
+	auth    authctx.Context
+	storage storagex.Service
+	posts   PostProvider
+	roles   RoleProvider
+}
+
+func NewService(db *gorm.DB, ac authctx.Context, deps Deps) *Service {
+	return &Service{
+		db:      db,
+		repo:    NewRepo(db),
+		auth:    ac,
+		storage: deps.Storage,
+		posts:   deps.NewPosts(ac),
+		roles:   deps.NewRoles(ac),
+	}
 }
 
 type PageOut struct {
@@ -42,7 +114,7 @@ type PageOut struct {
 }
 
 func (s *Service) buildScope(ctx context.Context) (permx.Scope, error) {
-	return permx.Build(ctx, s.repo.db, s.auth, permx.UserList)
+	return permx.Build(ctx, s.db, s.auth, permx.UserList)
 }
 
 func (s *Service) buildConditions(ctx context.Context, q QueryParam) ([]crudx.Cond, error) {
@@ -176,7 +248,7 @@ func (s *Service) GetByID(ctx context.Context, id int64) (*UserInfoOut, error) {
 	info.RoleIDs = toJSIntSlice(roleIDs)
 
 	if u != nil && u.DeptID != nil {
-		posts, err := post.NewService(s.db, s.auth).SelectList(ctx, post.QueryParam{DeptID: u.DeptID})
+		posts, err := s.posts.SelectList(ctx, post.QueryParam{DeptID: u.DeptID})
 		if err != nil {
 			return nil, err
 		}
@@ -213,7 +285,7 @@ func (s *Service) GetUserInfoNoID(ctx context.Context) (*UserInfoOut, error) {
 // scopedRoles 经 RoleService.SelectList 取角色（含角色数据权限），
 // status 传空串表示不过滤状态（authRole 用）。
 func (s *Service) scopedRoles(ctx context.Context, status string) ([]role.Out, error) {
-	rows, err := role.NewService(s.db, s.auth).SelectList(ctx, role.QueryParam{Status: status})
+	rows, err := s.roles.SelectList(ctx, role.QueryParam{Status: status})
 	if err != nil {
 		return nil, err
 	}
@@ -330,7 +402,22 @@ func (s *Service) OptionSelect(ctx context.Context, ids []int64, deptID *int64) 
 	return outs, nil
 }
 
+// InsertUser 新增用户。多写操作（用户行 + 岗位/角色关联重建）包在事务里，
+// 任一步失败整体回滚（对齐 Python session.begin，不留孤儿用户）。
 func (s *Service) InsertUser(ctx context.Context, in CreateIn) (bool, error) {
+	if s.db == nil { // 测试 harness 无真实 DB，直调内部
+		return s.insertUserTx(ctx, in)
+	}
+	var done bool
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var e error
+		done, e = s.insertUserTx(crudx.WithTx(ctx, tx), in)
+		return e
+	})
+	return done, err
+}
+
+func (s *Service) insertUserTx(ctx context.Context, in CreateIn) (bool, error) {
 	// Python controller 先查 userName/password 缺省（ServiceException 500），
 	// 再做部门数据权限与唯一性校验
 	if in.UserName == nil {
@@ -395,7 +482,22 @@ func (s *Service) InsertUser(ctx context.Context, in CreateIn) (bool, error) {
 	return true, nil
 }
 
+// UpdateUser 修改用户。多写操作（角色/岗位关联重建 + 用户行更新）包在事务里，
+// 任一步失败整体回滚（对齐 Python session.begin）。
 func (s *Service) UpdateUser(ctx context.Context, in UpdateIn) (bool, error) {
+	if s.db == nil { // 测试 harness 无真实 DB，直调内部
+		return s.updateUserTx(ctx, in)
+	}
+	var done bool
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var e error
+		done, e = s.updateUserTx(crudx.WithTx(ctx, tx), in)
+		return e
+	})
+	return done, err
+}
+
+func (s *Service) updateUserTx(ctx context.Context, in UpdateIn) (bool, error) {
 	if in.ID == nil {
 		return false, errs.New("用户ID不能为空")
 	}
@@ -536,7 +638,22 @@ func (s *Service) checkPostsVisible(ctx context.Context, ids []int64) error {
 	return nil
 }
 
+// DeleteUserByIDs 批量删除用户。多写操作（角色/岗位关联批删 + 软删用户）
+// 包在事务里，任一步失败整体回滚（对齐 Python session.begin）。
 func (s *Service) DeleteUserByIDs(ctx context.Context, ids []int64) (int64, error) {
+	if s.db == nil { // 测试 harness 无真实 DB，直调内部
+		return s.deleteUserByIDsTx(ctx, ids)
+	}
+	var n int64
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var e error
+		n, e = s.deleteUserByIDsTx(crudx.WithTx(ctx, tx), ids)
+		return e
+	})
+	return n, err
+}
+
+func (s *Service) deleteUserByIDsTx(ctx context.Context, ids []int64) (int64, error) {
 	for _, id := range ids {
 		if id == s.auth.User.ID {
 			return 0, errs.New("当前用户不能删除")
@@ -603,7 +720,49 @@ func (s *Service) ChangeStatus(ctx context.Context, in ChangeStatusIn) (bool, er
 	return n > 0, err
 }
 
+// UpdateAvatar 头像上传业务：扩展名白名单 → 读取 → 对象存储 → 落库。
+// 读取放在白名单之后，保持与 Python 端一致的错误优先级。
+func (s *Service) UpdateAvatar(ctx context.Context, filename string, r io.Reader) (string, error) {
+	ext := strings.ToLower(filepath.Ext(filename))
+	ext = strings.TrimPrefix(ext, ".")
+	imageExts := map[string]bool{"bmp": true, "gif": true, "jpg": true, "jpeg": true, "png": true}
+	if !imageExts[ext] {
+		return "", errs.New("文件格式不正确，请上传[bmp, gif, jpg, jpeg, png]格式")
+	}
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return "", errs.Wrap(err, errs.MsgSystemError)
+	}
+	result, err := s.storage.Upload(ctx, filename, data)
+	if err != nil {
+		return "", err
+	}
+	n, err := s.repo.UpdateAvatar(ctx, s.auth.User.ID, result.URL)
+	if err != nil {
+		return "", errs.Wrap(err, errs.MsgDBFailed)
+	}
+	if n == 0 {
+		return "", errs.New("上传图片异常，请联系管理员")
+	}
+	return result.URL, nil
+}
+
+// InsertAuthRole 分配用户角色。关联重建是先删后插两步写，包在事务里，
+// 插入失败回滚删除（对齐 Python session.begin，不丢原有关联）。
 func (s *Service) InsertAuthRole(ctx context.Context, userID int64, roleIDs []int64) (bool, error) {
+	if s.db == nil { // 测试 harness 无真实 DB，直调内部
+		return s.insertAuthRoleTx(ctx, userID, roleIDs)
+	}
+	var done bool
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var e error
+		done, e = s.insertAuthRoleTx(crudx.WithTx(ctx, tx), userID, roleIDs)
+		return e
+	})
+	return done, err
+}
+
+func (s *Service) insertAuthRoleTx(ctx context.Context, userID int64, roleIDs []int64) (bool, error) {
 	if err := s.CheckUserAllowed(ctx, userID); err != nil {
 		return false, err
 	}
@@ -619,7 +778,22 @@ func (s *Service) InsertAuthRole(ctx context.Context, userID int64, roleIDs []in
 
 // ImportUsers 从 Excel 批量导入用户，对应 Python 端 UserService.import_users。
 // 任一行失败 → 整体 500「很抱歉，导入失败！…」；全部成功 → 恭喜消息。
+// 多行写入包在事务里：任一行失败抛错时，先前成功行一并回滚
+// （对齐 Python 请求级 session.begin 的整体回滚语义）。
 func (s *Service) ImportUsers(ctx context.Context, data []byte, updateSupport bool) (string, error) {
+	if s.db == nil { // 测试 harness 无真实 DB，直调内部
+		return s.importUsersTx(ctx, data, updateSupport)
+	}
+	var msg string
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var e error
+		msg, e = s.importUsersTx(crudx.WithTx(ctx, tx), data, updateSupport)
+		return e
+	})
+	return msg, err
+}
+
+func (s *Service) importUsersTx(ctx context.Context, data []byte, updateSupport bool) (string, error) {
 	rows, headers, err := excelx.ReadRows(data)
 	if err != nil {
 		return "", err
@@ -962,7 +1136,7 @@ func (s *Service) checkDeptDataScope(ctx context.Context, deptID int64) error {
 	if s.auth.User.IsSuperAdmin() {
 		return nil
 	}
-	scope, err := permx.Build(ctx, s.repo.db, s.auth, permx.Default)
+	scope, err := permx.Build(ctx, s.db, s.auth, permx.Default)
 	if err != nil {
 		return errs.Wrap(err, errs.MsgDBFailed)
 	}
@@ -970,7 +1144,7 @@ func (s *Service) checkDeptDataScope(ctx context.Context, deptID int64) error {
 		return nil
 	}
 	var n int64
-	q := s.repo.db.WithContext(ctx).Table("sys_dept").
+	q := s.db.WithContext(ctx).Table("sys_dept").
 		Where("id = ? AND del_flag = ?", deptID, modelx.Normal)
 	q = scope.Apply(q)
 	if err := q.Count(&n).Error; err != nil {

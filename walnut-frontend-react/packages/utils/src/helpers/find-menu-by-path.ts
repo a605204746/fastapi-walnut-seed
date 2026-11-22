@@ -1,4 +1,4 @@
-import type { MenuRecordRaw } from '@vben-core/typings';
+import type { MenuRecordRaw } from '@walnut-core/typings';
 
 function findMenuByPath(
   list: MenuRecordRaw[],

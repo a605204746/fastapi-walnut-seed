@@ -36,17 +36,46 @@ const (
 	cacheDictType = "sys_dict_type"
 )
 
+// dictTypeRepo / dictDataRepo 是 service 消费的数据访问能力（consumer-side 接口，
+// 定义在消费方）。只列 service 实际调用的方法；*TypeRepo / *DataRepo 满足它们，
+// 单测以 mock 替换。
+type dictTypeRepo interface {
+	Page(ctx context.Context, page crudx.Page, conds []crudx.Cond) ([]SysDictType, int64, error)
+	ListAll(ctx context.Context, conds ...crudx.Cond) ([]SysDictType, error)
+	Get(ctx context.Context, id int64) (*SysDictType, error)
+	ExistsByType(ctx context.Context, dictType string, excludeID *int64) (bool, error)
+	Create(ctx context.Context, row *SysDictType) error
+	Update(ctx context.Context, row *SysDictType) error
+	DeleteBatch(ctx context.Context, ids []int64) (int64, error)
+}
+
+type dictDataRepo interface {
+	Page(ctx context.Context, page crudx.Page, conds []crudx.Cond) ([]SysDictData, int64, error)
+	ListAll(ctx context.Context, conds ...crudx.Cond) ([]SysDictData, error)
+	ListByType(ctx context.Context, dictType string) ([]SysDictData, error)
+	Get(ctx context.Context, id int64) (*SysDictData, error)
+	ExistsByType(ctx context.Context, dictType string) (bool, error)
+	ExistsByTypeAndValue(ctx context.Context, dictType, dictValue string, excludeID *int64) (bool, error)
+	Create(ctx context.Context, row *SysDictData) error
+	Update(ctx context.Context, row *SysDictData) error
+	RenameType(ctx context.Context, oldType, newType string) (int64, error)
+	DeleteBatch(ctx context.Context, ids []int64) (int64, error)
+}
+
 // Service 字典业务层。cache 可为 nil（Redis 不可用降级）。
+// db 用于多写操作的事务包裹（对齐 Python 请求级事务的失败整体回滚语义）；
+// 单测以 nil db + mock repo 直调，走 nil-db 守卫分支。
 type Service struct {
-	typeRepo *TypeRepo
-	dataRepo *DataRepo
+	db       *gorm.DB
+	typeRepo dictTypeRepo
+	dataRepo dictDataRepo
 	auth     authctx.Context
 	cache    *cachex.Client
 }
 
 // NewService 构造业务层。
 func NewService(db *gorm.DB, ac authctx.Context, cache *cachex.Client) *Service {
-	return &Service{typeRepo: NewTypeRepo(db), dataRepo: NewDataRepo(db), auth: ac, cache: cache}
+	return &Service{db: db, typeRepo: NewTypeRepo(db), dataRepo: NewDataRepo(db), auth: ac, cache: cache}
 }
 
 // ---- 字典类型查询 ----
@@ -264,22 +293,49 @@ func (s *Service) InsertType(ctx context.Context, in TypeCreateIn) error {
 }
 
 // UpdateType 修改字典类型，对应 update_dict_type。
+//
+// 多写操作（数据表联动改名 + 类型保存）包在事务里，任一步失败整体回滚，
+// 对齐 Python 请求级事务语义。缓存失效在事务**提交后**执行——回滚时不动缓存。
 func (s *Service) UpdateType(ctx context.Context, in TypeUpdateIn) error {
+	if s.db == nil { // 测试 harness 直调（mock repo，无真实事务）
+		oldType, err := s.updateTypeTx(ctx, in)
+		if err != nil {
+			return err
+		}
+		s.evictTypeCache(ctx, oldType, deref(in.DictType))
+		return nil
+	}
+	var oldType string
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var e error
+		oldType, e = s.updateTypeTx(crudx.WithTx(ctx, tx), in)
+		return e
+	})
+	if err != nil {
+		return err
+	}
+	s.evictTypeCache(ctx, oldType, deref(in.DictType))
+	return nil
+}
+
+// updateTypeTx 是 UpdateType 的库写部分（不含缓存失效），逻辑与原实现一致。
+// 返回旧类型名，供调用方在事务提交后失效新旧类型缓存。
+func (s *Service) updateTypeTx(ctx context.Context, in TypeUpdateIn) (string, error) {
 	if in.DictType == nil {
-		return errs.New("字典类型不能为空")
+		return "", errs.New("字典类型不能为空")
 	}
 	old, err := s.typeRepo.Get(ctx, *in.ID)
 	if err != nil {
-		return errs.Wrap(err, errs.MsgDBFailed)
+		return "", errs.Wrap(err, errs.MsgDBFailed)
 	}
 	if old == nil {
-		return errs.New("操作失败")
+		return "", errs.New("操作失败")
 	}
 	oldType := deref(old.DictType)
 
 	// 同步更新字典数据表的字典类型（不填审计字段）
 	if _, err := s.dataRepo.RenameType(ctx, oldType, *in.DictType); err != nil {
-		return errs.Wrap(err, errs.MsgDBFailed)
+		return "", errs.Wrap(err, errs.MsgDBFailed)
 	}
 
 	// 对应 model_dump(exclude_unset=True) 去 id 后仅对非 None 字段 setattr
@@ -294,18 +350,22 @@ func (s *Service) UpdateType(ctx context.Context, in TypeUpdateIn) error {
 	}
 	crudx.FillUpdate(&old.BaseModel, s.auth, nowFunc())
 	if err := s.typeRepo.Update(ctx, old); err != nil {
-		return errs.Wrap(err, errs.MsgDBFailed)
+		return "", errs.Wrap(err, errs.MsgDBFailed)
 	}
+	return oldType, nil
+}
 
-	if s.cache != nil {
-		s.cache.Delete(ctx,
-			cacheDictData+oldType,
-			cacheDictType+oldType,
-			cacheDictData+*in.DictType,
-			cacheDictType+*in.DictType,
-		)
+// evictTypeCache 失效新旧类型的数据/类型缓存（单命令四键），仅在写成功后调用。
+func (s *Service) evictTypeCache(ctx context.Context, oldType, newType string) {
+	if s.cache == nil {
+		return
 	}
-	return nil
+	s.cache.Delete(ctx,
+		cacheDictData+oldType,
+		cacheDictType+oldType,
+		cacheDictData+newType,
+		cacheDictType+newType,
+	)
 }
 
 // DeleteTypes 批量删除字典类型，对应 delete_dict_type_by_ids。

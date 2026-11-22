@@ -58,7 +58,7 @@ test('all seven layouts keep content visible after switching and reloading', asy
     }
     if (layout === 'full-content') {
       await expect(page.locator('header')).toHaveCount(0);
-      await expect(page.locator('.vben-tabs')).toHaveCount(0);
+      await expect(page.locator('.walnut-tabs')).toHaveCount(0);
     }
     await page.screenshot({ path: testInfo.outputPath(`${layout}.png`) });
     // Wait for the preference manager's debounced persistence before reloading.
@@ -71,12 +71,12 @@ test('all seven layouts keep content visible after switching and reloading', asy
 
 test('header spacing, menu radius and tab height follow the design tokens', async ({ page }) => {
   await expect(page.locator('header')).toHaveCSS('padding-left', '12px');
-  await expect(page.locator('.vben-tabs')).toHaveCSS('height', '38px');
+  await expect(page.locator('.walnut-tabs')).toHaveCSS('height', '38px');
   await expect(page.locator('.ant-menu-item-selected')).toHaveCSS('border-radius', '6px');
   await expect(page.locator('.ant-tabs-tab-active')).toHaveCSS('background-color', 'rgba(20, 118, 255, 0.15)');
   await preferences(page, { theme: { radius: '0.75' }, breadcrumb: { styleType: 'background' } });
   await expect(page.locator('.ant-menu-item-selected')).toHaveCSS('border-radius', '12px');
-  await expect(page.locator('.vben-breadcrumb-background')).toHaveCSS('border-radius', '12px');
+  await expect(page.locator('.walnut-breadcrumb-background')).toHaveCSS('border-radius', '12px');
 });
 
 test('light, dark and semi-dark themes retain contrast in every shell', async ({ page }, testInfo) => {

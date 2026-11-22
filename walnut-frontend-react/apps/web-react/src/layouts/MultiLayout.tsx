@@ -1,19 +1,19 @@
 import type { ReactNode } from 'react';
 
-import type { MenuRecordRaw, RouteHandle, RouteMeta } from '@vben-core/typings';
+import type { MenuRecordRaw, RouteHandle, RouteMeta } from '@walnut-core/typings';
 
 import { useEffect, useMemo, useState } from 'react';
 
-import { usePreferences } from '@vben/preferences';
-import { useAccessStore } from '@vben/stores';
-import { findMenuByPath, setObjToUrlParams } from '@vben/utils';
-import { isHttpUrl } from '@vben-core/shared/utils';
-import { VbenIcon } from '@vben-core/shadcn-ui';
+import { usePreferences } from '@walnut/preferences';
+import { useAccessStore } from '@walnut/stores';
+import { findMenuByPath, setObjToUrlParams } from '@walnut/utils';
+import { isHttpUrl } from '@walnut-core/shared/utils';
+import { WalnutIcon } from '@walnut-core/shadcn-ui';
 import { Breadcrumb, ConfigProvider, Layout, Menu } from 'antd';
 import { useLocation, useMatches, useNavigate } from 'react-router';
 
-import { VbenMenu } from '@/adapter/menu';
-import { VbenTabs } from '@/adapter/tabs';
+import { WalnutMenu } from '@/adapter/menu';
+import { WalnutTabs } from '@/adapter/tabs';
 import { $t } from '@/locales';
 import { mergeMatchMeta } from '@/router/route-tree';
 import { useUiStore } from '@/store/ui';
@@ -97,7 +97,14 @@ export function MultiLayout() {
       return;
     }
     const added = keys.filter((key) => !openKeys.includes(key));
-    setOpenKeys(added.length > 0 ? [added[added.length - 1]!] : keys);
+    if (added.length === 0) {
+      setOpenKeys(keys);
+      return;
+    }
+    // 手风琴只收起同级兄弟子树，保留新展开项的祖先链（对应 Vue menu-ui openMenu）
+    const key = added[added.length - 1]!;
+    const parents = findMenuByPath(accessMenus, key)?.parents ?? [];
+    setOpenKeys([...parents, key]);
   }
 
   const semiDark = !isDark;
@@ -143,7 +150,7 @@ export function MultiLayout() {
       items.push({
         title: (
           <span className="text-primary flex cursor-pointer items-center" onClick={() => navigate('/')}>
-            <VbenIcon className="size-3.5" icon="mdi:home-outline" />
+            <WalnutIcon className="size-3.5" icon="mdi:home-outline" />
           </span>
         ),
       });
@@ -153,7 +160,7 @@ export function MultiLayout() {
       items.push({
         title: (
           <span className={isLast ? 'flex items-center gap-1' : 'text-primary flex cursor-pointer items-center gap-1'}>
-            {showIcon && item.icon ? <VbenIcon className="size-3.5" icon={item.icon as string} /> : null}
+            {showIcon && item.icon ? <WalnutIcon className="size-3.5" icon={item.icon as string} /> : null}
             {$t(item.title)}
           </span>
         ),
@@ -163,7 +170,7 @@ export function MultiLayout() {
   }, [matches, preferences.breadcrumb, navigate]);
 
   const inlineMenu = (menus: MenuRecordRaw[]) => (
-    <VbenMenu
+    <WalnutMenu
       mode="inline"
       menus={menus}
       onMenuSelect={handleMenuSelect}
@@ -175,7 +182,7 @@ export function MultiLayout() {
   );
 
   const horizontalMenu = (
-    <VbenMenu
+    <WalnutMenu
       mode="horizontal"
       menus={horizontalMenus}
       onClick={({ key }) => {
@@ -184,7 +191,7 @@ export function MultiLayout() {
       }}
       onMenuSelect={isMixed ? undefined : handleMenuSelect}
       selectedKeys={[isMixed ? (activeRoot?.path ?? '') : activePath]}
-      style={{ background: 'transparent', borderBottom: 'none', flex: 'auto', minWidth: 0, justifyContent: preferences.header.menuAlign === 'center' ? 'center' : preferences.header.menuAlign === 'end' ? 'flex-end' : 'flex-start' }}
+      style={{ background: 'transparent', borderBottom: 'none', display: 'flex', alignItems: 'center', flex: 'auto', minWidth: 0, justifyContent: preferences.header.menuAlign === 'center' ? 'center' : preferences.header.menuAlign === 'end' ? 'flex-end' : 'flex-start' }}
     />
   );
 
@@ -195,9 +202,9 @@ export function MultiLayout() {
         <Menu
           inlineCollapsed
           items={accessMenus.map((root) => ({
-            icon: root.icon ? <VbenIcon icon={root.icon} /> : undefined,
+            icon: root.icon ? <WalnutIcon icon={root.icon} /> : undefined,
             key: root.path,
-            label: root.name,
+            label: $t(root.name),
           }))}
           mode="inline"
           onSelect={({ key }) => {
@@ -210,7 +217,7 @@ export function MultiLayout() {
       </div>
       <div className="flex min-h-0 flex-1 flex-col" style={{ width: preferences.sidebar.width }}>
         <div className="flex-center h-12 shrink-0 px-3">
-          <span className="text-foreground truncate text-lg font-semibold">{activeRoot?.name ?? preferences.app.name}</span>
+          <span className="text-foreground truncate text-lg font-semibold">{$t(activeRoot?.name ?? preferences.app.name)}</span>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">{inlineMenu(sideMenus)}</div>
       </div>
@@ -252,6 +259,9 @@ export function MultiLayout() {
         style={{
               display: 'flex',
               height: preferences.header.height,
+              // antd 6 的 header line-height 固定取 headerHeight token（64px），
+              // 不显式覆盖会让顶栏内的水平菜单继承 64px 行高而溢出
+              lineHeight: `${preferences.header.height}px`,
               marginTop: headerOffset,
               transition: preferences.header.mode === 'static' ? 'none' : 'margin-top 180ms ease',
               // antd 6 scopes Layout tokens to .ant-layout, not a standalone Header.
@@ -271,7 +281,7 @@ export function MultiLayout() {
 
   const bodyColumn = (
     <Layout className="bg-background-deep min-h-0">
-      {showTabbar ? <VbenTabs /> : null}
+      {showTabbar ? <WalnutTabs /> : null}
       {content}
       {footer}
     </Layout>

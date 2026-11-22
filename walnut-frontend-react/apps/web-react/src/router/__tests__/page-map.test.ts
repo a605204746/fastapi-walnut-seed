@@ -1,11 +1,11 @@
-import type { ComponentRecordType } from '@vben-core/typings';
+import type { ComponentRecordType } from '@walnut-core/typings';
 
 import type { Menu } from '@/api/core/menu';
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { generateRoutesByBackend, normalizeViewPath } from '@vben/utils';
+import { generateRoutesByBackend, normalizeViewPath } from '@walnut/utils';
 import { describe, expect, it } from 'vitest';
 
 import menuTree from '../../__fixtures__/backend-menu-tree.json';

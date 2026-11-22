@@ -3,7 +3,7 @@
 // 运行前置：先用 Python 生成测试向量
 //
 //	cd walnut-backend-python
-//	.venv/Scripts/python ../walnut-backend-go/test/cryptointerop/gen_vectors.py
+//	.venv/Scripts/python ../scripts/cryptointerop/gen_vectors.py
 //
 // 随后本测试会：
 //  1. 解 Python 生成的 AES/RSA 密文，断言还原一致

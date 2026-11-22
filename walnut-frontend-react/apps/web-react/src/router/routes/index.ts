@@ -1,6 +1,6 @@
-import type { AppRouteObject } from '@vben-core/typings';
+import type { AppRouteObject } from '@walnut-core/typings';
 
-import { mergeRouteModules } from '@vben/utils';
+import { mergeRouteModules } from '@walnut/utils';
 
 /**
  * 前端静态路由模块聚合（对应 Vue 侧 `router/routes/index.ts`）。

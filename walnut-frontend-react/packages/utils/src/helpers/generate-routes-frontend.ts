@@ -1,6 +1,6 @@
-import type { AppRouteObject } from '@vben-core/typings';
+import type { AppRouteObject } from '@walnut-core/typings';
 
-import { filterTree, mapTree } from '@vben-core/shared/utils';
+import { filterTree, mapTree } from '@walnut-core/shared/utils';
 
 /**
  * 动态生成路由 - 前端方式

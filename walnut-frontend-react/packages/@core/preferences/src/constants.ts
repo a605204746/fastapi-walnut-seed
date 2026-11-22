@@ -1,4 +1,4 @@
-import type { BuiltinThemeType, TimezoneOption } from '@vben-core/typings';
+import type { BuiltinThemeType, TimezoneOption } from '@walnut-core/typings';
 
 interface BuiltinThemePreset {
   color: string;

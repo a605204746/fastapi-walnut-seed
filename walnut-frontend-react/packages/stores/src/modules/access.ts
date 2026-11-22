@@ -1,4 +1,4 @@
-import type { AppRouteObject, MenuRecordRaw } from '@vben-core/typings';
+import type { AppRouteObject, MenuRecordRaw } from '@walnut-core/typings';
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';

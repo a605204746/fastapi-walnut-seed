@@ -13,9 +13,15 @@ import (
 	"walnut-seed-go/internal/pkg/authctx"
 )
 
+// socialRepo 是 service 消费的数据访问能力（consumer-side 接口，定义在消费方）。
+// 只列 service 实际调用的方法；*Repo 满足它，单测以 mock 替换。
+type socialRepo interface {
+	ListByUserID(ctx context.Context, userID int64) ([]SysSocial, error)
+}
+
 // Service 社交授权关系业务层。
 type Service struct {
-	repo *Repo
+	repo socialRepo
 	auth authctx.Context
 }
 

@@ -2,7 +2,7 @@ import { forwardRef, useImperativeHandle, useState } from 'react';
 
 import type { UploadFile } from 'antd';
 
-import { useVbenModal } from '@vben-core/popup-ui';
+import { useWalnutModal } from '@walnut-core/popup-ui';
 import { InboxOutlined } from '@ant-design/icons';
 import { Button, Modal, Switch, Upload } from 'antd';
 
@@ -37,7 +37,7 @@ export const UserImportModal = forwardRef<
   const [fileList, setFileList] = useState<UploadFile[]>([]);
   const [checked, setChecked] = useState(false);
 
-  const [BasicModal, modalApi] = useVbenModal({
+  const [BasicModal, modalApi] = useWalnutModal({
     closeOnClickModal: false,
     fullscreenButton: false,
     onCancel: handleCancel,

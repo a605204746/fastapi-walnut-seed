@@ -24,7 +24,6 @@ import (
 	"walnut-seed-go/internal/pkg/excelx"
 	"walnut-seed-go/internal/pkg/idempotentx"
 	"walnut-seed-go/internal/pkg/permguard"
-	"walnut-seed-go/internal/pkg/routex"
 )
 
 type Handler struct {
@@ -37,38 +36,6 @@ type Handler struct {
 
 func NewHandler(db *gorm.DB, eh *errs.Handler, perm *permguard.Guard, idem *idempotentx.Guard, cache *cachex.Client) *Handler {
 	return &Handler{db: db, errs: eh, perm: perm, idem: idem, cache: cache}
-}
-
-func (h *Handler) Mount(b routex.Binder) {
-	require, repeat := h.guards()
-
-	b.GET("/operlog/list", require("monitor:operlog:list"), h.OperLogList)
-	b.POST("/operlog/export", require("monitor:operlog:export"), h.OperLogExport)
-	b.DELETE("/operlog/clean", require("monitor:operlog:remove"), h.OperLogClean)
-	b.DELETE("/operlog/:oper_ids", require("monitor:operlog:remove"), h.OperLogDelete)
-
-	b.GET("/logininfor/list", require("monitor:logininfor:list"), h.LogininforList)
-	b.POST("/logininfor/export", require("monitor:logininfor:export"), h.LogininforExport)
-	b.DELETE("/logininfor/clean", require("monitor:logininfor:remove"), h.LogininforClean)
-	b.DELETE("/logininfor/:info_ids", require("monitor:logininfor:remove"), h.LogininforDelete)
-	b.GET("/logininfor/unlock/:user_name", require("monitor:logininfor:unlock"), repeat(), h.LogininforUnlock)
-}
-
-func (h *Handler) guards() (func(string) gin.HandlerFunc, func() gin.HandlerFunc) {
-	pass := func(c *gin.Context) { c.Next() }
-	require := func(perm string) gin.HandlerFunc {
-		if h.perm == nil {
-			return pass
-		}
-		return h.perm.Require(perm)
-	}
-	repeat := func() gin.HandlerFunc {
-		if h.idem == nil {
-			return pass
-		}
-		return h.idem.Default()
-	}
-	return require, repeat
 }
 
 func (h *Handler) service(c *gin.Context) (*Service, bool) {

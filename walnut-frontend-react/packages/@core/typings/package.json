@@ -1,5 +1,5 @@
 {
-  "name": "@vben-core/typings",
+  "name": "@walnut-core/typings",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
@@ -12,6 +12,6 @@
   },
   "devDependencies": {
     "@types/react": "catalog:",
-    "@vben/tsconfig": "workspace:*"
+    "@walnut/tsconfig": "workspace:*"
   }
 }

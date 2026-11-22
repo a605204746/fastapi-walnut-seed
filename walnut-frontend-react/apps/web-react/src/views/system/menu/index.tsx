@@ -2,8 +2,8 @@ import { useRef, useState } from 'react';
 
 import type { Menu } from '@/api/system/menu/model';
 
-import { $t } from '@vben/locales';
-import { listToTree, treeToList } from '@vben/utils';
+import { $t } from '@walnut/locales';
+import { listToTree, treeToList } from '@walnut/utils';
 import { Button, Popconfirm, Space, Switch, Tooltip } from 'antd';
 
 import { pruneEmptyChildren, useGrid } from '@/adapter/grid';
@@ -181,12 +181,12 @@ export default function MenuPage() {
                   </Button>
                 </Access>
               )}
-              <Popconfirm
-                onConfirm={() => handleDelete(row as Menu)}
-                placement="left"
-                title={removeConfirmTitle(row as Menu)}
-              >
-                <Access code={['system:menu:remove']} role={['superadmin']}>
+              <Access code={['system:menu:remove']} role={['superadmin']}>
+                <Popconfirm
+                  onConfirm={() => handleDelete(row as Menu)}
+                  placement="left"
+                  title={removeConfirmTitle(row as Menu)}
+                >
                   <Button
                     danger
                     onClick={(e) => e.stopPropagation()}
@@ -195,8 +195,8 @@ export default function MenuPage() {
                   >
                     {$t('pages.common.delete')}
                   </Button>
-                </Access>
-              </Popconfirm>
+                </Popconfirm>
+              </Access>
             </Space>
           ),
         }}

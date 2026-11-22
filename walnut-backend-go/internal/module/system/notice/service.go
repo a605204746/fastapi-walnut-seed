@@ -4,6 +4,7 @@ package notice
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"gorm.io/gorm"
@@ -17,9 +18,22 @@ import (
 // nowFunc 提供「当前时间」，便于单测钉住审计字段。
 var nowFunc = time.Now
 
+// noticeRepo 是 service 消费的数据访问能力（consumer-side 接口，定义在消费方）。
+// 只列 service 实际调用的方法；*Repo 满足它，单测以 mock 替换。
+type noticeRepo interface {
+	Page(ctx context.Context, page crudx.Page, conds []crudx.Cond) ([]SysNotice, int64, error)
+	Get(ctx context.Context, id int64) (*SysNotice, error)
+	Create(ctx context.Context, row *SysNotice) error
+	Update(ctx context.Context, row *SysNotice) error
+	DeleteBatch(ctx context.Context, ids []int64) (int64, error)
+	FindUserIDByName(ctx context.Context, name string) (*int64, error)
+	UserNameMap(ctx context.Context, ids []int64) (map[int64]*string, error)
+	DictLabelMap(ctx context.Context, dictType string, values []string) (map[string]string, error)
+}
+
 // Service 通知公告业务层。
 type Service struct {
-	repo *Repo
+	repo noticeRepo
 	auth authctx.Context
 }
 
@@ -211,4 +225,19 @@ func (s *Service) fillCreateByName(ctx context.Context, outs []Out) error {
 		}
 	}
 	return nil
+}
+
+// sortedIDs 去重升序（Python 端 sorted({...})），让 SQL 参数顺序稳定。
+func sortedIDs(in []int64) []int64 {
+	seen := make(map[int64]struct{}, len(in))
+	out := make([]int64, 0, len(in))
+	for _, v := range in {
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
 }

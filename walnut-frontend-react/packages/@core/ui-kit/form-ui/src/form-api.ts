@@ -5,8 +5,8 @@ import type {
   FormValidateResult,
 } from './types';
 
-import { Store } from '@vben-core/shared/store';
-import { cloneDeep, mergeWithArrayOverride } from '@vben-core/shared/utils';
+import { Store } from '@walnut-core/shared/store';
+import { cloneDeep, mergeWithArrayOverride } from '@walnut-core/shared/utils';
 import dayjs from 'dayjs';
 
 import { resolveRuleMessage } from './config';
@@ -57,7 +57,7 @@ function buildDefaults(schema: FormSchema[]): Record<string, any> {
  * 使搬运过来的调用点无需改动。
  */
 export class FormApi {
-  /** 最新的表单配置（非响应式，渲染时读取；由 useVbenForm 每次渲染同步） */
+  /** 最新的表单配置（非响应式，渲染时读取；由 useWalnutForm 每次渲染同步） */
   latestOptions: FormProps;
 
   /** 调用方传入的原始 schema（未叠加 updateSchema 的覆盖层） */
@@ -227,6 +227,9 @@ export class FormApi {
     for (const field of this.latestOptions.schema ?? []) {
       const deps = field.dependencies;
       if (deps?.if && !deps.if(values)) continue;
+      // 对齐 Vue form-field.vue 的 fieldRules：show 隐藏的字段不参与校验。
+      // 否则如菜单类型为目录时，隐藏的「组件路径」仍按必填校验，永远无法提交。
+      if (deps?.show && !deps.show(values)) continue;
 
       const value = values[field.fieldName];
       // dependencies.rules 是动态规则（随其它字段变化），提供时覆盖 field.rules

@@ -65,7 +65,8 @@ Start here if you are building on top of the scaffold.
 walnut-seed/
   walnut-backend-python/    # Python backend (FastAPI + SQLAlchemy 2.0 async + Redis)
   walnut-backend-java/      # Java backend (Spring Boot 3 + MyBatis-Plus + Sa-Token), same contract as Python
-  walnut-frontend/          # Vue 3 frontend monorepo (pnpm + turbo), main app in apps/web-antd/
+  walnut-frontend-react/    # React frontend monorepo (default, only active), main app in apps/web-react/
+  walnut-frontend/          # Vue 3 baseline (frozen as comparison reference since 2026-11-22), main app in apps/web-antd/
   docker/                   # Compose stacks (Python / Java full stacks + middleware) and container configuration
   data/                     # Runtime artifacts (not in git, auto-created): logs/, upload/
 ```
@@ -166,13 +167,14 @@ uv run main.py run --env dev   # http://localhost:8011
 cd walnut-backend-java
 mvn spring-boot:run            # http://localhost:8011
 
-# Frontend (new terminal)
-cd walnut-frontend
+# Frontend (new terminal, React by default)
+cd walnut-frontend-react
 pnpm install
-pnpm dev:antd                  # http://localhost:8010
+pnpm dev                       # http://localhost:8020
+# Vue baseline (comparison only): cd walnut-frontend && pnpm dev:antd   # http://localhost:8010
 ```
 
-Connection settings live in `walnut-backend-python/env/.env.dev` (Python) and `walnut-backend-java/src/main/resources/application-dev.yml` (Java), both already pointed at the Docker middleware. The frontend dev server runs at `http://localhost:8010` and proxies `/api` to `http://localhost:8011`.
+Connection settings live in `walnut-backend-python/env/.env.dev` (Python) and `walnut-backend-java/src/main/resources/application-dev.yml` (Java), both already pointed at the Docker middleware. The React dev server runs at `http://localhost:8020` (Vue baseline: 8010) and proxies `/api` to `http://localhost:8011`.
 
 ### Option B: full stack in Docker (production-like)
 
@@ -208,11 +210,19 @@ uv run ruff check .                         # Lint
 uv run ruff format .                        # Format
 ```
 
-Frontend (inside `walnut-frontend/`, uses pnpm):
+Frontend (default inside `walnut-frontend-react/`, uses pnpm):
 
 ```bash
 pnpm install      # Install dependencies
-pnpm dev:antd     # Dev server
+pnpm dev          # Dev server http://localhost:8020
+pnpm check        # lint / typecheck / unit / build
+```
+
+Vue baseline (frozen, comparison only, inside `walnut-frontend/`):
+
+```bash
+pnpm install      # Install dependencies
+pnpm dev:antd     # Dev server http://localhost:8010
 pnpm build:antd   # Production build
 ```
 

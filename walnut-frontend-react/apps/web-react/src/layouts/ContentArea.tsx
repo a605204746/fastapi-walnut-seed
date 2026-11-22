@@ -2,8 +2,8 @@ import type { CSSProperties } from 'react';
 
 import { useEffect, useState } from 'react';
 
-import { usePreferences } from '@vben/preferences';
-import { VbenIconButton } from '@vben-core/shadcn-ui';
+import { usePreferences } from '@walnut/preferences';
+import { WalnutIconButton } from '@walnut-core/shadcn-ui';
 import { Layout, Watermark } from 'antd';
 import { Minimize2 } from 'lucide-react';
 
@@ -33,7 +33,7 @@ export function ContentArea() {
     <Layout.Content
       className="relative overflow-hidden"
       ref={setElement}
-      style={{ '--vben-content-height': `${height}px`, minHeight: 0 } as CSSProperties}
+      style={{ '--walnut-content-height': `${height}px`, minHeight: 0 } as CSSProperties}
     >
       <Watermark
         content={preferences.app.watermark
@@ -52,13 +52,13 @@ export function ContentArea() {
         </div>
       </Watermark>
       {maximized ? (
-        <VbenIconButton
+        <WalnutIconButton
           aria-label="restore-layout"
           class="bg-header absolute right-4 top-2 z-10 shadow-sm"
           onClick={toggleMaximized}
         >
           <Minimize2 className="size-4" />
-        </VbenIconButton>
+        </WalnutIconButton>
       ) : null}
       <RouteFeedback />
     </Layout.Content>

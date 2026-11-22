@@ -6,7 +6,7 @@ import type { ComponentType } from 'react';
 
 import { lazy, Suspense } from 'react';
 
-import { setComponentMap } from '@vben-core/form-ui';
+import { setComponentMap } from '@walnut-core/form-ui';
 
 import { $t } from '@/locales';
 import { SecretInput } from '@/components/global/secret-input';

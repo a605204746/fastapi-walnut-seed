@@ -1,4 +1,4 @@
-import { cn } from '@vben-core/shared/utils';
+import { cn } from '@walnut-core/shared/utils';
 
 export interface CopyrightProps {
   className?: string;
@@ -12,7 +12,7 @@ export interface CopyrightProps {
 /** 对应 Vue 侧 layouts/src/basic/copyright/copyright.vue */
 export function Copyright({
   className,
-  companyName = 'Vben Admin',
+  companyName = 'Walnut Admin',
   companySiteLink = '',
   date = '2024',
   icp = '',

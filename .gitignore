@@ -53,7 +53,7 @@ walnut-backend-go/vendor/
 # go work 本地工作区（多人协作时各自启用，不入库）
 go.work
 go.work.sum
-# 加解密互通测试的生成物（由 test/cryptointerop/gen_vectors.py 现生成，
+# 加解密互通测试的生成物（由 scripts/cryptointerop/gen_vectors.py 现生成，
 # 内含开发用 RSA 私钥，且完全可复现，无需入库）
 walnut-backend-go/test/cryptointerop/vectors.json
 walnut-backend-go/test/cryptointerop/go_output.json

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import type { UserProfile } from '@/api/system/profile/model';
 
-import { useUserStore } from '@vben/stores';
+import { useUserStore } from '@walnut/stores';
 
 import { userProfile } from '@/api/system/profile';
 import { Page } from '@/components/page/Page';
@@ -50,7 +50,11 @@ export default function ProfilePage() {
         />
         {/* 右侧 */}
         {profile ? (
-          <SettingPanel className="flex-1 overflow-hidden" profile={profile} />
+          <SettingPanel
+            className="flex-1 overflow-hidden"
+            onProfileUpdate={loadProfile}
+            profile={profile}
+          />
         ) : null}
       </div>
     </Page>

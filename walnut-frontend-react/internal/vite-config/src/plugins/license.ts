@@ -2,7 +2,7 @@ import type { PluginOption } from 'vite';
 
 import { EOL } from 'node:os';
 
-import { dateUtil, readPackageJSON } from '@vben/node-utils';
+import { dateUtil, readPackageJSON } from '@walnut/node-utils';
 
 /**
  * 用于注入版权信息
@@ -24,15 +24,15 @@ async function viteLicensePlugin(
       handler(_options, bundle) {
         const date = dateUtil().format('YYYY-MM-DD ');
         const copyrightText = `/*!
-  * Vben Admin
+  * Walnut Admin
   * Version: ${version}
-  * Author: vben
-  * Copyright (C) 2024 Vben
+  * Author: walnut
+  * Copyright (C) 2024 Walnut
   * License: MIT License
   * Description: ${description}
   * Date Created: ${date}
   * Homepage: ${homepage}
-  * Contact: ann.vben@gmail.com
+  * Contact: ann.walnut@gmail.com
 */
               `.trim();
 

@@ -1,5 +1,5 @@
 {
-  "name": "@vben/locales",
+  "name": "@walnut/locales",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
@@ -14,6 +14,6 @@
     "i18next": "catalog:"
   },
   "devDependencies": {
-    "@vben/tsconfig": "workspace:*"
+    "@walnut/tsconfig": "workspace:*"
   }
 }

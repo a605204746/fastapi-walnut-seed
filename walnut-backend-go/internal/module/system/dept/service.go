@@ -43,15 +43,36 @@ const (
 	rootDeptAncestors = "0"
 )
 
+// deptRepo 是 service 消费的数据访问能力（consumer-side 接口，定义在消费方）。
+// 只列 service 实际调用的方法；*Repo 满足它，单测以 mock 替换。
+type deptRepo interface {
+	List(ctx context.Context, conds ...crudx.Cond) ([]SysDept, error)
+	Count(ctx context.Context, conds ...crudx.Cond) (int64, error)
+	Get(ctx context.Context, id int64) (*SysDept, error)
+	ListDescendants(ctx context.Context, deptID int64) ([]SysDept, error)
+	DescendantIDs(ctx context.Context, deptID int64) ([]int64, error)
+	CountNormalChildren(ctx context.Context, deptID int64) (int64, error)
+	CountUserInDept(ctx context.Context, deptID int64) (int64, error)
+	CountPostInDept(ctx context.Context, deptID int64) (int64, error)
+	DeptNameMap(ctx context.Context, ids []int64) (map[int64]*string, error)
+	LeaderNameMap(ctx context.Context, ids []int64) (map[int64]*string, error)
+	RoleScopes(ctx context.Context, userID int64) ([]permx.RoleScope, error)
+	UpdateStatusNormal(ctx context.Context, ids []int64) (int64, error)
+	LogicalDelete(ctx context.Context, id int64) (int64, error)
+	Create(ctx context.Context, row *SysDept) error
+	Update(ctx context.Context, row *SysDept) error
+}
+
 // Service 部门业务层。
 type Service struct {
-	repo *Repo
+	db   *gorm.DB
+	repo deptRepo
 	auth authctx.Context
 }
 
 // NewService 构造业务层。
 func NewService(db *gorm.DB, ac authctx.Context) *Service {
-	return &Service{repo: NewRepo(db), auth: ac}
+	return &Service{db: db, repo: NewRepo(db), auth: ac}
 }
 
 // ---- 数据权限 ----
@@ -562,7 +583,18 @@ func (s *Service) Insert(ctx context.Context, in CreateIn) error {
 }
 
 // Update 修改部门（含子孙 ancestors 维护），对应 update_dept。
+// 多写操作（子孙 ancestors 联动更新 + 自身更新 + 上级连带启用）包在事务里，
+// 任一步失败整体回滚（对齐 Python session.begin，不留半截祖级链）。
 func (s *Service) Update(ctx context.Context, in UpdateIn) error {
+	if s.db == nil { // 测试 harness 无真实 DB，直调内部
+		return s.updateTx(ctx, in)
+	}
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		return s.updateTx(crudx.WithTx(ctx, tx), in)
+	})
+}
+
+func (s *Service) updateTx(ctx context.Context, in UpdateIn) error {
 	old, err := s.repo.Get(ctx, *in.ID)
 	if err != nil {
 		return errs.Wrap(err, errs.MsgDBFailed)

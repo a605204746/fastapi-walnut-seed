@@ -23,7 +23,6 @@ import (
 	"walnut-seed-go/internal/pkg/excelx"
 	"walnut-seed-go/internal/pkg/idempotentx"
 	"walnut-seed-go/internal/pkg/permguard"
-	"walnut-seed-go/internal/pkg/routex"
 )
 
 // Handler 客户端域端点。
@@ -37,37 +36,6 @@ type Handler struct {
 // NewHandler 构造 handler。perm / idem 可为 nil（仅单测）。
 func NewHandler(db *gorm.DB, eh *errs.Handler, perm *permguard.Guard, idem *idempotentx.Guard) *Handler {
 	return &Handler{db: db, errs: eh, perm: perm, idem: idem}
-}
-
-// Mount 注册客户端路由。挂载点是 /system/client（由 bootstrap 决定）。
-func (h *Handler) Mount(b routex.Binder) {
-	require, repeat := h.guards()
-
-	b.GET("/list", require("system:client:list"), h.List)
-	b.POST("/export", require("system:client:export"), h.Export)
-	b.GET("/:client_id", require("system:client:query"), h.GetByID)
-	b.POST("", require("system:client:add"), repeat(), h.Add)
-	b.PUT("", require("system:client:edit"), repeat(), h.Update)
-	b.PUT("/changeStatus", require("system:client:edit"), h.ChangeStatus)
-	b.DELETE("/:ids", require("system:client:remove"), h.Delete)
-}
-
-// guards 返回「权限守卫」与「防重提交」两个中间件工厂（同 post/handler.go）。
-func (h *Handler) guards() (func(string) gin.HandlerFunc, func() gin.HandlerFunc) {
-	pass := func(c *gin.Context) { c.Next() }
-	require := func(perm string) gin.HandlerFunc {
-		if h.perm == nil {
-			return pass
-		}
-		return h.perm.Require(perm)
-	}
-	repeat := func() gin.HandlerFunc {
-		if h.idem == nil {
-			return pass
-		}
-		return h.idem.Default()
-	}
-	return require, repeat
 }
 
 // service 取出当前请求的业务层。
@@ -150,7 +118,7 @@ func (h *Handler) GetByID(c *gin.Context) {
 
 // Add POST /system/client
 func (h *Handler) Add(c *gin.Context) {
-	in, err := DecodeCreate(readBody(c))
+	in, err := DecodeCreate(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -182,7 +150,7 @@ func (h *Handler) Add(c *gin.Context) {
 
 // Update PUT /system/client
 func (h *Handler) Update(c *gin.Context) {
-	in, err := DecodeUpdate(readBody(c))
+	in, err := DecodeUpdate(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -214,7 +182,7 @@ func (h *Handler) Update(c *gin.Context) {
 
 // ChangeStatus PUT /system/client/changeStatus
 func (h *Handler) ChangeStatus(c *gin.Context) {
-	in, err := DecodeStatus(readBody(c))
+	in, err := DecodeStatus(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return

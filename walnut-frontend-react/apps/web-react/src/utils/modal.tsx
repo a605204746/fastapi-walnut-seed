@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 
 import { useEffect, useState } from 'react';
 
-import { $t } from '@vben/locales';
+import { $t } from '@walnut/locales';
 import { Alert, Input, Modal } from 'antd';
 
 import { getMessageApi } from '@/services/message';

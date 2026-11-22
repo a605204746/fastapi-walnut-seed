@@ -34,7 +34,7 @@
 ### 基本使用（默认 localStorage）
 
 ```typescript
-import { StorageManager } from '@vben-core/shared/cache';
+import { StorageManager } from '@walnut-core/shared/cache';
 
 const cache = new StorageManager({ prefix: 'myapp' });
 // 使用 IndexedDB
@@ -93,7 +93,7 @@ await cache.clearExpiredItems();
 基于浏览器 `localStorage` 或 `sessionStorage`，数据持久化存储。
 
 ```typescript
-import { LocalStorageDriver, StorageManager } from '@vben-core/shared/cache';
+import { LocalStorageDriver, StorageManager } from '@walnut-core/shared/cache';
 
 // 使用 localStorage（默认）
 const cache = new StorageManager({
@@ -124,11 +124,11 @@ const sessionCache = new StorageManager({
 基于浏览器 IndexedDB，支持大容量结构化数据存储。
 
 ```typescript
-import {IndexedDBDriver, StorageManager} from '@vben-core/shared/cache';
+import {IndexedDBDriver, StorageManager} from '@walnut-core/shared/cache';
 
 const cache = new StorageManager({
   driver: new IndexedDBDriver({
-    dbName: 'my-app-db',     // 数据库名称，默认 'vben-storage'
+    dbName: 'my-app-db',     // 数据库名称，默认 'walnut-storage'
     dbVersion: 1,            // 数据库版本，默认 1
     storeName: 'cache-store', // 对象存储名称，默认 'kv-store'
   }),
@@ -162,7 +162,7 @@ await cache.setItem('config', {
 基于内存 Map，数据不持久化，页面刷新即丢失。
 
 ```typescript
-import { MemoryStorageDriver, StorageManager } from '@vben-core/shared/cache';
+import { MemoryStorageDriver, StorageManager } from '@walnut-core/shared/cache';
 
 const cache = new StorageManager({
   driver: new MemoryStorageDriver(),
@@ -232,7 +232,7 @@ interface IStorageDriver {
 ### 自定义 Driver
 
 ```typescript
-import type { IStorageDriver } from '@vben-core/shared/cache';
+import type { IStorageDriver } from '@walnut-core/shared/cache';
 
 class CookieStorageDriver implements IStorageDriver {
   async getItem<T>(key: string): Promise<null | T> {
@@ -272,7 +272,7 @@ import {
   LocalStorageDriver,
   MemoryStorageDriver,
   StorageManager,
-} from '@vben-core/shared/cache';
+} from '@walnut-core/shared/cache';
 
 function createStorageManager(prefix: string) {
   // SSR 环境使用内存驱动

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button, Input, Popover, Tabs } from 'antd';
-import { VbenIcon } from '@vben-core/shadcn-ui';
+import { WalnutIcon } from '@walnut-core/shadcn-ui';
 const groups: Record<string, string[]> = {
   lucide: [
     'home',
@@ -86,7 +86,7 @@ export function IconPicker({
                         key={icon}
                         aria-label={`${prefix}:${icon}`}
                         type={value === `${prefix}:${icon}` ? 'primary' : 'text'}
-                        icon={<VbenIcon icon={`${prefix}:${icon}`} />}
+                        icon={<WalnutIcon icon={`${prefix}:${icon}`} />}
                         onClick={() => {
                           onChange?.(`${prefix}:${icon}`);
                           setOpen(false);
@@ -106,7 +106,7 @@ export function IconPicker({
         onChange={(e) => onChange?.(e.target.value)}
         allowClear
         placeholder="请选择图标或输入 Iconify 名称"
-        prefix={value ? <VbenIcon icon={value} /> : undefined}
+        prefix={value ? <WalnutIcon icon={value} /> : undefined}
       />
     </Popover>
   );

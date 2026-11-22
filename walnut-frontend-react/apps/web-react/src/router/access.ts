@@ -3,12 +3,12 @@ import type { ComponentType } from 'react';
 import type {
   ComponentRecordType,
   GenerateMenuAndRoutesOptions,
-} from '@vben-core/typings';
+} from '@walnut-core/typings';
 
 import { lazy } from 'react';
 
-import { getPreferences } from '@vben/preferences';
-import { generateAccessible } from '@vben/utils';
+import { getPreferences } from '@walnut/preferences';
+import { generateAccessible } from '@walnut/utils';
 
 import { getAllMenusApi } from '@/api/core/menu';
 import { BasicLayout } from '@/layouts/BasicLayout';

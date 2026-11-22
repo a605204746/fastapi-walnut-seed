@@ -505,7 +505,7 @@ func ParseIDs(raw, label string) ([]int64, error) {
 }
 
 // parsePyLaxInt 镜像 Pydantic v2 str→int（lax）：首尾空白、+/-、数字间单个
-// 下划线、".全零" 小数（"5.00"→5）；拒绝指数形式。与 dept.ParsePyQueryInt 同语义
+// 下划线、".全零" 小数（"5.00"→5）；拒绝指数形式。与 bindx.PyQueryInt 同语义
 // （crudx 不能反向依赖业务模块，故在此保留一份）。
 func parsePyLaxInt(raw string) (int64, bool) {
 	s := strings.TrimSpace(raw)

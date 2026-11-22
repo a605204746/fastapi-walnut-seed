@@ -8,64 +8,25 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"walnut-seed-go/internal/module/system/dept"
 	"walnut-seed-go/internal/pkg/authctx"
 	"walnut-seed-go/internal/pkg/crudx"
 	"walnut-seed-go/internal/pkg/envelope"
 	"walnut-seed-go/internal/pkg/errs"
 	"walnut-seed-go/internal/pkg/excelx"
 	"walnut-seed-go/internal/pkg/idempotentx"
-	"walnut-seed-go/internal/pkg/idtype"
 	"walnut-seed-go/internal/pkg/permguard"
-	"walnut-seed-go/internal/pkg/routex"
 )
 
 type Handler struct {
-	db   *gorm.DB
-	errs *errs.Handler
-	perm *permguard.Guard
-	idem *idempotentx.Guard
+	db       *gorm.DB
+	errs     *errs.Handler
+	perm     *permguard.Guard
+	idem     *idempotentx.Guard
+	NewDepts func(authctx.Context) DeptProvider
 }
 
-func NewHandler(db *gorm.DB, eh *errs.Handler, perm *permguard.Guard, idem *idempotentx.Guard) *Handler {
-	return &Handler{db: db, errs: eh, perm: perm, idem: idem}
-}
-
-func (h *Handler) Mount(b routex.Binder) {
-	require, repeat := h.guards()
-
-	b.GET("/list", require("system:role:list"), h.List)
-	b.GET("/optionselect", require("system:role:query"), h.OptionSelect)
-	b.GET("/authUser/allocatedList", require("system:role:list"), h.AllocatedList)
-	b.GET("/authUser/unallocatedList", require("system:role:list"), h.UnallocatedList)
-	b.GET("/deptTree/:role_id", require("system:role:list"), h.DeptTree)
-	b.POST("/export", require("system:role:export"), h.Export)
-	b.POST("", require("system:role:add"), repeat(), h.Add)
-	b.PUT("", require("system:role:edit"), repeat(), h.Update)
-	b.PUT("/dataScope", require("system:role:edit"), repeat(), h.DataScope)
-	b.PUT("/changeStatus", require("system:role:edit"), repeat(), h.ChangeStatus)
-	b.PUT("/authUser/cancel", require("system:role:edit"), repeat(), h.CancelAuthUser)
-	b.PUT("/authUser/cancelAll", require("system:role:edit"), repeat(), h.CancelAll)
-	b.PUT("/authUser/selectAll", require("system:role:edit"), repeat(), h.SelectAll)
-	b.GET("/:role_id", require("system:role:query"), h.GetByID)
-	b.DELETE("/:role_ids", require("system:role:remove"), h.Delete)
-}
-
-func (h *Handler) guards() (func(string) gin.HandlerFunc, func() gin.HandlerFunc) {
-	pass := func(c *gin.Context) { c.Next() }
-	require := func(perm string) gin.HandlerFunc {
-		if h.perm == nil {
-			return pass
-		}
-		return h.perm.Require(perm)
-	}
-	repeat := func() gin.HandlerFunc {
-		if h.idem == nil {
-			return pass
-		}
-		return h.idem.Default()
-	}
-	return require, repeat
+func NewHandler(db *gorm.DB, eh *errs.Handler, perm *permguard.Guard, idem *idempotentx.Guard, newDepts func(authctx.Context) DeptProvider) *Handler {
+	return &Handler{db: db, errs: eh, perm: perm, idem: idem, NewDepts: newDepts}
 }
 
 func (h *Handler) service(c *gin.Context) (*Service, bool) {
@@ -74,7 +35,7 @@ func (h *Handler) service(c *gin.Context) (*Service, bool) {
 		h.errs.Abort(c, errs.NotLogin())
 		return nil, false
 	}
-	return NewService(h.db, ac), true
+	return NewService(h.db, ac, Deps{NewDepts: h.NewDepts}), true
 }
 
 func (h *Handler) List(c *gin.Context) {
@@ -140,7 +101,7 @@ func (h *Handler) OptionSelect(c *gin.Context) {
 }
 
 func (h *Handler) Add(c *gin.Context) {
-	in, err := DecodeCreate(readBody(c))
+	in, err := DecodeCreate(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -197,7 +158,7 @@ func (h *Handler) Add(c *gin.Context) {
 }
 
 func (h *Handler) Update(c *gin.Context) {
-	in, err := DecodeUpdate(readBody(c))
+	in, err := DecodeUpdate(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -264,7 +225,7 @@ func (h *Handler) Update(c *gin.Context) {
 }
 
 func (h *Handler) DataScope(c *gin.Context) {
-	in, err := DecodeDataScope(readBody(c))
+	in, err := DecodeDataScope(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -291,7 +252,7 @@ func (h *Handler) DataScope(c *gin.Context) {
 }
 
 func (h *Handler) ChangeStatus(c *gin.Context) {
-	in, err := DecodeStatus(readBody(c))
+	in, err := DecodeStatus(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -397,11 +358,6 @@ func (h *Handler) Export(c *gin.Context) {
 	}
 }
 
-type DeptTreeOut struct {
-	CheckedKeys []idtype.JSInt   `json:"checkedKeys"`
-	Depts       []*dept.TreeNode `json:"depts"`
-}
-
 func (h *Handler) DeptTree(c *gin.Context) {
 	roleID, err := pathInt(c, "role_id")
 	if err != nil {
@@ -412,43 +368,12 @@ func (h *Handler) DeptTree(c *gin.Context) {
 	if !ok {
 		return
 	}
-	ctx := c.Request.Context()
-
-	row, err := svc.repo.GetByIDNoScope(ctx, roleID)
+	data, err := svc.DeptTree(c.Request.Context(), roleID)
 	if err != nil {
-		h.errs.Abort(c, errs.Wrap(err, errs.MsgDBFailed))
+		h.errs.Abort(c, err)
 		return
 	}
-	if row == nil {
-		h.errs.Abort(c, errs.New("角色不存在"))
-		return
-	}
-
-	dcs := false
-	if row.DeptCheckStrictly != nil {
-		dcs = *row.DeptCheckStrictly != 0
-	}
-	checkedKeys, err := svc.repo.CheckedDeptIDs(ctx, roleID, dcs)
-	if err != nil {
-		h.errs.Abort(c, errs.Wrap(err, errs.MsgDBFailed))
-		return
-	}
-
-	// Python 经 DeptService.select_dept_tree_list()：带 dept 自身 id 列数据权限，
-	// 根与每层 children 按 (orderNum, id) 排序。复用 dept 模块同款实现。
-	ac, _ := authctx.From(c)
-	tree, err := dept.NewService(h.db, ac).TreeSelectAll(ctx)
-	if err != nil {
-		h.errs.Abort(c, errs.Wrap(err, errs.MsgDBFailed))
-		return
-	}
-
-	cks := make([]idtype.JSInt, 0, len(checkedKeys))
-	for _, id := range checkedKeys {
-		cks = append(cks, idtype.JSInt(id))
-	}
-
-	envelope.OK(c, DeptTreeOut{CheckedKeys: cks, Depts: tree})
+	envelope.OK(c, data)
 }
 
 func (h *Handler) AllocatedList(c *gin.Context) {
@@ -488,7 +413,7 @@ func (h *Handler) UnallocatedList(c *gin.Context) {
 }
 
 func (h *Handler) CancelAuthUser(c *gin.Context) {
-	in, err := DecodeCancel(readBody(c))
+	in, err := DecodeCancel(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return

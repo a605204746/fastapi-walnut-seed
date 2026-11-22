@@ -200,7 +200,7 @@ type DefineApplicationOptions = (config?: ConfigEnv) => Promise<{
  */
 type DefineConfig = DefineApplicationOptions;
 
-type VbenViteConfig = Promise<UserConfig> | UserConfig | UserConfigFnPromise;
+type WalnutViteConfig = Promise<UserConfig> | UserConfig | UserConfigFnPromise;
 
 export type {
   ApplicationOptions,
@@ -212,5 +212,5 @@ export type {
   DefineConfig,
   HtmlPluginOptions,
   PrintPluginOptions,
-  VbenViteConfig,
+  WalnutViteConfig,
 };

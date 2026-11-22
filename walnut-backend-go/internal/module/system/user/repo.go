@@ -21,7 +21,7 @@ func NewRepo(db *gorm.DB) *Repo { return &Repo{db: db} }
 
 func (r *Repo) Page(ctx context.Context, page crudx.Page, conds []crudx.Cond, scope permx.Scope) ([]SysUser, int64, error) {
 	newQuery := func() *gorm.DB {
-		q := r.db.WithContext(ctx).Model(&SysUser{}).Where("del_flag = ?", modelx.Normal)
+		q := crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysUser{}).Where("del_flag = ?", modelx.Normal)
 		q = scope.Apply(q)
 		return crudx.Apply(q, conds...)
 	}
@@ -55,10 +55,10 @@ func (r *Repo) ListExport(ctx context.Context, conds []crudx.Cond, scope permx.S
 	// 条件/数据权限的列名不带限定词，而 leader 也是 sys_user——MySQL 里别名表
 	// 的列同样参与无限定列名解析，直接 JOIN 会触发 1052 歧义。故先在无 JOIN 的
 	// 子查询里过滤，外层只做名称翻译 JOIN。
-	inner := r.db.WithContext(ctx).Table("sys_user").Where("del_flag = ?", modelx.Normal)
+	inner := crudx.DB(ctx, r.db).WithContext(ctx).Table("sys_user").Where("del_flag = ?", modelx.Normal)
 	inner = scope.Apply(inner)
 	inner = crudx.Apply(inner, conds...)
-	q := r.db.WithContext(ctx).
+	q := crudx.DB(ctx, r.db).WithContext(ctx).
 		Table("(?) AS u", inner).
 		Select("u.*, d.dept_name, leader.user_name AS leader_name").
 		Joins("LEFT JOIN sys_dept d ON d.id = u.dept_id AND d.del_flag = ?", modelx.Normal).
@@ -77,7 +77,7 @@ func (r *Repo) ListExport(ctx context.Context, conds []crudx.Cond, scope permx.S
 
 func (r *Repo) FindByID(ctx context.Context, userID int64) (*SysUser, error) {
 	var u SysUser
-	err := r.db.WithContext(ctx).Where("id = ? AND del_flag = ?", userID, modelx.Normal).First(&u).Error
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Where("id = ? AND del_flag = ?", userID, modelx.Normal).First(&u).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -89,7 +89,7 @@ func (r *Repo) FindByID(ctx context.Context, userID int64) (*SysUser, error) {
 
 func (r *Repo) FindByIDWithScope(ctx context.Context, userID int64, scope permx.Scope) (*SysUser, error) {
 	var u SysUser
-	q := r.db.WithContext(ctx).Where("id = ? AND del_flag = ?", userID, modelx.Normal)
+	q := crudx.DB(ctx, r.db).WithContext(ctx).Where("id = ? AND del_flag = ?", userID, modelx.Normal)
 	q = scope.Apply(q)
 	if err := q.First(&u).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -102,7 +102,7 @@ func (r *Repo) FindByIDWithScope(ctx context.Context, userID int64, scope permx.
 
 func (r *Repo) CountByIDWithScope(ctx context.Context, userID int64, scope permx.Scope) (int64, error) {
 	var n int64
-	q := r.db.WithContext(ctx).Model(&SysUser{}).Where("id = ? AND del_flag = ?", userID, modelx.Normal)
+	q := crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysUser{}).Where("id = ? AND del_flag = ?", userID, modelx.Normal)
 	q = scope.Apply(q)
 	err := q.Count(&n).Error
 	return n, err
@@ -110,7 +110,7 @@ func (r *Repo) CountByIDWithScope(ctx context.Context, userID int64, scope permx
 
 func (r *Repo) FindByUserName(ctx context.Context, userName string) (*SysUser, error) {
 	var u SysUser
-	err := r.db.WithContext(ctx).Where("user_name = ? AND del_flag = ?", userName, modelx.Normal).First(&u).Error
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Where("user_name = ? AND del_flag = ?", userName, modelx.Normal).First(&u).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
@@ -124,7 +124,7 @@ func (r *Repo) ExistsByField(ctx context.Context, field, value string, excludeID
 	if value == "" {
 		return false, nil
 	}
-	q := r.db.WithContext(ctx).Model(&SysUser{}).
+	q := crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysUser{}).
 		Where(field+" = ? AND del_flag = ?", value, modelx.Normal)
 	if excludeID != nil {
 		q = q.Where("id <> ?", *excludeID)
@@ -138,13 +138,13 @@ func (r *Repo) ExistsByField(ctx context.Context, field, value string, excludeID
 
 func (r *Repo) ListByDeptID(ctx context.Context, deptID int64) ([]SysUser, error) {
 	rows := make([]SysUser, 0)
-	err := r.db.WithContext(ctx).Where("dept_id = ? AND del_flag = ?", deptID, modelx.Normal).
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Where("dept_id = ? AND del_flag = ?", deptID, modelx.Normal).
 		Order("id ASC").Find(&rows).Error
 	return rows, err
 }
 
 func (r *Repo) ListOptionByIDs(ctx context.Context, ids []int64, deptID *int64) ([]SysUser, error) {
-	q := r.db.WithContext(ctx).Model(&SysUser{}).
+	q := crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysUser{}).
 		Where("status = ? AND del_flag = ?", modelx.Normal, modelx.Normal)
 	if deptID != nil {
 		q = q.Where("dept_id = ?", *deptID)
@@ -160,29 +160,29 @@ func (r *Repo) ListOptionByIDs(ctx context.Context, ids []int64, deptID *int64) 
 }
 
 func (r *Repo) Create(ctx context.Context, row *SysUser) error {
-	return r.db.WithContext(ctx).Create(row).Error
+	return crudx.DB(ctx, r.db).WithContext(ctx).Create(row).Error
 }
 
 func (r *Repo) Update(ctx context.Context, row *SysUser) error {
-	return r.db.WithContext(ctx).Save(row).Error
+	return crudx.DB(ctx, r.db).WithContext(ctx).Save(row).Error
 }
 
 func (r *Repo) UpdatePassword(ctx context.Context, userID int64, hashedPwd string) (int64, error) {
-	res := r.db.WithContext(ctx).Model(&SysUser{}).
+	res := crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysUser{}).
 		Where("id = ? AND del_flag = ?", userID, modelx.Normal).
 		Update("password", hashedPwd)
 	return res.RowsAffected, res.Error
 }
 
 func (r *Repo) UpdateStatus(ctx context.Context, userID int64, status string) (int64, error) {
-	res := r.db.WithContext(ctx).Model(&SysUser{}).
+	res := crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysUser{}).
 		Where("id = ? AND del_flag = ?", userID, modelx.Normal).
 		Update("status", status)
 	return res.RowsAffected, res.Error
 }
 
 func (r *Repo) UpdateAvatar(ctx context.Context, userID int64, avatar string) (int64, error) {
-	res := r.db.WithContext(ctx).Model(&SysUser{}).
+	res := crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysUser{}).
 		Where("id = ? AND del_flag = ?", userID, modelx.Normal).
 		Update("avatar", avatar)
 	return res.RowsAffected, res.Error
@@ -199,7 +199,7 @@ func (r *Repo) UpdateProfile(ctx context.Context, userID int64, nickName *string
 	if nickName != nil {
 		updates["nick_name"] = *nickName
 	}
-	res := r.db.WithContext(ctx).Model(&SysUser{}).
+	res := crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysUser{}).
 		Where("id = ?", userID).
 		Updates(updates)
 	return res.RowsAffected, res.Error
@@ -209,7 +209,7 @@ func (r *Repo) SoftDelete(ctx context.Context, ids []int64) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	res := r.db.WithContext(ctx).Model(&SysUser{}).
+	res := crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysUser{}).
 		Where("id IN ? AND del_flag = ?", ids, modelx.Normal).
 		Update("del_flag", "1")
 	return res.RowsAffected, res.Error
@@ -219,7 +219,7 @@ func (r *Repo) SoftDelete(ctx context.Context, ids []int64) (int64, error) {
 
 func (r *Repo) FindRoles(ctx context.Context, userID int64) ([]role.SysRole, error) {
 	var roles []role.SysRole
-	err := r.db.WithContext(ctx).
+	err := crudx.DB(ctx, r.db).WithContext(ctx).
 		Table("sys_role").
 		Select("sys_role.*").
 		Joins("JOIN sys_user_role ON sys_user_role.role_id = sys_role.id").
@@ -231,13 +231,13 @@ func (r *Repo) FindRoles(ctx context.Context, userID int64) ([]role.SysRole, err
 
 func (r *Repo) RoleIDsByUserID(ctx context.Context, userID int64) ([]int64, error) {
 	ids := make([]int64, 0)
-	err := r.db.WithContext(ctx).Table("sys_user_role").
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Table("sys_user_role").
 		Where("user_id = ?", userID).Pluck("role_id", &ids).Error
 	return ids, err
 }
 
 func (r *Repo) DeleteUserRoles(ctx context.Context, userID int64) error {
-	return r.db.WithContext(ctx).Where("user_id = ?", userID).Delete(&SysUserRole{}).Error
+	return crudx.DB(ctx, r.db).WithContext(ctx).Where("user_id = ?", userID).Delete(&SysUserRole{}).Error
 }
 
 func (r *Repo) InsertUserRoles(ctx context.Context, userID int64, roleIDs []int64) error {
@@ -248,27 +248,27 @@ func (r *Repo) InsertUserRoles(ctx context.Context, userID int64, roleIDs []int6
 	for _, rid := range roleIDs {
 		rows = append(rows, SysUserRole{UserID: userID, RoleID: rid})
 	}
-	return r.db.WithContext(ctx).Create(&rows).Error
+	return crudx.DB(ctx, r.db).WithContext(ctx).Create(&rows).Error
 }
 
 func (r *Repo) DeleteUserRolesBatch(ctx context.Context, userIDs []int64) error {
 	if len(userIDs) == 0 {
 		return nil
 	}
-	return r.db.WithContext(ctx).Where("user_id IN ?", userIDs).Delete(&SysUserRole{}).Error
+	return crudx.DB(ctx, r.db).WithContext(ctx).Where("user_id IN ?", userIDs).Delete(&SysUserRole{}).Error
 }
 
 // ---- sys_user_post ----
 
 func (r *Repo) PostIDsByUserID(ctx context.Context, userID int64) ([]int64, error) {
 	ids := make([]int64, 0)
-	err := r.db.WithContext(ctx).Table("sys_user_post").
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Table("sys_user_post").
 		Where("user_id = ?", userID).Pluck("post_id", &ids).Error
 	return ids, err
 }
 
 func (r *Repo) DeleteUserPosts(ctx context.Context, userID int64) error {
-	return r.db.WithContext(ctx).Where("user_id = ?", userID).Delete(&SysUserPost{}).Error
+	return crudx.DB(ctx, r.db).WithContext(ctx).Where("user_id = ?", userID).Delete(&SysUserPost{}).Error
 }
 
 func (r *Repo) InsertUserPosts(ctx context.Context, userID int64, postIDs []int64) error {
@@ -279,14 +279,14 @@ func (r *Repo) InsertUserPosts(ctx context.Context, userID int64, postIDs []int6
 	for _, pid := range postIDs {
 		rows = append(rows, SysUserPost{UserID: userID, PostID: pid})
 	}
-	return r.db.WithContext(ctx).Create(&rows).Error
+	return crudx.DB(ctx, r.db).WithContext(ctx).Create(&rows).Error
 }
 
 func (r *Repo) DeleteUserPostsBatch(ctx context.Context, userIDs []int64) error {
 	if len(userIDs) == 0 {
 		return nil
 	}
-	return r.db.WithContext(ctx).Where("user_id IN ?", userIDs).Delete(&SysUserPost{}).Error
+	return crudx.DB(ctx, r.db).WithContext(ctx).Where("user_id IN ?", userIDs).Delete(&SysUserPost{}).Error
 }
 
 // ---- 部门辅助 ----
@@ -301,7 +301,7 @@ func (r *Repo) MapDeptNames(ctx context.Context, deptIDs []int64) (map[int64]*st
 		DeptName *string `gorm:"column:dept_name"`
 	}
 	var rows []row
-	err := r.db.WithContext(ctx).Model(&dept.SysDept{}).
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Model(&dept.SysDept{}).
 		Select("id, dept_name").
 		Where("del_flag = ? AND id IN ?", modelx.Normal, deptIDs).
 		Scan(&rows).Error
@@ -317,7 +317,7 @@ func (r *Repo) MapDeptNames(ctx context.Context, deptIDs []int64) (map[int64]*st
 func (r *Repo) DescendantAndSelfIDs(ctx context.Context, deptID int64) ([]int64, error) {
 	ids := make([]int64, 0, 1)
 	pattern := "%," + strconv.FormatInt(deptID, 10) + ",%"
-	err := r.db.WithContext(ctx).Table("sys_dept").
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Table("sys_dept").
 		Where("del_flag = ? AND CONCAT(',', ancestors, ',') LIKE ?", modelx.Normal, pattern).
 		Pluck("id", &ids).Error
 	if err != nil {
@@ -328,7 +328,7 @@ func (r *Repo) DescendantAndSelfIDs(ctx context.Context, deptID int64) ([]int64,
 
 func (r *Repo) CountVisibleRoles(ctx context.Context, roleIDs []int64, scope permx.Scope) (int64, error) {
 	var n int64
-	q := r.db.WithContext(ctx).Model(&role.SysRole{}).
+	q := crudx.DB(ctx, r.db).WithContext(ctx).Model(&role.SysRole{}).
 		Where("id IN ? AND del_flag = ?", roleIDs, modelx.Normal)
 	q = scope.Apply(q)
 	err := q.Count(&n).Error
@@ -337,7 +337,7 @@ func (r *Repo) CountVisibleRoles(ctx context.Context, roleIDs []int64, scope per
 
 func (r *Repo) CountVisiblePosts(ctx context.Context, postIDs []int64, scope permx.Scope) (int64, error) {
 	var n int64
-	q := r.db.WithContext(ctx).Table("sys_post").Where("id IN ?", postIDs)
+	q := crudx.DB(ctx, r.db).WithContext(ctx).Table("sys_post").Where("id IN ?", postIDs)
 	q = scope.Apply(q)
 	err := q.Count(&n).Error
 	return n, err
@@ -345,7 +345,7 @@ func (r *Repo) CountVisiblePosts(ctx context.Context, postIDs []int64, scope per
 
 func (r *Repo) RoleNameGroup(ctx context.Context, userID int64) (string, error) {
 	var names []string
-	err := r.db.WithContext(ctx).Table("sys_role").
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Table("sys_role").
 		Select("role_name").
 		Joins("JOIN sys_user_role ON sys_user_role.role_id = sys_role.id").
 		Where("sys_user_role.user_id = ? AND sys_role.del_flag = ?", userID, modelx.Normal).
@@ -366,7 +366,7 @@ func (r *Repo) RoleNameGroup(ctx context.Context, userID int64) (string, error) 
 
 func (r *Repo) PostNameGroup(ctx context.Context, userID int64) (string, error) {
 	var names []string
-	err := r.db.WithContext(ctx).Table("sys_post").
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Table("sys_post").
 		Select("post_name").
 		Joins("JOIN sys_user_post ON sys_user_post.post_id = sys_post.id").
 		Where("sys_user_post.user_id = ?", userID).
@@ -386,7 +386,7 @@ func (r *Repo) PostNameGroup(ctx context.Context, userID int64) (string, error) 
 
 func (r *Repo) PostsByDeptID(ctx context.Context, deptID int64) ([]PostInfo, error) {
 	rows := make([]PostInfo, 0)
-	err := r.db.WithContext(ctx).Table("sys_post").
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Table("sys_post").
 		Where("dept_id = ?", deptID).
 		Find(&rows).Error
 	return rows, err
@@ -408,7 +408,7 @@ type DeptTreeNode struct {
 
 func (r *Repo) DeptTreeNodes(ctx context.Context) ([]DeptTreeNode, error) {
 	rows := make([]DeptTreeNode, 0)
-	err := r.db.WithContext(ctx).Table("sys_dept").
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Table("sys_dept").
 		Select("id, parent_id, dept_name, order_num, status").
 		Where("del_flag = ?", modelx.Normal).
 		Clauses(clause.OrderBy{Columns: []clause.OrderByColumn{
@@ -422,7 +422,7 @@ func (r *Repo) DeptTreeNodes(ctx context.Context) ([]DeptTreeNode, error) {
 
 func (r *Repo) LogininforByUserName(ctx context.Context, userName string) *string {
 	var s string
-	err := r.db.WithContext(ctx).Table("sys_logininfor").
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Table("sys_logininfor").
 		Where("user_name = ?", userName).
 		Order("login_time DESC").
 		Pluck("DATE_FORMAT(login_time, '%Y-%m-%d %H:%i:%s')", &s).Error
@@ -436,7 +436,7 @@ func (r *Repo) LogininforByUserName(ctx context.Context, userName string) *strin
 // ConfigCrud.select_config_by_key。不存在返回 ("", nil)。
 func (r *Repo) ConfigValueByKey(ctx context.Context, key string) (string, error) {
 	var value string
-	err := r.db.WithContext(ctx).Table("sys_config").
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Table("sys_config").
 		Select("config_value").
 		Where("config_key = ?", key).
 		Limit(1).

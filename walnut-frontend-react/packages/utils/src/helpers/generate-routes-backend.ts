@@ -3,9 +3,9 @@ import type {
   ComponentRecordType,
   GenerateMenuAndRoutesOptions,
   RouteRecordStringComponent,
-} from '@vben-core/typings';
+} from '@walnut-core/typings';
 
-import { mapTree } from '@vben-core/shared/utils';
+import { mapTree } from '@walnut-core/shared/utils';
 
 /**
  * 判断路由是否在菜单中显示但访问时展示 403（让用户知悉功能并申请权限）
@@ -111,7 +111,7 @@ function normalizeViewPath(path: string): string {
     ? normalizedPath
     : `/${normalizedPath}`;
 
-  // 这里耦合了 vben-admin 的目录结构
+  // 这里耦合了 walnut-admin 的目录结构
   return viewPath.replace(/^\/views/, '');
 }
 

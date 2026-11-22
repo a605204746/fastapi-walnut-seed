@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 
-import { diff } from '@vben-core/shared/utils';
+import { diff } from '@walnut-core/shared/utils';
 import { useStore } from 'zustand';
 
 import { preferencesManager, preferencesStore } from './preferences';

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-import { usePreferences } from '@vben/preferences';
+import { usePreferences } from '@walnut/preferences';
 import { useMatches } from 'react-router';
 
 import { mergeMatchMeta } from '@/router/route-tree';

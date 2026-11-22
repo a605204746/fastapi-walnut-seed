@@ -2,7 +2,7 @@ import { useRef } from 'react';
 
 import type { Dept } from '@/api/system/dept/model';
 
-import { $t } from '@vben/locales';
+import { $t } from '@walnut/locales';
 import { Button, Popconfirm, Space } from 'antd';
 
 import { useGrid } from '@/adapter/grid';
@@ -122,12 +122,12 @@ export default function DeptPage() {
                   {$t('pages.common.add')}
                 </Button>
               </Access>
-              <Popconfirm
-                onConfirm={() => handleDelete(row as Dept)}
-                placement="left"
-                title="确认删除？"
-              >
-                <Access code={['system:dept:remove']}>
+              <Access code={['system:dept:remove']}>
+                <Popconfirm
+                  onConfirm={() => handleDelete(row as Dept)}
+                  placement="left"
+                  title="确认删除？"
+                >
                   <Button
                     danger
                     onClick={(e) => e.stopPropagation()}
@@ -136,8 +136,8 @@ export default function DeptPage() {
                   >
                     {$t('pages.common.delete')}
                   </Button>
-                </Access>
-              </Popconfirm>
+                </Popconfirm>
+              </Access>
             </Space>
           ),
         }}

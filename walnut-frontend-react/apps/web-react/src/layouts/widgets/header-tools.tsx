@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Avatar, Badge, Button, Empty, Form, Input, Modal, Popover, Select, Space } from 'antd';
 import { Bell, Globe, LockKeyhole, Search, Trash2 } from 'lucide-react';
-import { VbenIcon, VbenIconButton } from '@vben-core/shadcn-ui';
-import { updatePreferences, usePreferences } from '@vben/preferences';
-import { useAccessStore, useUserStore, useTimezoneStore } from '@vben/stores';
+import { WalnutIcon, WalnutIconButton } from '@walnut-core/shadcn-ui';
+import { $t } from '@walnut/locales';
+import { updatePreferences, usePreferences } from '@walnut/preferences';
+import { useAccessStore, useUserStore, useTimezoneStore } from '@walnut/stores';
 import { useNavigate } from 'react-router';
-import type { MenuRecordRaw } from '@vben-core/typings';
-import { getCurrentTimezone, setCurrentTimezone } from '@vben-core/shared/utils';
-import { DEFAULT_TIME_ZONE_OPTIONS } from '@vben/preferences';
+import type { MenuRecordRaw } from '@walnut-core/typings';
+import { getCurrentTimezone, setCurrentTimezone } from '@walnut-core/shared/utils';
+import { DEFAULT_TIME_ZONE_OPTIONS } from '@walnut/preferences';
 import { appConfig } from '@/lib/config';
 import { getMessageApi } from '@/services/message';
 import { useAuthStore } from '@/store/auth';
@@ -29,7 +30,7 @@ export function SearchButton() {
       onClick={openGlobalSearch}
     >
       <Search className="size-4" />
-      <span>搜索</span>
+      <span>{$t('ui.widgets.search.title')}</span>
       <kbd className="rounded bg-background px-1 text-[10px]">Ctrl K</kbd>
     </button>
   );
@@ -41,9 +42,9 @@ function NotificationButton() {
   const content = (
     <div className="w-80 max-w-[calc(100vw-48px)]">
       <div className="flex items-center justify-between border-b pb-2">
-        <strong>消息通知</strong>
+        <strong>{$t('ui.widgets.notifications')}</strong>
         <Button type="text" size="small" onClick={() => store.readAll(userId)}>
-          全部已读
+          {$t('ui.widgets.markAllAsRead')}
         </Button>
       </div>
       <div className="max-h-96 overflow-y-auto">
@@ -60,14 +61,14 @@ function NotificationButton() {
               <Button
                 type="text"
                 size="small"
-                aria-label="删除消息"
+                aria-label={$t('common.delete')}
                 icon={<Trash2 className="size-3" />}
                 onClick={() => store.remove(item.id)}
               />
             </div>
           ))
         ) : (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无通知" />
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={$t('common.noData')} />
         )}
       </div>
       <Button
@@ -76,16 +77,16 @@ function NotificationButton() {
         disabled={!notifications.length}
         onClick={() => store.clear(userId)}
       >
-        清空消息
+        {$t('ui.widgets.clearNotifications')}
       </Button>
     </div>
   );
   return (
     <Popover trigger="click" placement="bottomRight" content={content}>
       <Badge dot={notifications.some((item) => !item.isRead)} offset={[-8, 8]}>
-        <VbenIconButton aria-label="notifications">
+        <WalnutIconButton aria-label="notifications">
           <Bell className="size-4" />
-        </VbenIconButton>
+        </WalnutIconButton>
       </Badge>
     </Popover>
   );
@@ -96,10 +97,10 @@ function TimezoneButton() {
     <Popover
       trigger="click"
       placement="bottomRight"
-      title="时区设置"
+      title={$t('ui.widgets.timezone.setTimezone')}
       content={
         <Select
-          aria-label="时区"
+          aria-label={$t('ui.widgets.timezone.setTimezone')}
           showSearch
           style={{ width: 240 }}
           value={preferences.app.timezone}
@@ -114,9 +115,9 @@ function TimezoneButton() {
         />
       }
     >
-      <VbenIconButton aria-label="timezone">
+      <WalnutIconButton aria-label="timezone">
         <Globe className="size-4" />
-      </VbenIconButton>
+      </WalnutIconButton>
     </Popover>
   );
 }
@@ -126,9 +127,9 @@ export function HeaderTools() {
     <>
       {preferences.widget.notification && <NotificationButton />}
       {preferences.widget.lockScreen && (
-        <VbenIconButton aria-label="lock-screen" onClick={openLockScreen}>
+        <WalnutIconButton aria-label="lock-screen" onClick={openLockScreen}>
           <LockKeyhole className="size-4" />
-        </VbenIconButton>
+        </WalnutIconButton>
       )}
       {preferences.widget.timezone && <TimezoneButton />}
     </>
@@ -157,10 +158,10 @@ export function ShellServices() {
     ): { name: string; path: string; icon?: string }[] {
       return nodes.flatMap((node) =>
         node.children?.length
-          ? walk(node.children, [...parents, node.name])
+          ? walk(node.children, [...parents, $t(node.name)])
           : [
               {
-                name: [...parents, node.name].join(' / '),
+                name: [...parents, $t(node.name)].join(' / '),
                 path: node.path,
                 icon: typeof node.icon === 'string' ? node.icon : undefined,
               },
@@ -170,7 +171,7 @@ export function ShellServices() {
     return walk(menus)
       .filter((node) => node.name.toLowerCase().includes(query.toLowerCase()))
       .slice(0, 50);
-  }, [menus, query]);
+  }, [menus, query, preferences.app.locale]);
   function select(index: number) {
     const target = results[index];
     if (!target) return;
@@ -240,12 +241,12 @@ export function ShellServices() {
         .add({
           id: crypto.randomUUID(),
           userId: String(user.userId),
-          title: '系统通知',
+          title: $t('component.notice.title'),
           message: event.data,
           date: new Date().toLocaleString(),
           isRead: false,
         });
-      getMessageApi()?.notification.success({ title: '收到新消息', description: event.data });
+      getMessageApi()?.notification.success({ title: $t('component.notice.received'), description: event.data });
     };
     return () => source.close();
   }, [token, user?.userId]);
@@ -271,8 +272,10 @@ export function ShellServices() {
         if (cancelled || !tag) return;
         if (baseline && tag !== baseline)
           getMessageApi()?.modal.confirm({
-            title: '发现新版本',
-            content: '刷新页面以使用最新版本。请先保存正在编辑的内容。',
+            title: $t('ui.widgets.checkUpdatesTitle'),
+            content: $t('ui.widgets.checkUpdatesDescription'),
+            okText: $t('common.refresh'),
+            cancelText: $t('common.cancel'),
             onOk: () => location.reload(),
           });
         baseline = tag;
@@ -291,7 +294,7 @@ export function ShellServices() {
   return (
     <>
       <Modal
-        title="全局搜索"
+        title={$t('ui.widgets.search.title')}
         open={searchOpen}
         footer={null}
         onCancel={() => setSearchOpen(false)}
@@ -302,8 +305,8 @@ export function ShellServices() {
         <Input
           autoFocus
           prefix={<Search className="size-4" />}
-          aria-label="搜索菜单"
-          placeholder="搜索菜单，↑↓ 选择，Enter 打开"
+          aria-label={$t('ui.widgets.search.searchNavigate')}
+          placeholder={$t('ui.widgets.search.searchNavigate')}
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -331,17 +334,17 @@ export function ShellServices() {
                 className={`flex w-full items-center gap-3 rounded p-3 text-left ${i === selected ? 'bg-accent text-primary' : 'hover:bg-accent'}`}
                 onClick={() => select(i)}
               >
-                {result.icon && <VbenIcon icon={result.icon} />}
+                {result.icon && <WalnutIcon icon={result.icon} />}
                 <span>{result.name}</span>
               </button>
             ))
           ) : (
-            <Empty description="没有匹配的菜单" />
+            <Empty description={$t('ui.widgets.search.noResults')} />
           )}
         </div>
       </Modal>
       <Modal
-        title="锁定屏幕"
+        title={$t('ui.widgets.lockScreen.title')}
         open={lockOpen}
         onCancel={() => setLockOpen(false)}
         onOk={async () => {
@@ -352,7 +355,11 @@ export function ShellServices() {
         }}
       >
         <Form form={lockForm} layout="vertical">
-          <Form.Item name="password" label="锁屏密码" rules={[{ required: true }]}>
+          <Form.Item
+            name="password"
+            label={$t('authentication.password')}
+            rules={[{ required: true, message: $t('ui.widgets.lockScreen.placeholder') }]}
+          >
             <Input.Password autoComplete="new-password" />
           </Form.Item>
         </Form>
@@ -362,7 +369,7 @@ export function ShellServices() {
           className="fixed inset-0 z-[10000] flex flex-col items-center justify-center gap-5 bg-background text-foreground"
           role="dialog"
           aria-modal="true"
-          aria-label="屏幕已锁定"
+          aria-label={$t('ui.widgets.lockScreen.title')}
         >
           <div className="text-6xl font-semibold tabular-nums">
             {now.toLocaleTimeString(preferences.app.locale, {
@@ -389,18 +396,18 @@ export function ShellServices() {
               if (password === useAccessStore.getState().lockScreenPassword) {
                 useAccessStore.getState().unlockScreen();
                 unlockForm.resetFields();
-              } else unlockForm.setFields([{ name: 'password', errors: ['密码错误'] }]);
+              } else unlockForm.setFields([{ name: 'password', errors: [$t('authentication.passwordErrorTip')] }]);
             }}
           >
-            <Form.Item name="password" rules={[{ required: true, message: '请输入锁屏密码' }]}>
-              <Input.Password autoFocus aria-label="解锁密码" placeholder="锁屏密码" />
+            <Form.Item name="password" rules={[{ required: true, message: $t('authentication.passwordTip') }]}>
+              <Input.Password autoFocus aria-label={$t('authentication.password')} placeholder={$t('ui.widgets.lockScreen.placeholder')} />
             </Form.Item>
             <Button block type="primary" htmlType="submit">
-              解锁
+              {$t('ui.widgets.lockScreen.screenButton')}
             </Button>
           </Form>
           <Button type="link" onClick={() => void useAuthStore.getState().logout()}>
-            返回登录
+            {$t('ui.widgets.lockScreen.backToLogin')}
           </Button>
         </div>
       )}

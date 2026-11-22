@@ -22,83 +22,109 @@ body {
   background: hsl(var(--background, 210 40% 98%));
 }
 
-/* vben-link：登录页「忘记密码 / 创建账号」等文字链接（对应 Vue 侧全局样式） */
-.vben-link {
+/* walnut-link：登录页「忘记密码 / 创建账号」等文字链接（对应 Vue 侧全局样式） */
+.walnut-link {
   color: hsl(var(--primary));
   cursor: pointer;
 }
 
-.vben-link:hover {
+.walnut-link:hover {
   color: hsl(var(--primary-hover, var(--primary)));
   text-decoration: underline;
 }
 
-/* 偏好设置页签条：outline 风格（Vue VbenSegmented 观感），非 antd 默认灰底 */
-.vben-pref-segmented.ant-segmented {
-  background: transparent;
-  border: 1px solid hsl(var(--border));
-  padding: 2px;
+/* 明暗切换 View Transition（复刻 Vue internal/tailwind-config/theme.css）：
+   关掉默认交叉淡化，由 theme-button 的 clip-path 圆形动画接管；
+   亮→暗时旧快照在上层收缩，暗→亮时新快照在上层扩张 */
+::view-transition-new(root),
+::view-transition-old(root) {
+  animation: none;
+  mix-blend-mode: normal;
 }
-.vben-pref-segmented .ant-segmented-item {
-  background: transparent;
-  color: hsl(var(--muted-foreground));
+::view-transition-old(root) {
+  z-index: 1;
 }
-.vben-pref-segmented .ant-segmented-item-selected {
-  background: hsl(var(--background));
-  color: hsl(var(--primary));
-  box-shadow: 0 0 0 1px hsl(var(--border));
+::view-transition-new(root) {
+  z-index: 2147483646;
 }
-.vben-pref-segmented .ant-segmented-thumb {
-  background: hsl(var(--background));
+html.dark::view-transition-old(root) {
+  z-index: 2147483646;
+}
+html.dark::view-transition-new(root) {
+  z-index: 1;
+}
+
+/* hover 收缩动效（复刻 Vue @core/base/design ui.css 的 @keyframes shrink，
+   供 hover:animate-[shrink_0.3s_ease-in-out] 使用） */
+@keyframes shrink {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* 偏好设置页签条吸顶（preferences.app.enableStickyPreferencesNavigationBar），
+   对应 Vue preferences-drawer.vue 的 :deep(.sticky-tabs-header [role='tablist'])。
+   React WalnutSegmented 的 class 直接落在 role=tablist 元素上，故两种选择器都覆盖。 */
+.sticky-tabs-header[role='tablist'],
+.sticky-tabs-header [role='tablist'] {
+  position: sticky;
+  top: -0.75rem;
+  z-index: 9999;
 }
 
 /* 页面切换动画（preferences.transition.enable / name），对应 Vue 侧 transition 组件 */
-@keyframes vben-fade {
+@keyframes walnut-fade {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-@keyframes vben-fade-slide {
+@keyframes walnut-fade-slide {
   from { opacity: 0; transform: translateX(-12px); }
   to { opacity: 1; transform: translateX(0); }
 }
-@keyframes vben-fade-up {
+@keyframes walnut-fade-up {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
 }
-@keyframes vben-fade-down {
+@keyframes walnut-fade-down {
   from { opacity: 0; transform: translateY(-12px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.page-transition--fade { animation: vben-fade 0.25s ease both; }
-.page-transition--fade-slide { animation: vben-fade-slide 0.25s ease both; }
-.page-transition--fade-up { animation: vben-fade-up 0.25s ease both; }
-.page-transition--fade-down { animation: vben-fade-down 0.25s ease both; }
+.page-transition--fade { animation: walnut-fade 0.25s ease both; }
+.page-transition--fade-slide { animation: walnut-fade-slide 0.25s ease both; }
+.page-transition--fade-up { animation: walnut-fade-up 0.25s ease both; }
+.page-transition--fade-down { animation: walnut-fade-down 0.25s ease both; }
 
 /* 导航菜单圆角风格（preferences.navigation.styleType = rounded） */
-.vben-menu-rounded.ant-menu-inline .ant-menu-item,
-.vben-menu-rounded.ant-menu-inline .ant-menu-submenu-title {
+.walnut-menu-rounded.ant-menu-inline .ant-menu-item,
+.walnut-menu-rounded.ant-menu-inline .ant-menu-submenu-title {
   margin-inline: 8px;
   width: calc(100% - 16px);
   border-radius: var(--radius);
 }
 
 /* plain / brisk 页签风格；chrome 的弧形与主题色在 adapter/tabs.css 中统一维护。 */
-.vben-tabs--plain .ant-tabs-tab {
+.walnut-tabs--plain .ant-tabs-tab {
   background: transparent !important;
   border: none !important;
 }
-.vben-tabs--brisk .ant-tabs-tab {
+.walnut-tabs--brisk .ant-tabs-tab {
   border-radius: 0 !important;
   background: transparent !important;
   border: none !important;
   border-bottom: 2px solid transparent !important;
 }
-.vben-tabs--brisk .ant-tabs-tab-active {
+.walnut-tabs--brisk .ant-tabs-tab-active {
   border-bottom-color: hsl(var(--primary)) !important;
 }
 
 /* 侧边栏拖拽调宽条（preferences.sidebar.draggable），对应 Vue layout-ui 右缘拖拽 */
-.vben-sidebar-dragger {
+.walnut-sidebar-dragger {
   position: absolute;
   top: 0;
   right: 0;
@@ -107,19 +133,19 @@ body {
   cursor: col-resize;
   z-index: 10;
 }
-.vben-sidebar-dragger:hover {
+.walnut-sidebar-dragger:hover {
   background: hsl(var(--primary) / 0.3);
 }
 
 /* 面包屑背景风格（preferences.breadcrumb.styleType = background） */
-.vben-breadcrumb-background {
+.walnut-breadcrumb-background {
   background: hsl(var(--accent));
   padding: 4px 8px;
   border-radius: var(--radius);
 }
 
 /* 页面切换顶部进度条（preferences.transition.progress） */
-.vben-progress-bar {
+.walnut-progress-bar {
   position: fixed;
   top: 0;
   left: 0;
@@ -128,30 +154,37 @@ body {
   z-index: 2000;
   background: hsl(var(--primary));
   transform-origin: left;
-  animation: vben-progress 0.45s ease-out both;
+  animation: walnut-progress 0.45s ease-out both;
 }
-@keyframes vben-progress {
+@keyframes walnut-progress {
   from { transform: scaleX(0); }
   to { transform: scaleX(1); }
 }
 
 /* 动画预览卡慢速循环（设置抽屉 animation 块，对应 Vue `${name}-slow`） */
-.fade-slow { animation: vben-fade 1.5s ease infinite; }
-.fade-slide-slow { animation: vben-fade-slide 1.5s ease infinite; }
-.fade-up-slow { animation: vben-fade-up 1.5s ease infinite; }
-.fade-down-slow { animation: vben-fade-down 1.5s ease infinite; }
+.fade-slow { animation: walnut-fade 1.5s ease infinite; }
+.fade-slide-slow { animation: walnut-fade-slide 1.5s ease infinite; }
+.fade-up-slow { animation: walnut-fade-up 1.5s ease infinite; }
+.fade-down-slow { animation: walnut-fade-down 1.5s ease infinite; }
 
-.vben-menu.ant-menu-inline .ant-menu-item, .vben-menu.ant-menu-inline .ant-menu-submenu-title { height: 42px; line-height: 42px; }
-.vben-menu.ant-menu-inline > .ant-menu-submenu > .ant-menu-submenu-title { padding-inline-start: 8px !important; }
-.vben-menu.ant-menu-inline .ant-menu-sub .ant-menu-item { padding-inline-start: 32px !important; }
-.vben-menu.ant-menu-inline .ant-menu-item-selected { background: hsl(var(--primary) / .15); }
-.vben-menu .ant-menu-item-icon { min-width: 16px; width: 16px; height: 16px; }
-.vben-menu-collapsed-title.ant-menu-inline-collapsed > .ant-menu-item, .vben-menu-collapsed-title.ant-menu-inline-collapsed > .ant-menu-submenu > .ant-menu-submenu-title { height: 58px; padding-inline: 4px; text-align: center; }
-.vben-menu-collapsed-title.ant-menu-inline-collapsed .ant-menu-title-content { display: block; opacity: 1; height: 20px; line-height: 20px; margin: 0; font-size: 11px; }
+.walnut-menu.ant-menu-inline .ant-menu-item, .walnut-menu.ant-menu-inline .ant-menu-submenu-title { height: 42px; line-height: 42px; }
+.walnut-menu.ant-menu-inline > .ant-menu-submenu > .ant-menu-submenu-title { padding-inline-start: 8px !important; }
+/* 根级叶子菜单（顶层 C 型菜单，如「测试菜单」）与根目录标题同 8px
+   （Vue menu-ui 根级：indent - 8px）；不写这条会被 antd 默认 inline 缩进推到与一级子项齐平 */
+.walnut-menu.ant-menu-inline > .ant-menu-item { padding-inline-start: 8px !important; }
+.walnut-menu.ant-menu-inline .ant-menu-sub .ant-menu-item { padding-inline-start: 32px !important; }
+/* 嵌套子目录标题与同级 item 同缩进（Vue menu-ui：indent + level * indent），
+   不写这条会被 antd 默认 inline 缩进（48px）推到与三级子项齐平 */
+.walnut-menu.ant-menu-inline .ant-menu-sub .ant-menu-submenu-title { padding-inline-start: 32px !important; }
+.walnut-menu.ant-menu-inline .ant-menu-sub .ant-menu-sub .ant-menu-submenu-title { padding-inline-start: 48px !important; }
+.walnut-menu.ant-menu-inline .ant-menu-item-selected { background: hsl(var(--primary) / .15); }
+.walnut-menu .ant-menu-item-icon { min-width: 16px; width: 16px; height: 16px; }
+.walnut-menu-collapsed-title.ant-menu-inline-collapsed > .ant-menu-item, .walnut-menu-collapsed-title.ant-menu-inline-collapsed > .ant-menu-submenu > .ant-menu-submenu-title { height: 58px; padding-inline: 4px; text-align: center; }
+.walnut-menu-collapsed-title.ant-menu-inline-collapsed .ant-menu-title-content { display: block; opacity: 1; height: 20px; line-height: 20px; margin: 0; font-size: 11px; }
 
 .ant-drawer-content-wrapper { max-width: 100vw; }
-@media (max-width: 767px) { .vben-grid-toolbar .ant-space { flex-wrap: wrap; } }
+@media (max-width: 767px) { .walnut-grid-toolbar .ant-space { flex-wrap: wrap; } }
 
 .screen-locked .ant-drawer, .screen-locked .ant-modal-root, .screen-locked .ant-popover { visibility: hidden; pointer-events: none; }
 
-.vben-menu.ant-menu-inline .ant-menu-sub .ant-menu-sub .ant-menu-item { padding-inline-start: 48px !important; }
+.walnut-menu.ant-menu-inline .ant-menu-sub .ant-menu-sub .ant-menu-item { padding-inline-start: 48px !important; }

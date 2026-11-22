@@ -2,7 +2,7 @@ import { useRef } from 'react';
 
 import type { LoginLog } from '@/api/monitor/logininfo/model';
 
-import { $t } from '@vben/locales';
+import { $t } from '@walnut/locales';
 import { Button, Popconfirm, Space } from 'antd';
 
 import { useGrid, vxeCheckboxChecked } from '@/adapter/grid';
@@ -142,12 +142,12 @@ export default function LoginInfoPage() {
               >
                 {$t('pages.common.info')}
               </Button>
-              <Popconfirm
-                onConfirm={() => handleDelete(row)}
-                placement="left"
-                title="确认删除?"
-              >
-                <Access code={['monitor:logininfor:remove']}>
+              <Access code={['monitor:logininfor:remove']}>
+                <Popconfirm
+                  onConfirm={() => handleDelete(row)}
+                  placement="left"
+                  title="确认删除?"
+                >
                   <Button
                     danger
                     onClick={(e) => e.stopPropagation()}
@@ -156,8 +156,8 @@ export default function LoginInfoPage() {
                   >
                     {$t('pages.common.delete')}
                   </Button>
-                </Access>
-              </Popconfirm>
+                </Popconfirm>
+              </Access>
             </Space>
           ),
         }}

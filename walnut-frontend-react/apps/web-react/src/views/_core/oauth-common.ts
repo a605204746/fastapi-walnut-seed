@@ -1,4 +1,4 @@
-import { DEFAULT_TENANT_ID } from '@vben/constants';
+import { DEFAULT_TENANT_ID } from '@walnut/constants';
 import { create } from 'zustand';
 
 import { authBinding } from '@/api/core/auth';

@@ -2,11 +2,11 @@ import type {
   ComponentRecordType,
   RouteMeta,
   RouteRecordStringComponent,
-} from '@vben-core/typings';
+} from '@walnut-core/typings';
 
 import type { Menu } from '@/api/core/menu';
 
-import { cloneDeep } from '@vben-core/shared/utils';
+import { cloneDeep } from '@walnut-core/shared/utils';
 import { lazy } from 'react';
 
 /**
@@ -21,7 +21,7 @@ const routeMetaMapping: Record<string, Omit<RouteMeta, 'title'>> = {
 };
 
 /**
- * 后台菜单转应用路由对象（对应 Vue 侧 `backMenuToVbenMenu`）。
+ * 后台菜单转应用路由对象（对应 Vue 基线的后台菜单转路由函数）。
  *
  * 五种特殊 component 字符串（`Layout` / `ParentView` / `Link` / `InnerLink` / `RootMenu`）
  * 的判断分支**逐行照搬** Vue 版，只把输出类型换成本仓的 `RouteRecordStringComponent`。

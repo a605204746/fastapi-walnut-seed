@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react';
 
-import type { FormApi, FormSchema } from '@vben-core/form-ui';
+import type { FormApi, FormSchema } from '@walnut-core/form-ui';
 
 import { forwardRef, useCallback, useImperativeHandle, useState } from 'react';
 
-import { $t } from '@vben/locales';
-import { useVbenForm } from '@vben-core/form-ui';
-import { cn } from '@vben-core/shared/utils';
+import { $t } from '@walnut/locales';
+import { useWalnutForm } from '@walnut-core/form-ui';
+import { cn } from '@walnut-core/shared/utils';
 import { Button, Checkbox } from 'antd';
 import { useNavigate } from 'react-router';
 
@@ -76,7 +76,7 @@ export const AuthenticationLogin = forwardRef<
   ref,
 ) {
   const navigate = useNavigate();
-  const [Form, formApi] = useVbenForm({
+  const [Form, formApi] = useWalnutForm({
     commonConfig: { hideLabel: true, hideRequiredMark: true },
     schema: formSchema,
     showDefaultActions: false,
@@ -124,7 +124,7 @@ export const AuthenticationLogin = forwardRef<
           </div>
           {showForgetPassword ? (
             <span
-              className="vben-link text-sm font-normal"
+              className="walnut-link text-sm font-normal"
               onClick={() => navigate(forgetPasswordPath)}
             >
               {$t('authentication.forgetPassword')}

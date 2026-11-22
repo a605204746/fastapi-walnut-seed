@@ -3,9 +3,9 @@ import type {
   AppRouteObject,
   GenerateMenuAndRoutesOptions,
   MenuRecordRaw,
-} from '@vben-core/typings';
+} from '@walnut-core/typings';
 
-import { cloneDeep, mapTree } from '@vben-core/shared/utils';
+import { cloneDeep, mapTree } from '@walnut-core/shared/utils';
 
 import { generateMenus } from './generate-menus';
 import { generateRoutesByBackend } from './generate-routes-backend';

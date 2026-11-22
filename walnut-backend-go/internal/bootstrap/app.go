@@ -56,6 +56,8 @@ type App struct {
 	idGen *idgen.Generator
 	// builder 保留路由登记表，供启动期认证审计与契约 diff 使用
 	builder *Builder
+	// contractSpec 冻结契约 OpenAPI 文档（main.go embed 注入），供 /docs 文档端点
+	contractSpec []byte
 	// logCloser 关闭日志文件句柄；不关会导致 Windows 上目录无法删除、
 	// Linux 上轮转后的旧文件无法回收
 	logCloser io.Closer
@@ -63,11 +65,19 @@ type App struct {
 	shutdownOnce sync.Once
 }
 
+// Option 装配选项（ functional options，保持 New(cfg) 向后兼容）。
+type Option func(*App)
+
+// WithContractSpec 注入 OpenAPI 文档字节（/docs 与 /openapi.json 的数据源）。
+func WithContractSpec(spec []byte) Option {
+	return func(a *App) { a.contractSpec = spec }
+}
+
 // New 完成全部装配。任何**致命**问题在此返回 error（拒绝启动），
 // 可降级问题只记告警——对齐 Python 端 lifespan 的容错策略：
 // DB/Redis 不可用时应用仍要起来，由 /common/health/ready 返回 503 反映真实状态，
 // 让 compose 的探针门禁去拦流量，而不是让容器反复重启。
-func New(cfg *config.Config) (*App, error) {
+func New(cfg *config.Config, opts ...Option) (*App, error) {
 	if cfg == nil {
 		return nil, errors.New("配置不能为空")
 	}
@@ -111,6 +121,9 @@ func New(cfg *config.Config) (*App, error) {
 			Resolve:  i18nx.MessageIn,
 			LocaleOf: middleware.LocaleFrom,
 		},
+	}
+	for _, o := range opts {
+		o(app)
 	}
 
 	// ---- 3. 雪花 ID 生成器（业务写入都依赖它，须在路由注册前就绪）----

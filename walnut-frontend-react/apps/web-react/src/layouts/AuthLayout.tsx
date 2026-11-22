@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 
-import { $t } from '@vben/locales';
-import { usePreferences } from '@vben/preferences';
+import { $t } from '@walnut/locales';
+import { usePreferences } from '@walnut/preferences';
 import { ConfigProvider, theme as antdTheme } from 'antd';
 import { Outlet } from 'react-router';
 

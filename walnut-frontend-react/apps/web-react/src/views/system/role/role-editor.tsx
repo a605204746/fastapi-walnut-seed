@@ -12,7 +12,7 @@ import {
   Spin,
   Tree,
 } from 'antd';
-import { DictEnum } from '@vben/constants';
+import { DictEnum } from '@walnut/constants';
 import { roleAdd, roleDataScope, roleDeptTree, roleInfo, roleUpdate } from '@/api/system/role';
 import { menuTreeSelect, roleMenuTreeSelect } from '@/api/system/menu';
 import type { MenuOption } from '@/api/system/menu/model';

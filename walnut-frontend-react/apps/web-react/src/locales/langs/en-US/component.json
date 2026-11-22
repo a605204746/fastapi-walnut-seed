@@ -23,6 +23,21 @@
     "title": "Notice",
     "received": "You have received a new message"
   },
+  "grid": {
+    "expandSearch": "Expand search",
+    "columnSettings": "Column settings"
+  },
+  "pager": {
+    "total": "Total {0} records",
+    "pagesize": "{0} items/page",
+    "homePage": "front page",
+    "prevPage": "Previous page",
+    "nextPage": "Next page",
+    "prevJump": "Jump up page",
+    "nextJump": "Jump down page",
+    "endPage": "Last page",
+    "pageClassifier": "Page"
+  },
   "upload": {
     "save": "Save",
     "upload": "Upload",

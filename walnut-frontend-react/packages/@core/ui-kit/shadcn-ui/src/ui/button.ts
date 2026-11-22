@@ -1,4 +1,4 @@
-import { cn } from '@vben-core/shared/utils';
+import { cn } from '@walnut-core/shared/utils';
 
 /**
  * 按钮 variant / size 的 class 表。

@@ -1,12 +1,12 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
-import { cn } from '@vben-core/shared/utils';
+import { cn } from '@walnut-core/shared/utils';
 import { LoaderCircle } from 'lucide-react';
 
 import { type ButtonVariants, type ButtonVariantSize, buttonVariants } from '../ui/button';
-import { VbenTooltip } from './tooltip';
+import { WalnutTooltip } from './tooltip';
 
-export interface VbenButtonProps
+export interface WalnutButtonProps
   extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'className'> {
   class?: string;
   className?: string;
@@ -19,7 +19,7 @@ export interface VbenButtonProps
  * 对应 Vue 侧 `@core/ui-kit/shadcn-ui/src/components/button/button.vue`。
  * 默认 as=button，class = buttonVariants({variant,size}) + props.class。
  */
-export function VbenButton({
+export function WalnutButton({
   class: className,
   children,
   disabled = false,
@@ -27,7 +27,7 @@ export function VbenButton({
   size = 'default',
   variant = 'default',
   ...rest
-}: VbenButtonProps) {
+}: WalnutButtonProps) {
   const isDisabled = disabled || loading;
   return (
     <button
@@ -44,7 +44,7 @@ export function VbenButton({
   );
 }
 
-export interface VbenIconButtonProps extends VbenButtonProps {
+export interface WalnutIconButtonProps extends WalnutButtonProps {
   tooltip?: ReactNode;
   tooltipDelayDuration?: number;
   tooltipSide?: 'bottom' | 'left' | 'right' | 'top';
@@ -52,18 +52,18 @@ export interface VbenIconButtonProps extends VbenButtonProps {
 
 /**
  * 对应 Vue 侧 `icon-button.vue`：variant=icon / size=icon / rounded-full，
- * 传入 tooltip 时包裹 VbenTooltip。
+ * 传入 tooltip 时包裹 WalnutTooltip。
  */
-export function VbenIconButton({
+export function WalnutIconButton({
   class: className,
   tooltip,
   tooltipDelayDuration = 200,
   tooltipSide = 'bottom',
   variant = 'icon',
   ...rest
-}: VbenIconButtonProps) {
+}: WalnutIconButtonProps) {
   const button = (
-    <VbenButton
+    <WalnutButton
       {...rest}
       class={cn('rounded-full', className)}
       size="icon"
@@ -76,12 +76,12 @@ export function VbenIconButton({
   }
 
   return (
-    <VbenTooltip
+    <WalnutTooltip
       delayDuration={tooltipDelayDuration}
       side={tooltipSide}
       trigger={button}
     >
       {tooltip}
-    </VbenTooltip>
+    </WalnutTooltip>
   );
 }

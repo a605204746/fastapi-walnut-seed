@@ -2,7 +2,7 @@ import { useRef } from 'react';
 
 import type { User } from '@/api/system/user/model';
 
-import { $t } from '@vben/locales';
+import { $t } from '@walnut/locales';
 import { Button, Popconfirm, Space } from 'antd';
 import { useParams } from 'react-router';
 
@@ -94,14 +94,14 @@ export default function RoleAssignPage() {
       <BasicTable
         slots={{
           action: ({ row }) => (
-            <Popconfirm
-              onConfirm={() => handleAuthCancel(row as User)}
-              placement="left"
-              title={`是否取消授权用户[${(row as User).userName} - ${
-                (row as User).nickName
-              }]?`}
-            >
-              <Access code={['system:role:remove']}>
+            <Access code={['system:role:remove']}>
+              <Popconfirm
+                onConfirm={() => handleAuthCancel(row as User)}
+                placement="left"
+                title={`是否取消授权用户[${(row as User).userName} - ${
+                  (row as User).nickName
+                }]?`}
+              >
                 <Button
                   danger
                   onClick={(e) => e.stopPropagation()}
@@ -110,8 +110,8 @@ export default function RoleAssignPage() {
                 >
                   取消授权
                 </Button>
-              </Access>
-            </Popconfirm>
+              </Popconfirm>
+            </Access>
           ),
         }}
         tableTitle="已分配的用户列表"

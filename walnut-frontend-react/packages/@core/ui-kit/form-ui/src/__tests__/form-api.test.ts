@@ -146,7 +146,7 @@ describe('FormApi.updateSchema', () => {
 
   it('⚠️ React 特有：syncOptions 重跑后覆盖层不丢失', async () => {
     /**
-     * `useVbenForm` 每次渲染都会调 `syncOptions(options)`，而业务页通常传的是
+     * `useWalnutForm` 每次渲染都会调 `syncOptions(options)`，而业务页通常传的是
      * 内联字面量（`schema: drawerSchema()`），引用每次都变。若覆盖层没被保留，
      * 任何一次重渲染都会把 `updateSchema` 注入的异步选项冲掉 —— 这是 Vue 侧
      * 不存在的问题（Vue 的 schema 就存在 store 里）。
@@ -177,5 +177,42 @@ describe('FormApi.updateSchema', () => {
 
     expect(await api.getValues()).toMatchObject({ extra: 'x' });
     expect(field(api, 'name').label).toBe('A');
+  });
+});
+
+describe('FormApi.validate 隐藏字段', () => {
+  it('show 隐藏的字段不参与校验（对齐 Vue fieldRules 的 visible 判断）', async () => {
+    // 菜单抽屉场景：类型为目录时「组件路径」隐藏，但 path 非空时
+    // dependencies.rules 仍返回必填 —— 隐藏字段若参与校验就永远无法提交。
+    const api = new FormApi({
+      schema: [
+        { component: 'Input', defaultValue: 'M', fieldName: 'menuType' },
+        {
+          component: 'Input',
+          defaultValue: 'system',
+          fieldName: 'path',
+          rules: 'required',
+        },
+        {
+          component: 'Input',
+          dependencies: {
+            rules: (values) =>
+              values.path ? [{ message: '非链接时必填组件路径', required: true }] : [],
+            show: (values) => values.menuType === 'C',
+            triggerFields: ['menuType', 'path'],
+          },
+          fieldName: 'component',
+        },
+      ],
+    });
+
+    // 目录：component 隐藏，不校验
+    expect((await api.validate()).valid).toBe(true);
+
+    // 菜单：component 显示且必填
+    await api.setFieldValue('menuType', 'C');
+    const result = await api.validate();
+    expect(result.valid).toBe(false);
+    expect(result.errors.component).toBe('非链接时必填组件路径');
   });
 });

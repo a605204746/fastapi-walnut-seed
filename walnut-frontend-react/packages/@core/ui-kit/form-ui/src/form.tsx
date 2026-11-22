@@ -4,8 +4,8 @@ import type { ReactNode } from 'react';
 import type { FormApi } from './form-api';
 import type { FormSchema } from './types';
 
-import { useStore } from '@vben-core/shared/store';
-import { cn } from '@vben-core/shared/utils';
+import { useStore } from '@walnut-core/shared/store';
+import { cn } from '@walnut-core/shared/utils';
 
 import { getComponent } from './config';
 import { normalizeRules } from './form-api';

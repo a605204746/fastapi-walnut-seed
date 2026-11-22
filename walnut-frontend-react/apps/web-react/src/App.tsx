@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 
-import { useAntdComponentTokens, useAntdDesignTokens } from '@vben/hooks';
-import { usePreferences } from '@vben/preferences';
+import { useAntdComponentTokens, useAntdDesignTokens } from '@walnut/hooks';
+import { usePreferences } from '@walnut/preferences';
 import { App as AntdApp, ConfigProvider, theme as antdTheme } from 'antd';
 import enUS from 'antd/locale/en_US';
 import zhCN from 'antd/locale/zh_CN';

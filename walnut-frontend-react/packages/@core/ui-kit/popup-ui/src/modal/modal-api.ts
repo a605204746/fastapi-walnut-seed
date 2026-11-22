@@ -1,4 +1,4 @@
-import { Store } from '@vben-core/shared/store';
+import { Store } from '@walnut-core/shared/store';
 
 export interface ModalState {
   centered?: boolean;
@@ -182,7 +182,7 @@ export class ModalApi {
   }
 
   /**
-   * 每次渲染同步最新回调，避免 useVbenModal 构造时捕获的闭包过期。
+   * 每次渲染同步最新回调，避免 useWalnutModal 构造时捕获的闭包过期。
    */
   updateCallbacks(options: ModalApiOptions) {
     this.api = {

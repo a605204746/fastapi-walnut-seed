@@ -67,8 +67,9 @@ make dev                           # 等价 go run . run --env dev
 ### 3. 起前端
 
 ```bash
-cd walnut-frontend
-pnpm install && pnpm dev:antd      # http://localhost:8010，/api 代理到 8011
+cd walnut-frontend-react
+pnpm install && pnpm dev           # http://localhost:8020，/api 代理到 8011
+# Vue 基线（仅对比）：cd walnut-frontend && pnpm dev:antd   # http://localhost:8010
 ```
 
 ## 常用命令
@@ -109,22 +110,22 @@ walnut-backend-go/
 │       └── common/health/   #   handler.go / service.go / repo.go / model.go / dto.go
 ├── migrations/              # 版本化 SQL（P1）
 ├── seed/                    # 种子数据（P1）
-├── api/openapi/             # ★ golden 契约快照（由 scripts/export_contract.py 从 Python 端导出）
+├── api/openapi/             # ★ golden 契约快照（由仓库根 scripts/export_contract.py 从 Python 端导出）
 │   ├── contract.json        #   完整 OpenAPI 3.1 文档
 │   ├── routes.txt           #   125 条 "METHOD path" 清单
 │   ├── modules.json         #   路由 → 归属模块映射
 │   └── README.md
 ├── scripts/
-│   └── export_contract.py   # 导出 golden 契约（调 create_app()，无需启动服务）
+│   └── smoke_all.go         # 全端点冒烟（make smoke）
 ├── test/
 │   ├── contract/
-│   │   ├── diff_contract.py         # ★ 双后端响应逐字节 diff（需两端同时运行）
-│   │   ├── routes_inventory_test.go # ★ 路由清单 diff（纯静态，可进每次 CI）
-│   │   └── README.md
+│   │   └── routes_inventory_test.go # ★ 路由清单 diff（纯静态，可进每次 CI）
 │   └── cryptointerop/               # Python↔Go 加解密互通测试（AES 密文逐字节比对）
 ├── env/                     # .env.example / .env.dev（镜像不打包）
 ├── Makefile  Dockerfile  .golangci.yml
 ```
+
+> 跨端 Python 工具（双端响应 diff `diff_*.py`、互通向量生成/反向校验、契约导出、schema 与密钥校验）位于仓库根 `scripts/`。
 
 ## 契约防漂移
 

@@ -17,14 +17,14 @@ func NewRepo(db *gorm.DB) *Repo { return &Repo{db: db} }
 
 func (r *Repo) OperLogPage(ctx context.Context, page crudx.Page, conds []crudx.Cond) ([]SysOperLog, int64, error) {
 	newQuery := func() *gorm.DB {
-		return crudx.Apply(r.db.WithContext(ctx).Model(&SysOperLog{}), conds...)
+		return crudx.Apply(crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysOperLog{}), conds...)
 	}
 	var total int64
 	if err := newQuery().Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 	// 用户排序在前；仅未指定 orderByColumn 时兜底 id DESC（log/crud._apply_order）。
-	order, err := crudx.BuildOrder(r.db, &SysOperLog{}, page)
+	order, err := crudx.BuildOrder(crudx.DB(ctx, r.db), &SysOperLog{}, page)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -46,7 +46,7 @@ func (r *Repo) OperLogPage(ctx context.Context, page crudx.Page, conds []crudx.C
 }
 
 func (r *Repo) OperLogListAll(ctx context.Context, conds []crudx.Cond) ([]SysOperLog, error) {
-	q := crudx.Apply(r.db.WithContext(ctx).Model(&SysOperLog{}), conds...)
+	q := crudx.Apply(crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysOperLog{}), conds...)
 	q = q.Order("id DESC")
 	rows := make([]SysOperLog, 0)
 	if err := q.Find(&rows).Error; err != nil {
@@ -59,12 +59,12 @@ func (r *Repo) OperLogDeleteBatch(ctx context.Context, ids []int64) (int64, erro
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	res := r.db.WithContext(ctx).Where("id IN ?", ids).Delete(&SysOperLog{})
+	res := crudx.DB(ctx, r.db).WithContext(ctx).Where("id IN ?", ids).Delete(&SysOperLog{})
 	return res.RowsAffected, res.Error
 }
 
 func (r *Repo) OperLogClean(ctx context.Context) error {
-	return r.db.WithContext(ctx).
+	return crudx.DB(ctx, r.db).WithContext(ctx).
 		Where("1 = 1").
 		Delete(&SysOperLog{}).Error
 }
@@ -73,13 +73,13 @@ func (r *Repo) OperLogClean(ctx context.Context) error {
 
 func (r *Repo) LogininforPage(ctx context.Context, page crudx.Page, conds []crudx.Cond) ([]SysLogininfor, int64, error) {
 	newQuery := func() *gorm.DB {
-		return crudx.Apply(r.db.WithContext(ctx).Model(&SysLogininfor{}), conds...)
+		return crudx.Apply(crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysLogininfor{}), conds...)
 	}
 	var total int64
 	if err := newQuery().Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	order, err := crudx.BuildOrder(r.db, &SysLogininfor{}, page)
+	order, err := crudx.BuildOrder(crudx.DB(ctx, r.db), &SysLogininfor{}, page)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -101,7 +101,7 @@ func (r *Repo) LogininforPage(ctx context.Context, page crudx.Page, conds []crud
 }
 
 func (r *Repo) LogininforListAll(ctx context.Context, conds []crudx.Cond) ([]SysLogininfor, error) {
-	q := crudx.Apply(r.db.WithContext(ctx).Model(&SysLogininfor{}), conds...)
+	q := crudx.Apply(crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysLogininfor{}), conds...)
 	q = q.Order("id DESC")
 	rows := make([]SysLogininfor, 0)
 	if err := q.Find(&rows).Error; err != nil {
@@ -114,12 +114,12 @@ func (r *Repo) LogininforDeleteBatch(ctx context.Context, ids []int64) (int64, e
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	res := r.db.WithContext(ctx).Where("id IN ?", ids).Delete(&SysLogininfor{})
+	res := crudx.DB(ctx, r.db).WithContext(ctx).Where("id IN ?", ids).Delete(&SysLogininfor{})
 	return res.RowsAffected, res.Error
 }
 
 func (r *Repo) LogininforClean(ctx context.Context) error {
-	return r.db.WithContext(ctx).
+	return crudx.DB(ctx, r.db).WithContext(ctx).
 		Where("1 = 1").
 		Delete(&SysLogininfor{}).Error
 }
@@ -133,7 +133,7 @@ func (r *Repo) DictLabelMap(ctx context.Context, dictType string) (map[string]st
 		DictLabel *string `gorm:"column:dict_label"`
 	}
 	var rows []row
-	err := r.db.WithContext(ctx).Table("sys_dict_data").
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Table("sys_dict_data").
 		Select("dict_value, dict_label").
 		Where("dict_type = ?", dictType).
 		Find(&rows).Error

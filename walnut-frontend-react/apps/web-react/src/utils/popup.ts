@@ -1,4 +1,4 @@
-import type { FormApi } from '@vben-core/form-ui';
+import type { FormApi } from '@walnut-core/form-ui';
 
 import { useRef } from 'react';
 
@@ -10,7 +10,7 @@ import { getMessageApi } from '@/services/message';
 /**
  * 弹窗/抽屉相关的命令式工具（对应 Vue 侧 `utils/popup.ts`）。
  *
- * 8 个使用 `useVbenDrawer` 的业务页（dept / client / menu / post / role /
+ * 8 个使用 `useWalnutDrawer` 的业务页（dept / client / menu / post / role /
  * role-assign / user / operlog）都靠 `useBeforeCloseDiff` 实现「表单有改动时
  * 关闭前二次确认」，因此它是 A2 阶段的硬前置。
  *
@@ -65,7 +65,7 @@ function confirmDiscard(): Promise<boolean> {
  *   currentGetter: defaultFormValueGetter(formApi),
  *   initializedGetter: defaultFormValueGetter(formApi),
  * });
- * const [BasicDrawer, drawerApi] = useVbenDrawer({ onBeforeClose, ... });
+ * const [BasicDrawer, drawerApi] = useWalnutDrawer({ onBeforeClose, ... });
  * ```
  */
 export function useBeforeCloseDiff(props: BeforeCloseDiffProps) {
@@ -91,7 +91,7 @@ export function useBeforeCloseDiff(props: BeforeCloseDiffProps) {
     isInitialized.current = false;
   }
 
-  /** 提供给 useVbenDrawer / useVbenModal 的 onBeforeClose，返回是否允许关闭 */
+  /** 提供给 useWalnutDrawer / useWalnutModal 的 onBeforeClose，返回是否允许关闭 */
   async function onBeforeClose(): Promise<boolean> {
     // 还没初始化，直接允许关闭
     if (!isInitialized.current) {
@@ -125,7 +125,7 @@ export function useBeforeCloseDiff(props: BeforeCloseDiffProps) {
   return { markInitialized, onBeforeClose, resetInitialized };
 }
 
-/** 给 useVbenForm 使用的封装：把表单值序列化成 JSON 便于对比 */
+/** 给 useWalnutForm 使用的封装：把表单值序列化成 JSON 便于对比 */
 export function defaultFormValueGetter(formApi: FormApi) {
   return async () => JSON.stringify(await formApi.getValues());
 }

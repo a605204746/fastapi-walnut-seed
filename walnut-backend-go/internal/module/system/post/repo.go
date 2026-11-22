@@ -32,7 +32,7 @@ func NewRepo(db *gorm.DB) *Repo { return &Repo{db: db} }
 // 漏掉这个默认排序会让两端列表顺序不同。
 func (r *Repo) Page(ctx context.Context, page crudx.Page, conds []crudx.Cond) ([]SysPost, int64, error) {
 	newQuery := func() *gorm.DB {
-		return crudx.Apply(r.db.WithContext(ctx).Model(&SysPost{}), conds...)
+		return crudx.Apply(crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysPost{}), conds...)
 	}
 
 	var total int64
@@ -45,7 +45,7 @@ func (r *Repo) Page(ctx context.Context, page crudx.Page, conds []crudx.Cond) ([
 			{Column: clause.Column{Name: "post_sort"}},
 		}})
 
-	order, err := crudx.BuildOrder(r.db, &SysPost{}, page)
+	order, err := crudx.BuildOrder(crudx.DB(ctx, r.db), &SysPost{}, page)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -65,13 +65,13 @@ func (r *Repo) Page(ctx context.Context, page crudx.Page, conds []crudx.Cond) ([
 
 // ListAll 查询全部（导出用），对应 PostCrud.list_all。
 func (r *Repo) ListAll(ctx context.Context, conds ...crudx.Cond) ([]SysPost, error) {
-	return crudx.ListAll[SysPost](ctx, r.db, conds...)
+	return crudx.ListAll[SysPost](ctx, crudx.DB(ctx, r.db), conds...)
 }
 
 // Get 按主键查询，对应 CRUDBase.get。
 func (r *Repo) Get(ctx context.Context, id int64) (*SysPost, error) {
 	var row SysPost
-	err := r.db.WithContext(ctx).Where("id = ?", id).First(&row).Error
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Where("id = ?", id).First(&row).Error
 	if err != nil {
 		if isNotFound(err) {
 			return nil, nil
@@ -83,7 +83,7 @@ func (r *Repo) Get(ctx context.Context, id int64) (*SysPost, error) {
 
 // ExistsByName 同部门下岗位名称是否已存在，对应 PostCrud.exists_by_name。
 func (r *Repo) ExistsByName(ctx context.Context, name string, deptID int64, excludeID *int64) (bool, error) {
-	q := r.db.WithContext(ctx).Model(&SysPost{}).
+	q := crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysPost{}).
 		Where("post_name = ? AND dept_id = ?", name, deptID)
 	if excludeID != nil {
 		q = q.Where("id <> ?", *excludeID)
@@ -93,7 +93,7 @@ func (r *Repo) ExistsByName(ctx context.Context, name string, deptID int64, excl
 
 // ExistsByCode 岗位编码是否已存在，对应 PostCrud.exists_by_code。
 func (r *Repo) ExistsByCode(ctx context.Context, code string, excludeID *int64) (bool, error) {
-	q := r.db.WithContext(ctx).Model(&SysPost{}).Where("post_code = ?", code)
+	q := crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysPost{}).Where("post_code = ?", code)
 	if excludeID != nil {
 		q = q.Where("id <> ?", *excludeID)
 	}
@@ -103,7 +103,7 @@ func (r *Repo) ExistsByCode(ctx context.Context, code string, excludeID *int64) 
 // CountUserPost 岗位已分配的用户数量，对应 PostCrud.count_user_post。
 func (r *Repo) CountUserPost(ctx context.Context, postID int64) (int64, error) {
 	var n int64
-	err := r.db.WithContext(ctx).Table("sys_user_post").
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Table("sys_user_post").
 		Where("post_id = ?", postID).Count(&n).Error
 	return n, err
 }
@@ -111,7 +111,7 @@ func (r *Repo) CountUserPost(ctx context.Context, postID int64) (int64, error) {
 // CountByDeptID 部门下的岗位数量，对应 PostCrud.count_by_dept_id。
 func (r *Repo) CountByDeptID(ctx context.Context, deptID int64) (int64, error) {
 	var n int64
-	err := r.db.WithContext(ctx).Model(&SysPost{}).
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysPost{}).
 		Where("dept_id = ?", deptID).Count(&n).Error
 	return n, err
 }
@@ -121,7 +121,7 @@ func (r *Repo) CountByDeptID(ctx context.Context, deptID int64) (int64, error) {
 // ⚠️ ids 为空时 Python 端只施加 status='0' 而不加 IN 条件（`if post_ids:`），
 // 即返回全部正常岗位。不要写成恒假条件。
 func (r *Repo) ListOptionByIDs(ctx context.Context, ids []int64) ([]SysPost, error) {
-	q := r.db.WithContext(ctx).Model(&SysPost{}).Where("status = ?", modelx.Normal)
+	q := crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysPost{}).Where("status = ?", modelx.Normal)
 	if len(ids) > 0 {
 		q = q.Where("id IN ?", ids)
 	}
@@ -135,7 +135,7 @@ func (r *Repo) ListOptionByIDs(ctx context.Context, ids []int64) ([]SysPost, err
 // ListByUserID 用户所属岗位，对应 PostCrud.list_by_user_id。
 func (r *Repo) ListByUserID(ctx context.Context, userID int64) ([]SysPost, error) {
 	rows := make([]SysPost, 0)
-	err := r.db.WithContext(ctx).Model(&SysPost{}).
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Model(&SysPost{}).
 		Where("id IN (SELECT post_id FROM sys_user_post WHERE user_id = ?)", userID).
 		Find(&rows).Error
 	if err != nil {
@@ -146,7 +146,7 @@ func (r *Repo) ListByUserID(ctx context.Context, userID int64) ([]SysPost, error
 
 // Create 新增，对应 CRUDBase.create。审计字段由调用方经 crudx.FillCreate 填好。
 func (r *Repo) Create(ctx context.Context, row *SysPost) error {
-	return r.db.WithContext(ctx).Create(row).Error
+	return crudx.DB(ctx, r.db).WithContext(ctx).Create(row).Error
 }
 
 // Update 更新，对应 CRUDBase.update。
@@ -156,7 +156,7 @@ func (r *Repo) Create(ctx context.Context, row *SysPost) error {
 // GORM 的 Save 会写入所有字段，语义等价；用 Save 而非 Updates，
 // 因为 Updates(struct) 会跳过零值字段，导致 status="" 之类的显式清空失效。
 func (r *Repo) Update(ctx context.Context, row *SysPost) error {
-	return r.db.WithContext(ctx).Save(row).Error
+	return crudx.DB(ctx, r.db).WithContext(ctx).Save(row).Error
 }
 
 // DeleteBatch 批量物理删除，对应 CRUDBase.delete_batch。返回受影响行数。
@@ -164,7 +164,7 @@ func (r *Repo) DeleteBatch(ctx context.Context, ids []int64) (int64, error) {
 	if len(ids) == 0 {
 		return 0, nil
 	}
-	res := r.db.WithContext(ctx).Where("id IN ?", ids).Delete(&SysPost{})
+	res := crudx.DB(ctx, r.db).WithContext(ctx).Where("id IN ?", ids).Delete(&SysPost{})
 	return res.RowsAffected, res.Error
 }
 
@@ -181,7 +181,7 @@ func (r *Repo) DeleteBatch(ctx context.Context, ids []int64) (int64, error) {
 func (r *Repo) DeptAndChildIDs(ctx context.Context, deptID int64) ([]int64, error) {
 	ids := make([]int64, 0, 1)
 	pattern := "%," + strconv.FormatInt(deptID, 10) + ",%"
-	err := r.db.WithContext(ctx).Table("sys_dept").
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Table("sys_dept").
 		Where("del_flag = ? AND CONCAT(',', ancestors, ',') LIKE ?", modelx.Normal, pattern).
 		Pluck("id", &ids).Error
 	if err != nil {
@@ -202,7 +202,7 @@ func (r *Repo) DeptNameMap(ctx context.Context, deptIDs []int64) (map[int64]*str
 		DeptName *string `gorm:"column:dept_name"`
 	}
 	var rows []row
-	err := r.db.WithContext(ctx).Table("sys_dept").
+	err := crudx.DB(ctx, r.db).WithContext(ctx).Table("sys_dept").
 		Select("id, dept_name").
 		Where("id IN ? AND del_flag = ?", deptIDs, modelx.Normal).
 		Scan(&rows).Error
@@ -231,7 +231,7 @@ type DeptNode struct {
 // 排序是四级复合排序，顺序不可调换：ancestors, parent_id, order_num, id。
 func (r *Repo) DeptTree(ctx context.Context, conds []crudx.Cond) ([]DeptNode, error) {
 	rows := make([]DeptNode, 0)
-	q := crudx.Apply(r.db.WithContext(ctx).Table("sys_dept"), conds...).
+	q := crudx.Apply(crudx.DB(ctx, r.db).WithContext(ctx).Table("sys_dept"), conds...).
 		Clauses(clause.OrderBy{Columns: []clause.OrderByColumn{
 			{Column: clause.Column{Name: "ancestors"}},
 			{Column: clause.Column{Name: "parent_id"}},

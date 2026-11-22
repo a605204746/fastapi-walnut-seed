@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, Result, Spin } from 'antd';
 import { useNavigate, useSearchParams } from 'react-router';
-import { DEFAULT_TENANT_ID } from '@vben/constants';
-import { getPreferences } from '@vben/preferences';
-import { useAccessStore } from '@vben/stores';
+import { DEFAULT_TENANT_ID } from '@walnut/constants';
+import { getPreferences } from '@walnut/preferences';
+import { useAccessStore } from '@walnut/stores';
 import { authCallback } from '@/api/core/auth';
 import { useAuthStore } from '@/store/auth';
 import { accountBindList } from '../oauth-common';

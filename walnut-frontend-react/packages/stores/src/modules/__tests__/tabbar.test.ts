@@ -1,7 +1,7 @@
-import type { TabDefinition, TabMeta } from '@vben-core/typings';
+import type { TabDefinition, TabMeta } from '@walnut-core/typings';
 
-import { updatePreferences } from '@vben-core/preferences';
-import { Stack } from '@vben-core/shared/utils';
+import { updatePreferences } from '@walnut-core/preferences';
+import { Stack } from '@walnut-core/shared/utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {

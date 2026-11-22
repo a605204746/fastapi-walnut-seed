@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
-  "extends": "@vben/tsconfig/library.json",
+  "extends": "@walnut/tsconfig/library.json",
   "compilerOptions": {
     // TS 6 起不再自动装载 node_modules/@types，需显式声明。
     // 本包的 encryption 测试用到 node:crypto 生成 RSA 密钥对。

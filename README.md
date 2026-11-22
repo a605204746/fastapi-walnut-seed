@@ -27,7 +27,7 @@ GitHub: https://github.com/a605204746/walnut-seed
 
 ## React 前端
 
-`walnut-frontend-react/` 提供 React 19 + antd 6 管理应用，与 Vue 版共用接口契约。现有前端功能迁移实施覆盖 100%（菜单组件 14/14），包括角色权限、公告富文本、双仪表盘、七种布局与主题。范围及实测验证见 [迁移验收记录](./docs/frontend/07-React迁移-验收记录.md)。
+`walnut-frontend-react/` 提供 React 19 + antd 6 管理应用，与 Vue 版共用接口契约。现有前端功能迁移实施覆盖 100%（菜单组件 14/14），包括角色权限、公告富文本、双仪表盘、七种布局与主题。范围及实测验证见 [迁移验收记录](./docs/frontend/07-React迁移-验收记录.md)。**本仓为默认前端、唯一活跃**；Vue 版（`walnut-frontend/`）自 2026-11-22 起冻结作对比参照。
 
 ```sh
 cd walnut-frontend-react
@@ -81,7 +81,8 @@ walnut-seed/
   walnut-backend-python/    # Python 后端（FastAPI + SQLAlchemy 2.0 异步 + Redis）
   walnut-backend-java/      # Java 后端（Spring Boot 3 + MyBatis-Plus + Sa-Token），与 Python 端同契约
   walnut-backend-go/        # Go 后端（Gin + GORM + go-redis），与 Python/Java 端同契约，路由覆盖率 122/122
-  walnut-frontend/          # Vue3 前端 monorepo（pnpm + turbo），主应用位于 apps/web-antd/
+  walnut-frontend-react/    # React 前端 monorepo（默认前端、唯一活跃），主应用位于 apps/web-react/
+  walnut-frontend/          # Vue3 基线（2026-11-22 起冻结作对比参照），主应用位于 apps/web-antd/
   docker/                   # compose 编排与容器配置（Python / Java / Go 三套全栈编排 + 中间件编排）
   data/                     # 运行时产物（不入 git，自动创建）：logs/、upload/
 ```
@@ -179,11 +180,13 @@ walnut-backend-go/
   migrations/                # 0001_init_schema.{up,down}.sql（17 张系统表）
   seed/                      # mysql_data.sql（幂等播种，与 Python 端 SHA256 一致）
   api/openapi/               # golden 契约（routes.txt 125 条，由 Python 端导出）
-  test/contract/             # 双端契约 diff（11 个 diff_*.py 脚本 + routes_inventory_test.go）
-  test/cryptointerop/        # Python↔Go 加解密互通测试
+  test/contract/             # 路由清单 diff（routes_inventory_test.go，纯静态）
+  test/cryptointerop/        # Python↔Go 加解密互通测试（Go 侧）
   env/                       # .env.dev / .env.example
   Makefile  Dockerfile  .golangci.yml  .go-version
 ```
+
+双端契约 diff（`diff_*.py`）、加解密互通向量、契约导出等跨端 Python 工具位于仓库根 `scripts/`。
 
 每个业务模块按**五件套**组织（handler / service / repo / dto / model），依赖方向单向向内。
 
@@ -222,13 +225,14 @@ mvn spring-boot:run            # http://localhost:8011
 cd walnut-backend-go
 go run . run --env dev         # http://localhost:8011
 
-# 前端（新终端）
-cd walnut-frontend
+# 前端（新终端，默认 React）
+cd walnut-frontend-react
 pnpm install
-pnpm dev:antd                  # http://localhost:8010
+pnpm dev                       # http://localhost:8020
+# Vue 基线（仅对比）：cd walnut-frontend && pnpm dev:antd   # http://localhost:8010
 ```
 
-连接信息：Python 在 `walnut-backend-python/env/.env.dev`、Java 在 `walnut-backend-java/src/main/resources/application-dev.yml`、Go 在 `walnut-backend-go/env/.env.dev`，均已指向 Docker 中间件。前端 dev server 默认运行于 `http://localhost:8010`，将 `/api` 代理到 `http://localhost:8011`。
+连接信息：Python 在 `walnut-backend-python/env/.env.dev`、Java 在 `walnut-backend-java/src/main/resources/application-dev.yml`、Go 在 `walnut-backend-go/env/.env.dev`，均已指向 Docker 中间件。前端 dev server 默认运行于 `http://localhost:8020`（React；Vue 基线为 8010），将 `/api` 代理到 `http://localhost:8011`。
 
 ### 方式二：生产/全栈
 
@@ -265,11 +269,19 @@ uv run ruff check .                         # 代码检查
 uv run ruff format .                        # 代码格式化
 ```
 
-前端（在 `walnut-frontend/` 下，使用 pnpm）：
+前端（默认在 `walnut-frontend-react/` 下，使用 pnpm）：
 
 ```bash
 pnpm install      # 安装依赖
-pnpm dev:antd     # 开发服务
+pnpm dev          # 开发服务 http://localhost:8020
+pnpm check        # lint / typecheck / unit / build
+```
+
+Vue 基线（已冻结，仅对比用，在 `walnut-frontend/` 下）：
+
+```bash
+pnpm install      # 安装依赖
+pnpm dev:antd     # 开发服务 http://localhost:8010
 pnpm build:antd   # 构建生产包
 ```
 
@@ -387,6 +399,7 @@ uv run main.py history --env dev             # 查看版本链
 | 中间件端口映射 / 健康检查 / 启动参数 | `docker/docker-compose.middleware.yml` | 全栈与中间件编排共用这份定义 |
 | 前端 nginx 路由 / 代理 / HTTPS | `docker/config/nginx.conf` | 构建期经 `additional_contexts` 注入前端镜像，改后需 `--build frontend` |
 | 前端构建期变量（API 地址、RSA 公钥等）/ dev 代理 | `walnut-frontend/apps/web-antd/.env.*`、`vite.config.ts` | 构建时注入 / vite dev server 代理 |
+| React 前端构建期变量 / dev 代理 | `walnut-frontend-react/apps/web-react/.env.*`、`internal/vite-config` | 与 Vue 基线同契约 |
 
 ### 配置加载优先级（后端）
 

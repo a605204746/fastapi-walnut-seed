@@ -1,11 +1,11 @@
-import type { UserInfo } from '@vben/types';
+import type { UserInfo } from '@walnut/types';
 
 import type { AuthApi } from '@/api/core/auth';
 
 import { doLogout, loginApi, seeConnectionClose } from '@/api/core/auth';
 import { getUserInfoApi } from '@/api/core/user';
-import { LOGIN_PATH } from '@vben/constants';
-import { resetAllStores, useAccessStore, useUserStore } from '@vben/stores';
+import { LOGIN_PATH } from '@walnut/constants';
+import { resetAllStores, useAccessStore, useUserStore } from '@walnut/stores';
 import { create } from 'zustand';
 
 import { getMessageApi } from '@/services/message';

@@ -3,10 +3,10 @@ import type { ReactNode } from 'react';
 
 import type { DictOption } from '@/store/dict';
 
-import { cn } from '@vben-core/shared/utils';
+import { cn } from '@walnut-core/shared/utils';
 import { Tag } from 'antd';
 
-import { VbenIcon } from '@vben-core/shadcn-ui';
+import { WalnutIcon } from '@walnut-core/shadcn-ui';
 
 import { DictTag } from '@/components/dict';
 import { getDictOptions } from '@/store/dict';
@@ -17,7 +17,7 @@ import { getDictOptions } from '@/store/dict';
  * 与 Vue 版的差异：
  * - `class={...}` → `className={...}`（JSX 属性名）。
  * - 图标：Vue 用 UnoCSS 的 `Iconify(logos--chrome)` 类名，React 侧统一走
- *   `VbenIcon` + Iconify 名（`logos:chrome`）。两套 tailwind 配置都没有装
+ *   `WalnutIcon` + Iconify 名（`logos:chrome`）。两套 tailwind 配置都没有装
  *   iconify 的 class 插件，照抄类名会渲染成空 span。
  * - `renderJsonPreview`：Vue 依赖 `common-ui` 的 `JsonPreview`（内部是
  *   json-viewer，D 类 → `@microlink/react-json-view`）。React 侧该依赖尚未引入，
@@ -148,7 +148,7 @@ export function renderJsonPreview(json: any): ReactNode {
 
 /** Iconify 图标（对应 Vue 侧 renderIcon） */
 export function renderIcon(icon: string): ReactNode {
-  return <VbenIcon icon={icon} />;
+  return <WalnutIcon icon={icon} />;
 }
 
 const osOptions = [
@@ -196,7 +196,7 @@ export function renderOsIcon(os: string, className?: string): ReactNode {
     current = osOptions[0];
   }
   return (
-    <VbenIcon
+    <WalnutIcon
       className={cn('inline-block size-4', className)}
       icon={current ? current.icon : DEFAULT_OS_ICON}
     />
@@ -213,7 +213,7 @@ export function renderBrowserIcon(
     browser.toLocaleLowerCase().includes(item.value),
   );
   return (
-    <VbenIcon
+    <WalnutIcon
       className={cn('inline-block size-4', className)}
       icon={current ? current.icon : DEFAULT_BROWSER_ICON}
     />

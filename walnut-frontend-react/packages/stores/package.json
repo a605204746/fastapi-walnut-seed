@@ -1,5 +1,5 @@
 {
-  "name": "@vben/stores",
+  "name": "@walnut/stores",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
@@ -14,15 +14,15 @@
     "react": "catalog:"
   },
   "dependencies": {
-    "@vben-core/preferences": "workspace:*",
-    "@vben-core/shared": "workspace:*",
-    "@vben-core/typings": "workspace:*",
+    "@walnut-core/preferences": "workspace:*",
+    "@walnut-core/shared": "workspace:*",
+    "@walnut-core/typings": "workspace:*",
     "secure-ls": "^2.0.0",
     "zustand": "catalog:"
   },
   "devDependencies": {
     "@types/react": "catalog:",
-    "@vben/tsconfig": "workspace:*",
+    "@walnut/tsconfig": "workspace:*",
     "react": "catalog:"
   }
 }

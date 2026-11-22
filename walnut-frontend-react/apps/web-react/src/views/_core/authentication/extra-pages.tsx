@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Alert, Button, Checkbox, Form, Input, QRCode, Select } from 'antd';
 import { Link, useNavigate } from 'react-router';
-import { DEFAULT_TENANT_ID } from '@vben/constants';
-import { getPreferences } from '@vben/preferences';
+import { DEFAULT_TENANT_ID } from '@walnut/constants';
+import { getPreferences } from '@walnut/preferences';
 import { tenantList, type TenantResp } from '@/api/core/auth';
 import { sendSmsCode } from '@/api/core/captcha';
 import { useAuthStore } from '@/store/auth';
@@ -182,7 +182,7 @@ export function CodeLoginPage() {
         initialValues={{ tenantId: DEFAULT_TENANT_ID }}
       >
         {tenant.tenantEnabled && (
-          <Form.Item name="tenantId" label="租户" rules={[{ required: true }]}>
+          <Form.Item name="tenantId" label={$t('authentication.selectAccount')} rules={[{ required: true }]}>
             <Select
               size="large"
               options={tenant.voList.map((item) => ({
@@ -205,7 +205,7 @@ export function CodeLoginPage() {
           <Form.Item name="smsCode" className="flex-1" rules={[{ required: true, len: 4 }]}>
             <Input
               size="large"
-              aria-label="短信验证码"
+              aria-label={$t('authentication.code')}
               autoComplete="one-time-code"
               maxLength={4}
               placeholder={$t('authentication.code')}
@@ -236,8 +236,8 @@ export function QrcodeLoginPage() {
         description={$t('authentication.qrcodeSubtitle')}
       />
       <div className="flex flex-col items-center gap-4">
-        <QRCode value="https://vben.vvbin.cn" size={200} />
-        <p className="text-sm text-muted-foreground">上游二维码演示，扫码打开 Vben 网站。</p>
+        <QRCode value={window.location.origin} size={200} />
+        <p className="text-sm text-muted-foreground">二维码演示，扫码打开当前站点。</p>
       </div>
       <Back />
     </div>

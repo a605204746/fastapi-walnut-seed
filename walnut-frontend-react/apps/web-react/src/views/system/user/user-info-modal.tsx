@@ -4,8 +4,8 @@ import type { DescriptionsProps } from 'antd';
 
 import type { User } from '@/api/system/user/model';
 
-import { useVbenModal } from '@vben-core/popup-ui';
-import { DictEnum } from '@vben/constants';
+import { useWalnutModal } from '@walnut-core/popup-ui';
+import { DictEnum } from '@walnut/constants';
 import { Descriptions, Tag } from 'antd';
 import dayjs from 'dayjs';
 import duration from 'dayjs/plugin/duration';
@@ -44,7 +44,7 @@ export const UserInfoModal = forwardRef<UserInfoModalHandle>(
     useDictStore((state) => state.map);
     const [currentUser, setCurrentUser] = useState<null | UserWithNames>(null);
 
-    const [BasicModal, modalApi] = useVbenModal({
+    const [BasicModal, modalApi] = useWalnutModal({
       footer: false,
       fullscreenButton: false,
       onClosed: () => setCurrentUser(null),

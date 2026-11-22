@@ -8,6 +8,8 @@ import { SecureSetting } from './components/secure-setting';
 
 export interface SettingPanelProps {
   className?: string;
+  /** 基本设置更新成功后重载左侧资料卡（对应 Vue 侧 emitter 的 updateProfile） */
+  onProfileUpdate?: () => Promise<void> | void;
   profile: UserProfile;
 }
 
@@ -15,13 +17,19 @@ export interface SettingPanelProps {
  * 设置页签面板（对应 Vue 侧 views/_core/profile/setting-panel.vue）。
  * 三个页签：基本设置 / 安全设置 / 账号绑定，与 Vue 侧 settingList 顺序一致。
  */
-export function SettingPanel({ className }: SettingPanelProps) {
+export function SettingPanel({
+  className,
+  onProfileUpdate,
+  profile,
+}: SettingPanelProps) {
   return (
     <Tabs
       className={className}
       items={[
         {
-          children: <BaseSetting />,
+          children: (
+            <BaseSetting onProfileUpdate={onProfileUpdate} profile={profile} />
+          ),
           key: '1',
           label: '基本设置',
         },

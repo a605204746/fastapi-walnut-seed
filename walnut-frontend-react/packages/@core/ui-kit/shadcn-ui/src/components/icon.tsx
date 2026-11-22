@@ -11,11 +11,11 @@ import {
   isHttpUrl,
   isObject,
   isString,
-} from '@vben-core/shared/utils';
+} from '@walnut-core/shared/utils';
 import { Icon as IconifyIcon } from '@iconify/react';
 import { Menu as IconDefault } from 'lucide-react';
 
-interface VbenIconProps extends Partial<Omit<IconProps, 'icon'>> {
+interface WalnutIconProps extends Partial<Omit<IconProps, 'icon'>> {
   /** icon 为空时是否显示默认图标 */
   fallback?: boolean;
   icon?: ComponentType<any> | string;
@@ -34,7 +34,7 @@ interface VbenIconProps extends Partial<Omit<IconProps, 'icon'>> {
  * `@iconify/vue` 行为一致。若将来要离线，用 `addCollection()` 预注册图标集，
  * 对应 Vue 侧的 `packages/icons/src/iconify-offline/`。
  */
-export function VbenIcon({ fallback, icon, ...rest }: VbenIconProps) {
+export function WalnutIcon({ fallback, icon, ...rest }: WalnutIconProps) {
   if (!isString(icon) && (isObject(icon) || isFunction(icon))) {
     const Component = icon as ComponentType<any>;
     return <Component {...rest} />;

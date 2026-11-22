@@ -37,15 +37,48 @@ const (
 	visibleHidden = "1"
 )
 
+// menuRepo 是 service 消费的数据访问能力（consumer-side 接口，定义在消费方）。
+// 只列实际调用的方法；*Repo 满足它，单测以 mock 替换。
+// ⚠️ 末尾三个方法由 handler 的删除前置校验经 service 委托消费，一并列入。
+type menuRepo interface {
+	SelectMenuTreeByUserID(ctx context.Context, ac authctx.Context) ([]SysMenu, error)
+	SelectMenuList(ctx context.Context, ac authctx.Context, q Query) ([]SysMenu, error)
+	SelectMenuByID(ctx context.Context, id int64) (*SysMenu, error)
+	MenuIDsByRoleID(ctx context.Context, roleID int64) ([]int64, error)
+	ExistsMenuName(ctx context.Context, name string, parentID, excludeID *int64) (bool, error)
+	RouteConflictCandidates(ctx context.Context, path, routeName string) ([]SysMenu, error)
+	Create(ctx context.Context, row *SysMenu) error
+	Update(ctx context.Context, row *SysMenu) error
+	Delete(ctx context.Context, id int64) (bool, error)
+	DeleteBatch(ctx context.Context, ids []int64) (int64, error)
+	DeleteRoleMenuByMenuIDs(ctx context.Context, ids []int64) (int64, error)
+	HasChildByMenuID(ctx context.Context, id int64) (bool, error)
+	HasChildByMenuIDs(ctx context.Context, ids []int64) (bool, error)
+	CheckMenuExistRole(ctx context.Context, id int64) (bool, error)
+}
+
 // Service 菜单域业务层，对应 Python 端 MenuService。
 type Service struct {
-	repo *Repo
+	db   *gorm.DB
+	repo menuRepo
 	auth authctx.Context
 }
 
 // NewService 构造业务层。
 func NewService(db *gorm.DB, ac authctx.Context) *Service {
-	return &Service{repo: NewRepo(db), auth: ac}
+	return &Service{db: db, repo: NewRepo(db), auth: ac}
+}
+
+func (s *Service) HasChildByMenuID(ctx context.Context, id int64) (bool, error) {
+	return s.repo.HasChildByMenuID(ctx, id)
+}
+
+func (s *Service) HasChildByMenuIDs(ctx context.Context, ids []int64) (bool, error) {
+	return s.repo.HasChildByMenuIDs(ctx, ids)
+}
+
+func (s *Service) CheckMenuExistRole(ctx context.Context, id int64) (bool, error) {
+	return s.repo.CheckMenuExistRole(ctx, id)
 }
 
 // GetRouters 对应 controller.get_routers：查菜单 → 构建前端路由树。
@@ -668,7 +701,18 @@ func (s *Service) DeleteByID(ctx context.Context, id int64) (int64, error) {
 }
 
 // DeleteCascade 级联删除菜单及角色关联，对应 delete_menu_by_ids。
+// 多写操作（批删菜单 + 清角色关联）包在事务里，任一步失败整体回滚
+// （对齐 Python session.begin，不留悬挂关联）。
 func (s *Service) DeleteCascade(ctx context.Context, ids []int64) error {
+	if s.db == nil { // 测试 harness 无真实 DB，直调内部
+		return s.deleteCascadeTx(ctx, ids)
+	}
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		return s.deleteCascadeTx(crudx.WithTx(ctx, tx), ids)
+	})
+}
+
+func (s *Service) deleteCascadeTx(ctx context.Context, ids []int64) error {
 	if _, err := s.repo.DeleteBatch(ctx, ids); err != nil {
 		return errs.Wrap(err, errs.MsgDBFailed)
 	}

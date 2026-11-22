@@ -286,11 +286,11 @@ func pyFloatTimestamp(s string) (float64, bool) {
 
 // 时间戳边界：0000-01-01 与 9999-12-31T23:59:59 的 Unix 秒；|ts|>2e10 视为毫秒。
 const (
-	pyUnix0000     int64 = -62167219200
-	pyUnix9999     int64 = 253402300799
-	pyMSWatershed  int64 = 20000000000
-	msgTSBefore0000      = "Input should be a valid date or datetime, dates before 0000 are not supported as unix timestamps"
-	msgTSAfter9999       = "Input should be a valid date or datetime, dates after 9999 are not supported as unix timestamps"
+	pyUnix0000      int64 = -62167219200
+	pyUnix9999      int64 = 253402300799
+	pyMSWatershed   int64 = 20000000000
+	msgTSBefore0000       = "Input should be a valid date or datetime, dates before 0000 are not supported as unix timestamps"
+	msgTSAfter9999        = "Input should be a valid date or datetime, dates after 9999 are not supported as unix timestamps"
 )
 
 func pyDateFromTS(ts int64) (time.Time, *pyDateErr) {

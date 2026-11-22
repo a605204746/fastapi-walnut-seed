@@ -12,8 +12,22 @@ import (
 	"walnut-seed-go/internal/pkg/idtype"
 )
 
+// logRepo 是 service 消费的数据访问能力（consumer-side 接口，定义在消费方）。
+// 只列 service 实际调用的方法；*Repo 满足它，单测以 mock 替换。
+type logRepo interface {
+	OperLogPage(ctx context.Context, page crudx.Page, conds []crudx.Cond) ([]SysOperLog, int64, error)
+	OperLogListAll(ctx context.Context, conds []crudx.Cond) ([]SysOperLog, error)
+	OperLogDeleteBatch(ctx context.Context, ids []int64) (int64, error)
+	OperLogClean(ctx context.Context) error
+	LogininforPage(ctx context.Context, page crudx.Page, conds []crudx.Cond) ([]SysLogininfor, int64, error)
+	LogininforListAll(ctx context.Context, conds []crudx.Cond) ([]SysLogininfor, error)
+	LogininforDeleteBatch(ctx context.Context, ids []int64) (int64, error)
+	LogininforClean(ctx context.Context) error
+	DictLabelMap(ctx context.Context, dictType string) (map[string]string, error)
+}
+
 type Service struct {
-	repo *Repo
+	repo logRepo
 	auth authctx.Context
 }
 

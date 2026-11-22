@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Avatar, Card, Checkbox, Timeline } from 'antd';
 import { useNavigate } from 'react-router';
-import { useUserStore } from '@vben/stores';
-import { usePreferences } from '@vben/preferences';
-import { VbenIcon } from '@vben-core/shadcn-ui';
+import { useUserStore } from '@walnut/stores';
+import { usePreferences } from '@walnut/preferences';
+import { WalnutIcon } from '@walnut-core/shadcn-ui';
 import { EChart } from '@/components/chart/EChart';
 import { analytics_visits_source } from '../analytics/options';
 import { projectItems, quickNavItems, todoItems, trendItems } from './data';
@@ -50,7 +50,7 @@ export default function WorkspacePage() {
                   onClick={() => nav(item.url)}
                 >
                   <div className="flex items-center gap-3">
-                    <VbenIcon icon={item.icon} className="size-7" style={{ color: item.color }} />
+                    <WalnutIcon icon={item.icon} className="size-7" style={{ color: item.color }} />
                     <strong>{item.title}</strong>
                   </div>
                   <p className="my-3 text-muted-foreground">{item.content}</p>
@@ -85,7 +85,7 @@ export default function WorkspacePage() {
                   className="flex flex-col items-center gap-2 rounded p-2 hover:bg-accent"
                   onClick={() => nav(item.url)}
                 >
-                  <VbenIcon icon={item.icon} className="size-6" style={{ color: item.color }} />
+                  <WalnutIcon icon={item.icon} className="size-6" style={{ color: item.color }} />
                   <span>{item.title}</span>
                 </button>
               ))}

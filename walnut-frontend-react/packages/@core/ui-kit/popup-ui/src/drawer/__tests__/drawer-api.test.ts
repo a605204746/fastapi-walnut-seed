@@ -8,8 +8,8 @@ import { DrawerApi } from '../drawer-api';
  * 用例移植自 Vue 侧 `popup-ui/src/drawer/__tests__/drawer-api.test.ts`（11 例），
  * 并补了 React 侧新增/差异的部分。
  *
- * 与 Vue 版的差异：Vue 版 `vi.mock('@vben-core/shared/store')` 自己手搓了一个
- * Store 替身；React 侧直接用真实的 TanStack Store（`@vben-core/shared/store`
+ * 与 Vue 版的差异：Vue 版 `vi.mock('@walnut-core/shared/store')` 自己手搓了一个
+ * Store 替身；React 侧直接用真实的 TanStack Store（`@walnut-core/shared/store`
  * 就是它的再导出），既少一层 mock 失真，也和 tabbar store 的测试口径一致。
  */
 describe('drawerApi', () => {

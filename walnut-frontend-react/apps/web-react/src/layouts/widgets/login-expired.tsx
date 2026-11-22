@@ -1,12 +1,16 @@
 import { Modal } from 'antd';
-import { useAccessStore } from '@vben/stores';
+import { useAccessStore } from '@walnut/stores';
+import { usePreferences } from '@walnut/preferences';
+import { $t } from '@/locales';
 import { LoginPage } from '@/views/_core/authentication/login';
 export function LoginExpiredModal() {
   const expired = useAccessStore((s) => s.loginExpired);
+  // 订阅偏好：locale 变化时重译标题
+  usePreferences();
   return (
     <Modal
       open={expired}
-      title="登录已过期"
+      title={$t('authentication.loginAgainTitle')}
       footer={null}
       closable={false}
       mask={{ closable: false }}

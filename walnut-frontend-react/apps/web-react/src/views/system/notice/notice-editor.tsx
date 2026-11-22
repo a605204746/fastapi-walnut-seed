@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Form, Input, Modal, Radio, Spin } from 'antd';
-import { DictEnum } from '@vben/constants';
+import { DictEnum } from '@walnut/constants';
 import { noticeAdd, noticeInfo, noticeUpdate } from '@/api/system/notice';
 import { Tiptap } from '@/components/tiptap';
 import { useDirtyClose } from '@/hooks/use-dirty-close';

@@ -23,6 +23,7 @@ import (
 	"walnut-seed-go/internal/module/system/user"
 	"walnut-seed-go/internal/pkg/cachex"
 	"walnut-seed-go/internal/pkg/captcha"
+	"walnut-seed-go/internal/pkg/crudx"
 	"walnut-seed-go/internal/pkg/cryptox"
 	"walnut-seed-go/internal/pkg/errs"
 	"walnut-seed-go/internal/pkg/i18nx"
@@ -87,18 +88,36 @@ type OnlineUser struct {
 	DeviceType string `json:"deviceType"`
 }
 
+// authRepo 是 service 消费的认证专属数据访问能力（consumer-side 接口，定义在消费方）。
+// 只列 service 实际调用的方法；*Repo 满足它，单测以 mock 替换。
+// 跨域只读查询（用户/部门/角色/菜单）已迁出，经 provider.go 的窄接口注入；
+// handler 的前置查询（客户端/配置）同样走 provider，不经过本接口。
+type authRepo interface {
+	UpdateLoginInfo(ctx context.Context, userID int64, ip string, at time.Time) error
+	CountActiveUsersByUsername(ctx context.Context, username string) (int64, error)
+	CreateUser(ctx context.Context, u *user.SysUser) error
+	InsertLogininfor(ctx context.Context, entry *logmodel.SysLogininfor) error
+}
+
 // Service 认证服务，对应 Python 端 AuthService。
 type Service struct {
-	repo   *Repo
+	repo   authRepo
 	db     *gorm.DB
 	cache  *cachex.Client
 	cfg    *config.Config
 	logger *slog.Logger
 	locale string
+
+	// 跨域只读能力（provider.go），由 bootstrap 经 Deps 注入各域 repo 适配器。
+	users UserProvider
+	depts DeptProvider
+	roles RoleProvider
+	menus MenuProvider
 }
 
-// NewService 构造认证服务。locale 来自请求（i18n 文案需要）。
-func NewService(db *gorm.DB, cache *cachex.Client, cfg *config.Config, logger *slog.Logger, locale string) *Service {
+// NewService 构造认证服务。locale 来自请求（i18n 文案需要）；
+// deps 提供跨域只读能力（登录用户/部门/角色/菜单查询）。
+func NewService(db *gorm.DB, cache *cachex.Client, cfg *config.Config, logger *slog.Logger, locale string, deps Deps) *Service {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -109,6 +128,10 @@ func NewService(db *gorm.DB, cache *cachex.Client, cfg *config.Config, logger *s
 		cfg:    cfg,
 		logger: logger,
 		locale: locale,
+		users:  deps.Users,
+		depts:  deps.Depts,
+		roles:  deps.Roles,
+		menus:  deps.Menus,
 	}
 }
 
@@ -148,7 +171,7 @@ func (s *Service) LoginPassword(ctx context.Context, body *PasswordLoginRequest,
 	}
 
 	// ---- 2. 查用户 ----
-	u, err := s.repo.FindUserByUsername(ctx, username)
+	u, err := s.users.FindByUsername(ctx, username)
 	if err != nil {
 		return nil, fmt.Errorf("查询用户失败: %w", err)
 	}
@@ -367,7 +390,7 @@ func (s *Service) buildSessionInfo(ctx context.Context, u *user.SysUser) (*Sessi
 
 	deptName, deptCategory := "", ""
 	if u.DeptID != nil && *u.DeptID != 0 {
-		d, err := s.repo.FindDeptByID(ctx, *u.DeptID)
+		d, err := s.depts.FindByID(ctx, *u.DeptID)
 		if err != nil {
 			return nil, fmt.Errorf("查询部门失败: %w", err)
 		}
@@ -395,7 +418,7 @@ func (s *Service) buildSessionInfo(ctx context.Context, u *user.SysUser) (*Sessi
 	if isSuper {
 		info.RolePermission = []string{modelx.SuperAdminRoleKey}
 		info.MenuPermission = []string{modelx.AllPermission}
-		ids, err := s.repo.FindAllActiveMenuIDs(ctx)
+		ids, err := s.menus.AllActiveIDs(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("查询超管菜单失败: %w", err)
 		}
@@ -403,7 +426,7 @@ func (s *Service) buildSessionInfo(ctx context.Context, u *user.SysUser) (*Sessi
 		return info, nil
 	}
 
-	roles, err := s.repo.FindActiveRolesByUserID(ctx, u.ID)
+	roles, err := s.roles.FindActiveByUserID(ctx, u.ID)
 	if err != nil {
 		return nil, fmt.Errorf("查询用户角色失败: %w", err)
 	}
@@ -418,7 +441,7 @@ func (s *Service) buildSessionInfo(ctx context.Context, u *user.SysUser) (*Sessi
 	info.RolePermission = roleKeys
 
 	if len(roleIDs) > 0 {
-		menus, err := s.repo.FindMenusByRoleIDs(ctx, roleIDs)
+		menus, err := s.menus.FindByRoleIDs(ctx, roleIDs)
 		if err != nil {
 			return nil, fmt.Errorf("查询角色菜单失败: %w", err)
 		}
@@ -578,6 +601,10 @@ func (s *Service) Logout(ctx context.Context, meta RequestMeta) error {
 // ==================== 注册 ====================
 
 // Register 用户注册，对应 Python 端 AuthService.register。
+//
+// 写部分（建号 + 注册日志）包在事务里，失败整体回滚。前置校验（类型解析/
+// 验证码/查重/哈希）留在事务外——验证码失败分支的登录日志经独立连接写入
+// （Python 端 record_login_infor 用独立 session 立即提交），不能随注册失败回滚。
 func (s *Service) Register(ctx context.Context, body *RegisterRequest, meta RequestMeta) error {
 	username, password := body.Username, body.Password
 
@@ -631,15 +658,26 @@ func (s *Service) Register(ctx context.Context, body *RegisterRequest, meta Requ
 	newUser.UpdateBy = &sysUser
 	newUser.CreateTime = &now
 
+	if s.db == nil { // 测试 harness 直调（mock repo，无真实事务）
+		return s.registerTx(ctx, newUser, meta)
+	}
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		return s.registerTx(crudx.WithTx(ctx, tx), newUser, meta)
+	})
+}
+
+// registerTx 是 Register 的写部分：建号 + 注册成功日志，逻辑与原实现一致。
+// repo 写经 crudx.DB(ctx, r.db) 自动取 ctx 中的事务句柄，失败整体回滚。
+func (s *Service) registerTx(ctx context.Context, newUser *user.SysUser, meta RequestMeta) error {
 	if err := s.repo.CreateUser(ctx, newUser); err != nil {
 		// 并发注册同名账号时会撞唯一约束。此时应报"已存在"而不是暴露 SQL 错误
 		if isDuplicate(err) {
-			return errs.FromAuthCode(errs.AuthUserRegisterExists, username)
+			return errs.FromAuthCode(errs.AuthUserRegisterExists, newUser.UserName)
 		}
 		return fmt.Errorf("创建用户失败: %w", err)
 	}
 
-	s.recordLogininfor(ctx, meta, username, modelx.Register, s.t("user.register.success"), logmodel.StatusSuccess, nil)
+	s.recordLogininfor(ctx, meta, newUser.UserName, modelx.Register, s.t("user.register.success"), logmodel.StatusSuccess, nil)
 	return nil
 }
 

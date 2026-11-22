@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 
 import type { DrawerApi } from './drawer-api';
 
-import { useStore } from '@vben-core/shared/store';
+import { useStore } from '@walnut-core/shared/store';
 import { Button, Drawer } from 'antd';
 
 export interface DrawerRendererProps {
@@ -18,8 +18,8 @@ export interface DrawerRendererProps {
 /**
  * 底部按钮文案解析器。
  *
- * `@core/*` 是 UI 库无关层，**不能**依赖 `@vben/locales`（会破坏分层、且有循环依赖风险）。
- * Vue 侧用 `@vben-core/composables` 的 `useSimpleLocale()` 解决同一问题，React 侧没有
+ * `@core/*` 是 UI 库无关层，**不能**依赖 `@walnut/locales`（会破坏分层、且有循环依赖风险）。
+ * Vue 基线用其 composables 包的 `useSimpleLocale()` 解决同一问题，React 侧没有
  * composables 包，改为由 app 在 bootstrap 时注入解析器：
  *
  * ```ts

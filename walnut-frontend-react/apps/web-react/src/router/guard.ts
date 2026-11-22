@@ -1,6 +1,6 @@
 import type { DataRouter } from 'react-router';
 
-import { useAccessStore, useUserStore, useTabbarStore } from '@vben/stores';
+import { useAccessStore, useUserStore, useTabbarStore } from '@walnut/stores';
 
 import { useAuthStore } from '@/store/auth';
 

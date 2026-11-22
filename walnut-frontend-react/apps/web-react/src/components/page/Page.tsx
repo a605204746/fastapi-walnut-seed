@@ -1,8 +1,8 @@
 import type { CSSProperties, ReactNode } from 'react';
 
-import { usePreferences } from '@vben/preferences';
-import { CSS_VARIABLE_LAYOUT_CONTENT_HEIGHT } from '@vben-core/shared/constants';
-import { cn } from '@vben-core/shared/utils';
+import { usePreferences } from '@walnut/preferences';
+import { CSS_VARIABLE_LAYOUT_CONTENT_HEIGHT } from '@walnut-core/shared/constants';
+import { cn } from '@walnut-core/shared/utils';
 
 export interface PageProps {
   autoContentHeight?: boolean;
@@ -19,7 +19,7 @@ export interface PageProps {
  * 页面容器（对应 Vue 侧 common-ui/src/components/page/page.vue）。
  *
  * PoC 简化：config 页无 title/description/footer，autoContentHeight 直接用
- * `--vben-content-height` 计算内容高度（该变量由 BasicLayout 的内容区写入并继承）。
+ * `--walnut-content-height` 计算内容高度（该变量由 BasicLayout 的内容区写入并继承）。
  */
 export function Page({
   autoContentHeight = false,

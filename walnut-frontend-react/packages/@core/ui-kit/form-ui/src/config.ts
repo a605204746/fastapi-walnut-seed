@@ -25,11 +25,11 @@ export function hasComponent(name: string): boolean {
 /**
  * 必填校验的文案解析器。
  *
- * Vue 侧在 `adapter/form.ts` 的 `setupVbenForm({ defineRules })` 里注册
+ * Vue 基线在 `adapter/form.ts` 的表单 setup（{ defineRules }）里注册
  * `required` / `selectRequired` 两条规则，文案走 `$t('ui.formRules.required', [label])`
- * （词典里是 `请输入{0}` / `请选择{0}`）。`@core/*` 不能依赖 `@vben/locales`，
+ * （词典里是 `请输入{0}` / `请选择{0}`）。`@core/*` 不能依赖 `@walnut/locales`，
  * 故同样采用注入式解析器（与 popup-ui 的 `setDrawerTextResolver` 一个套路），
- * app 在 bootstrap 时调 `initSetupVbenForm()` 注入。
+ * app 在 bootstrap 时调 `initSetupWalnutForm()` 注入。
  *
  * 解析器在**校验时**调用，语言切换后自动生效。
  */

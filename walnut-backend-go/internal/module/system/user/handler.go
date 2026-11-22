@@ -2,7 +2,6 @@ package user
 
 import (
 	"io"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -10,7 +9,6 @@ import (
 	"gorm.io/gorm"
 
 	"walnut-seed-go/internal/module/system/dept"
-	"walnut-seed-go/internal/module/system/post"
 	"walnut-seed-go/internal/pkg/authctx"
 	"walnut-seed-go/internal/pkg/crudx"
 	"walnut-seed-go/internal/pkg/envelope"
@@ -18,63 +16,18 @@ import (
 	"walnut-seed-go/internal/pkg/excelx"
 	"walnut-seed-go/internal/pkg/idempotentx"
 	"walnut-seed-go/internal/pkg/permguard"
-	"walnut-seed-go/internal/pkg/routex"
-	"walnut-seed-go/internal/pkg/storagex"
 )
 
 type Handler struct {
-	db      *gorm.DB
-	errs    *errs.Handler
-	perm    *permguard.Guard
-	idem    *idempotentx.Guard
-	storage storagex.Service
+	db   *gorm.DB
+	errs *errs.Handler
+	perm *permguard.Guard
+	idem *idempotentx.Guard
+	deps Deps
 }
 
-func NewHandler(db *gorm.DB, eh *errs.Handler, perm *permguard.Guard, idem *idempotentx.Guard, storage storagex.Service) *Handler {
-	return &Handler{db: db, errs: eh, perm: perm, idem: idem, storage: storage}
-}
-
-func (h *Handler) Mount(b routex.Binder) {
-	require, repeat := h.guards()
-
-	b.GET("/getInfo", h.GetInfo)
-	b.GET("/profile", h.GetProfile)
-	b.PUT("/profile", repeat(), h.UpdateProfile)
-	b.PUT("/profile/updatePwd", repeat(), h.UpdatePwd)
-	b.POST("/profile/avatar", repeat(), h.Avatar)
-	b.GET("/list", require("system:user:list"), h.List)
-	b.GET("/list/dept/:dept_id", require("system:user:list"), h.ListByDept)
-	b.POST("/export", require("system:user:export"), h.Export)
-	b.POST("/importData", require("system:user:import"), h.ImportData)
-	b.POST("/importTemplate", h.ImportTemplate)
-	b.GET("/optionselect", require("system:user:query"), h.OptionSelect)
-	b.GET("/deptTree", require("system:user:list"), h.DeptTree)
-	b.GET("/authRole/:user_id", require("system:user:query"), h.GetAuthRole)
-	b.PUT("/resetPwd", require("system:user:resetPwd"), repeat(), h.ResetPwd)
-	b.PUT("/changeStatus", require("system:user:edit"), repeat(), h.ChangeStatus)
-	b.PUT("/authRole", require("system:user:edit"), repeat(), h.AuthRole)
-	b.POST("", require("system:user:add"), repeat(), h.Add)
-	b.PUT("", require("system:user:edit"), repeat(), h.Update)
-	b.DELETE("/:user_ids", require("system:user:remove"), h.Delete)
-	b.GET("/", require("system:user:query"), h.GetUserInfo)
-	b.GET("/:user_id", require("system:user:query"), h.GetByID)
-}
-
-func (h *Handler) guards() (func(string) gin.HandlerFunc, func() gin.HandlerFunc) {
-	pass := func(c *gin.Context) { c.Next() }
-	require := func(perm string) gin.HandlerFunc {
-		if h.perm == nil {
-			return pass
-		}
-		return h.perm.Require(perm)
-	}
-	repeat := func() gin.HandlerFunc {
-		if h.idem == nil {
-			return pass
-		}
-		return h.idem.Default()
-	}
-	return require, repeat
+func NewHandler(db *gorm.DB, eh *errs.Handler, perm *permguard.Guard, idem *idempotentx.Guard, deps Deps) *Handler {
+	return &Handler{db: db, errs: eh, perm: perm, idem: idem, deps: deps}
 }
 
 func (h *Handler) service(c *gin.Context) (*Service, bool) {
@@ -83,7 +36,7 @@ func (h *Handler) service(c *gin.Context) (*Service, bool) {
 		h.errs.Abort(c, errs.NotLogin())
 		return nil, false
 	}
-	return NewService(h.db, ac), true
+	return NewService(h.db, ac, h.deps), true
 }
 
 func (h *Handler) List(c *gin.Context) {
@@ -236,7 +189,7 @@ func (h *Handler) DeptTree(c *gin.Context) {
 		h.errs.Abort(c, err)
 		return
 	}
-	tree, err := dept.NewService(h.db, svc.auth).TreeSelectOut(c.Request.Context(), q)
+	tree, err := h.deps.NewDepts(svc.auth).TreeSelectOut(c.Request.Context(), q)
 	if err != nil {
 		h.errs.Abort(c, errs.Wrap(err, errs.MsgDBFailed))
 		return
@@ -245,7 +198,7 @@ func (h *Handler) DeptTree(c *gin.Context) {
 }
 
 func (h *Handler) Add(c *gin.Context) {
-	in, err := DecodeCreate(readBody(c))
+	in, err := DecodeCreate(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -267,7 +220,7 @@ func (h *Handler) Add(c *gin.Context) {
 }
 
 func (h *Handler) Update(c *gin.Context) {
-	in, err := DecodeUpdate(readBody(c))
+	in, err := DecodeUpdate(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -313,7 +266,7 @@ func (h *Handler) Delete(c *gin.Context) {
 }
 
 func (h *Handler) ResetPwd(c *gin.Context) {
-	in, err := DecodeResetPwd(readBody(c))
+	in, err := DecodeResetPwd(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -335,7 +288,7 @@ func (h *Handler) ResetPwd(c *gin.Context) {
 }
 
 func (h *Handler) ChangeStatus(c *gin.Context) {
-	in, err := DecodeChangeStatus(readBody(c))
+	in, err := DecodeChangeStatus(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -392,67 +345,11 @@ func (h *Handler) AuthRole(c *gin.Context) {
 }
 
 func (h *Handler) Export(c *gin.Context) {
-	if err := c.Request.ParseForm(); err != nil {
-		h.errs.Abort(c, errs.BadRequest(errs.MsgValidationFailed))
+	q, err := BindExportParam(c)
+	if err != nil {
+		h.errs.Abort(c, err)
 		return
 	}
-	// Python：query 打底，非空 form 值覆盖；pageNum/pageSize 丢弃；
-	// id/userIds/excludeUserIds 参与类型校验但不进导出条件
-	merged := make(map[string]string)
-	for k, v := range c.Request.URL.Query() {
-		if len(v) > 0 {
-			merged[k] = v[0]
-		}
-	}
-	for k, v := range c.Request.PostForm {
-		if len(v) > 0 && v[0] != "" {
-			merged[k] = v[0]
-		}
-	}
-	delete(merged, "pageNum")
-	delete(merged, "pageSize")
-
-	q := QueryParam{}
-	q.UserName = strings.TrimSpace(merged["userName"])
-	q.NickName = strings.TrimSpace(merged["nickName"])
-	q.Status = strings.TrimSpace(merged["status"])
-	q.PhoneNumber = strings.TrimSpace(merged["phonenumber"])
-	// UserQueryParam.model_validate 抛 pydantic ValidationError（⊂ValueError）
-	// → 全局 ValueError 处理器透传 __str__ 原文（与 post/export 同款排版）
-	var ferrs []post.FormFieldError
-	for _, key := range []string{"id", "deptId"} {
-		if raw, ok := merged[key]; ok {
-			n, valid := dept.ParsePyQueryInt(raw)
-			if !valid {
-				ferrs = append(ferrs, post.FormFieldError{Loc: key, Msg: msgValidInt, Typ: "int_parsing", Input: raw})
-				continue
-			}
-			if key == "deptId" {
-				q.DeptID = &n
-			}
-		}
-	}
-	for _, key := range []string{"beginTime", "endTime"} {
-		if raw, ok := merged[key]; ok {
-			v, derr := dept.ParseDateQuery(raw)
-			if derr != nil {
-				if se := errs.As(derr); se != nil {
-					ferrs = append(ferrs, post.FormFieldError{Loc: key, Msg: se.Msg, Typ: post.DateErrType(se.Msg), Input: raw})
-				}
-				continue
-			}
-			if key == "beginTime" {
-				q.BeginTime = v
-			} else {
-				q.EndTime = v
-			}
-		}
-	}
-	if len(ferrs) > 0 {
-		h.errs.Abort(c, errs.BadRequest(post.ValidationErrorText("UserQueryParam", ferrs)))
-		return
-	}
-
 	svc, ok := h.service(c)
 	if !ok {
 		return
@@ -558,7 +455,7 @@ func (h *Handler) GetProfile(c *gin.Context) {
 }
 
 func (h *Handler) UpdateProfile(c *gin.Context) {
-	in, err := DecodeProfileUpdate(readBody(c))
+	in, err := DecodeProfileUpdate(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -580,7 +477,7 @@ func (h *Handler) UpdateProfile(c *gin.Context) {
 }
 
 func (h *Handler) UpdatePwd(c *gin.Context) {
-	in, err := DecodeUpdatePwd(readBody(c))
+	in, err := DecodeUpdatePwd(c.Request.Context(), readBody(c))
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -602,7 +499,7 @@ func (h *Handler) UpdatePwd(c *gin.Context) {
 }
 
 func (h *Handler) Avatar(c *gin.Context) {
-	if h.storage == nil {
+	if h.deps.Storage == nil {
 		h.errs.Abort(c, errs.New("对象存储未初始化，头像上传不可用"))
 		return
 	}
@@ -613,41 +510,16 @@ func (h *Handler) Avatar(c *gin.Context) {
 	}
 	defer file.Close()
 
-	// 扩展名白名单（仅图片），文案与 Python _IMAGE_EXTENSIONS 拼接一致
-	ext := strings.ToLower(filepath.Ext(header.Filename))
-	ext = strings.TrimPrefix(ext, ".")
-	imageExts := map[string]bool{"bmp": true, "gif": true, "jpg": true, "jpeg": true, "png": true}
-	if !imageExts[ext] {
-		h.errs.Abort(c, errs.New("文件格式不正确，请上传[bmp, gif, jpg, jpeg, png]格式"))
-		return
-	}
-
-	data, err := io.ReadAll(file)
-	if err != nil {
-		h.errs.Abort(c, errs.Wrap(err, errs.MsgSystemError))
-		return
-	}
-
-	result, err := h.storage.Upload(c.Request.Context(), header.Filename, data)
-	if err != nil {
-		h.errs.Abort(c, err)
-		return
-	}
-
 	svc, ok := h.service(c)
 	if !ok {
 		return
 	}
-	n, err := svc.repo.UpdateAvatar(c.Request.Context(), svc.auth.User.ID, result.URL)
+	url, err := svc.UpdateAvatar(c.Request.Context(), header.Filename, file)
 	if err != nil {
-		h.errs.Abort(c, errs.Wrap(err, errs.MsgDBFailed))
+		h.errs.Abort(c, err)
 		return
 	}
-	if n == 0 {
-		h.errs.Abort(c, errs.New("上传图片异常，请联系管理员"))
-		return
-	}
-	envelope.OK(c, map[string]string{"imgUrl": result.URL})
+	envelope.OK(c, map[string]string{"imgUrl": url})
 }
 
 // ---- Helpers ----

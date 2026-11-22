@@ -1,4 +1,4 @@
-export interface VbenAdminProAppConfigRaw {
+export interface WalnutAdminProAppConfigRaw {
   // 后端接口地址
   VITE_GLOB_API_URL: string;
   // 客户端ID
@@ -34,6 +34,6 @@ export interface ApplicationConfig {
 
 declare global {
   interface Window {
-    _VBEN_ADMIN_PRO_APP_CONF_: VbenAdminProAppConfigRaw;
+    _WALNUT_ADMIN_PRO_APP_CONF_: WalnutAdminProAppConfigRaw;
   }
 }

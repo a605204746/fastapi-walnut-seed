@@ -90,7 +90,7 @@ async function login(page: Page) {
 
 /** 冻结动画/过渡的 CSS，保证截图逐帧可复现（在每次导航前注入） */
 const FREEZE_CSS =
-  '*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}.ant-message,.ant-notification,#nprogress,.vben-progress-bar{display:none!important}';
+  '*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important}.ant-message,.ant-notification,#nprogress,.walnut-progress-bar{display:none!important}';
 
 test.describe(`capture:${SIDE}`, () => {
   test.beforeEach(async ({ page }) => {

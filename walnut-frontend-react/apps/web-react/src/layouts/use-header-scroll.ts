@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { usePreferences } from '@vben/preferences';
+import { usePreferences } from '@walnut/preferences';
 export function useHeaderScroll() {
   const { preferences } = usePreferences();
   const [offset, setOffset] = useState(0);

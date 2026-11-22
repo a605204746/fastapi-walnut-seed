@@ -1,6 +1,6 @@
 import type { Plugin } from 'vite';
 
-const REFERENCE_LINE = '@reference "@vben/tailwind-config/theme";\n';
+const REFERENCE_LINE = '@reference "@walnut/tailwind-config/theme";\n';
 
 /**
  * 给用到 @apply 的样式文件自动注入 @reference。

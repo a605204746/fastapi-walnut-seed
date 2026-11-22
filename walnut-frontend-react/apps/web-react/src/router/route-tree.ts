@@ -1,4 +1,4 @@
-import type { AppRouteObject, RouteHandle } from '@vben-core/typings';
+import type { AppRouteObject, RouteHandle } from '@walnut-core/typings';
 import type {
   IndexRouteObject,
   NonIndexRouteObject,

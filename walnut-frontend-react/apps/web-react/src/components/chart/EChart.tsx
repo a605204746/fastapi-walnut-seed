@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { usePreferences } from '@vben/preferences';
+import { usePreferences } from '@walnut/preferences';
 import * as echarts from 'echarts/core';
 import { BarChart, LineChart, PieChart, RadarChart } from 'echarts/charts';
 import {

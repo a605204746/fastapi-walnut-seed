@@ -1,4 +1,4 @@
-import { buildUUID } from '@vben/utils';
+import { buildUUID } from '@walnut/utils';
 import { ReloadOutlined } from '@ant-design/icons';
 import { Button, Input, Space } from 'antd';
 

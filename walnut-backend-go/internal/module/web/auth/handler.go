@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"io"
 	"strings"
 	"time"
@@ -9,13 +10,13 @@ import (
 	"gorm.io/gorm"
 
 	"walnut-seed-go/internal/config"
+	"walnut-seed-go/internal/module/system/client"
 	"walnut-seed-go/internal/pkg/cachex"
 	"walnut-seed-go/internal/pkg/envelope"
 	"walnut-seed-go/internal/pkg/errs"
 	"walnut-seed-go/internal/pkg/i18nx"
 	"walnut-seed-go/internal/pkg/middleware"
 	"walnut-seed-go/internal/pkg/ratelimitx"
-	"walnut-seed-go/internal/pkg/routex"
 )
 
 // 限流规则，与 Python 端 controller 的 RateLimiter 依赖逐条对应：
@@ -32,6 +33,29 @@ var (
 	ruleCode   = ratelimitx.Rule{Window: time.Minute, Count: 30, Type: ratelimitx.LimitIP}
 )
 
+// handlerRepo 是 handler 消费的数据访问能力（consumer-side 小接口，定义在消费方）。
+// 只列 handler 实际直调的两个前置查询；由 providerRepo 适配跨域 provider 实现，
+// handler 不再穿透到具体 *Repo（客户端/配置查询已归还 client/config 域）。
+type handlerRepo interface {
+	FindClientByClientID(ctx context.Context, clientID string) (*client.SysClient, error)
+	GetConfigValue(ctx context.Context, key string) (string, bool, error)
+}
+
+// providerRepo 把 ClientProvider/ConfigProvider 适配成 handlerRepo，
+// 仅做方法名映射，无任何业务逻辑——调用点语义与迁移前逐字一致。
+type providerRepo struct {
+	clients ClientProvider
+	configs ConfigProvider
+}
+
+func (p providerRepo) FindClientByClientID(ctx context.Context, clientID string) (*client.SysClient, error) {
+	return p.clients.FindByClientID(ctx, clientID)
+}
+
+func (p providerRepo) GetConfigValue(ctx context.Context, key string) (string, bool, error) {
+	return p.configs.GetValue(ctx, key)
+}
+
 // Handler 认证端点，对应 Python 端 module_web/auth/controller.py。
 type Handler struct {
 	db      *gorm.DB
@@ -39,34 +63,29 @@ type Handler struct {
 	cfg     *config.Config
 	limiter *ratelimitx.Limiter
 	errs    *errs.Handler
-	repo    *Repo
+	repo    handlerRepo
+	deps    Deps
 }
 
 // NewHandler 构造认证 handler。limiter 可为 nil（Redis 不可用时），
 // 此时限流按 fail-closed 处理——见 limit() 的说明。
-func NewHandler(db *gorm.DB, cache *cachex.Client, cfg *config.Config, limiter *ratelimitx.Limiter, eh *errs.Handler) *Handler {
-	return &Handler{db: db, cache: cache, cfg: cfg, limiter: limiter, errs: eh, repo: NewRepo(db)}
-}
-
-// Mount 注册全部 5 条认证路由。
-//
-// 命名为 Mount 而非 Register：本包的 HTTP handler 已经有一个叫 Register
-// （POST /auth/register 的用户注册），同名会冲突。
-//
-// ⚠️ 全部 5 条都在 WHITE_API_LIST_PATH 白名单内（无需认证）：
-// login / code / tenant/list 是登录前置，logout 必须允许 token 失效时调用（幂等）。
-// 故 bootstrap 侧要用 **Public** 分组注册，否则启动期路由认证审计会拒绝启动。
-func (h *Handler) Mount(b routex.Binder) {
-	b.POST("/login", h.Login)
-	b.POST("/logout", h.Logout)
-	b.POST("/register", h.Register)
-	b.GET("/tenant/list", h.TenantList)
-	b.GET("/code", h.Code)
+// deps 提供跨域只读能力：handler 直调的客户端/配置查询经 providerRepo 适配，
+// 请求作用域 Service 经同一份 deps 注入用户/部门/角色/菜单 provider。
+func NewHandler(db *gorm.DB, cache *cachex.Client, cfg *config.Config, limiter *ratelimitx.Limiter, eh *errs.Handler, deps Deps) *Handler {
+	return &Handler{
+		db:      db,
+		cache:   cache,
+		cfg:     cfg,
+		limiter: limiter,
+		errs:    eh,
+		repo:    providerRepo{clients: deps.Clients, configs: deps.Configs},
+		deps:    deps,
+	}
 }
 
 // service 构造一次请求作用域的 Service（locale 随请求变化，不能缓存在 Handler 上）。
 func (h *Handler) service(c *gin.Context) *Service {
-	return NewService(h.db, h.cache, h.cfg, nil, middleware.LocaleFrom(c))
+	return NewService(h.db, h.cache, h.cfg, nil, middleware.LocaleFrom(c), h.deps)
 }
 
 // meta 从请求中提取 IP / UA / Authorization。
@@ -121,7 +140,7 @@ func (h *Handler) Login(c *gin.Context) {
 
 	var body PasswordLoginRequest
 	raw, _ := io.ReadAll(c.Request.Body)
-	body, err := decodeLoginBody(raw)
+	body, err := decodeLoginBody(c.Request.Context(), raw)
 	if err != nil {
 		h.errs.Abort(c, err)
 		return
@@ -180,7 +199,7 @@ func (h *Handler) Logout(c *gin.Context) {
 func (h *Handler) Register(c *gin.Context) {
 	var body RegisterRequest
 	raw, _ := io.ReadAll(c.Request.Body)
-	body, err := decodeRegisterBody(raw)
+	body, err := decodeRegisterBody(c.Request.Context(), raw)
 	if err != nil {
 		h.errs.Abort(c, err)
 		return

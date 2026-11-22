@@ -1,5 +1,5 @@
 {
-  "name": "@vben/vite-config",
+  "name": "@walnut/vite-config",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
@@ -25,7 +25,7 @@
   "dependencies": {
     "@pnpm/workspace.read-manifest": "catalog:",
     "@tailwindcss/vite": "catalog:",
-    "@vben/node-utils": "workspace:*",
+    "@walnut/node-utils": "workspace:*",
     "@vitejs/plugin-react": "catalog:",
     "archiver": "catalog:",
     "dotenv": "catalog:",
@@ -39,7 +39,7 @@
     "@types/archiver": "catalog:",
     "@types/html-minifier-terser": "catalog:",
     "@types/node": "catalog:",
-    "@vben/tsconfig": "workspace:*",
+    "@walnut/tsconfig": "workspace:*",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:"

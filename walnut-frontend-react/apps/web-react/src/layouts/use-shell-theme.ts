@@ -1,4 +1,4 @@
-import { useAntdDesignTokens } from '@vben/hooks';
+import { useAntdDesignTokens } from '@walnut/hooks';
 import { theme } from 'antd';
 
 /** Local dark tokens must override the light tokens inherited from the app provider. */
