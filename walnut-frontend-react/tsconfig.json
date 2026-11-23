@@ -1,21 +1,17 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
-  "extends": "./internal/tsconfig/base.json",
+  "extends": "./build/tsconfig/base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "moduleResolution": "bundler",
     "types": ["vite/client", "node"],
+    "paths": {
+      "@/*": ["./src/*"]
+    },
     "noUnusedLocals": false,
     "noUnusedParameters": false
   },
-  "include": [
-    "packages/**/src/**/*.ts",
-    "packages/**/src/**/*.tsx",
-    "packages/**/*.d.ts",
-    "apps/**/src/**/*.ts",
-    "apps/**/src/**/*.tsx",
-    "*.config.ts"
-  ],
-  "exclude": ["**/node_modules/**", "**/dist/**"]
+  "include": ["src", "build", "vite.config.ts", "vitest.config.ts"],
+  "exclude": ["**/node_modules/**", "**/dist/**", "e2e"]
 }

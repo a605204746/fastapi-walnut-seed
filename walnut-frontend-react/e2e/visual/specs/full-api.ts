@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import menuTree from '../../../apps/web-react/src/__fixtures__/backend-menu-tree.json' with { type: 'json' };
+import menuTree from '../../../src/__fixtures__/backend-menu-tree.json' with { type: 'json' };
 import { installMockApi } from './mock-api';
 export async function installFullApi(page: Page) {
   await installMockApi(page);

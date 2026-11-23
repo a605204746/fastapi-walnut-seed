@@ -9,7 +9,7 @@ const preferencesUrl =
   path
     .resolve(
       path.dirname(fileURLToPath(import.meta.url)),
-      '../../../packages/preferences/src/index.ts',
+      '../../../src/core/preferences/index.ts',
     )
     .replaceAll('\\', '/');
 async function prefs(page: Page, value: Record<string, unknown>) {

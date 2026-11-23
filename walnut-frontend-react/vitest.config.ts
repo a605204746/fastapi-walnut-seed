@@ -7,11 +7,8 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      // 让 app 层（apps/web-react/src）的 `@/` 别名在单测里也可解析，
-      // 与 apps/web-react/vite.config.ts 保持一致。
-      '@': fileURLToPath(
-        new URL('./apps/web-react/src', import.meta.url),
-      ),
+      // `@/` 别名指向应用源码根，与 vite.config.ts 保持一致。
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
   test: {

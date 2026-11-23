@@ -11,58 +11,66 @@ WalnutSeed 的 **React 版前端**（默认前端），与 `walnut-frontend`（V
 
 | 领域 | 选型 | 对应 Vue 侧 |
 | --- | --- | --- |
-| 构建 | Vite 8 + `internal/vite-config`（自建插件链） | 同（共用 catalog 版本） |
+| 构建 | Vite 8 + `build/vite`（自建插件链，源码直出） | 同（Vue 侧仍是 monorepo + catalog） |
 | 框架 | React 19 | Vue 3.5 |
 | UI 库 | antd 6 | antdv-next 1.3 |
 | 样式 | Tailwind 4 + CSS 变量设计令牌 | 同 |
 | 状态 | Zustand（vanilla store + React 绑定） | Pinia |
 | 命令式 API | `@tanstack/react-store` | `@tanstack/vue-store` |
-| HTTP | axios（`@walnut/request`，原样搬运） | alova + `@alova/adapter-axios` |
+| HTTP | axios（`src/core/request`，原样搬运） | alova + `@alova/adapter-axios` |
 | 加解密 | crypto-js + jsencrypt（原样搬运） | 同 |
 | 国际化 | i18next | vue-i18n |
-| 打包 | tsdown（仅 `internal/*`）+ rolldown 分包 | 同 |
+| 打包 | rolldown 分包，无预构建（Vite/vitest 直接消费 TS 源码） | tsdown（仅 `internal/*`）+ rolldown 分包 |
 | 测试 | vitest + happy-dom | vitest + happy-dom |
 
 ## 目录
 
+2026-11-23 收敛为**单包**：原 `apps/web-react/` 提到仓库根，`packages/*` 并入 `src/core/*`，
+`internal/*` 并入 `build/*`，`pnpm-workspace.yaml` / `turbo.json` 与各子包 `package.json` 全部删除。
+依赖与脚本直接落根 `package.json`，包间引用改为相对路径（`@/` 别名指向 `src/`）。
+
 ```
 walnut-frontend-react/
-  apps/web-react/          # React 管理应用
-    src/__fixtures__/      # 从运行中后端抓取的真实契约样本
-  packages/
-    @core/shared/          # @walnut-core/shared       纯 TS，原样搬运
-    @core/typings/         # @walnut-core/typings      类型契约
-    @core/design/          # @walnut-core/design       CSS 变量设计令牌 + Tailwind 入口
-    @core/preferences/     # @walnut-core/preferences  偏好/主题（Zustand 重写）
-    preferences/           # @walnut/preferences       应用层覆盖入口
-    hooks/                 # @walnut/hooks             useAntdDesignTokens
-    constants/  types/     # 常量与类型
-    locales/               # i18next 实现 + 与 Vue 侧共用的词典 JSON
-    utils/                 # RSA/AES/SM2/SM4 加密 + tree/mitt/uuid 等
-    request/               # axios 客户端 + 401 刷新队列 + SSE/上传/下载
-  internal/
-    tsconfig/              # TS 预设（web.json 已改 jsx: react-jsx）
-    tailwind-config/       # Tailwind 4 主题
-    node-utils/            # Node 侧工具（tsdown 构建）
-    vite-config/           # 自建 Vite 配置与插件链（tsdown 构建）
+  src/
+    __fixtures__/          # 从运行中后端抓取的真实契约样本
+    core/                  # 原 packages/*：与 UI 库无关的内核
+      shared/ typings/ types/ constants/
+      design/              # CSS 变量设计令牌 + Tailwind 入口
+      preferences/         # 偏好/主题（Zustand），含应用层覆盖入口
+      locales/             # i18next 实现（词典 JSON 在 src/locales）
+      utils/               # RSA/AES/SM2/SM4 加密 + tree/mitt/uuid 等
+      request/             # axios 客户端 + 401 刷新队列 + SSE/上传/下载
+      stores/              # access/user/tabbar/timezone（Zustand）
+      hooks/               # useAntdDesignTokens 等
+      form-ui/ popup-ui/ shadcn-ui/   # 原 @core/ui-kit/*
+    adapter/ api/ components/ layouts/ router/ store/ services/
+    hooks/ lib/ locales/ styles/ utils/ views/
+    main.tsx  App.tsx  preferences.ts
+  build/                   # 原 internal/*：仅构建期消费，不进浏览器产物
+    vite/                  # 自建 Vite 配置与插件链（config/ plugins/ utils/）
+    utils/                 # Node 侧工具（日期 / 内容 hash / 路径 / pkg-types）
+    tsconfig/              # TS 预设 base.json
+  e2e/visual/              # Playwright 像素门禁与浏览器验收
+  vite.config.ts  vitest.config.ts  tsconfig.json  package.json
 ```
 
 ## 命令
 
 ```bash
 cd walnut-frontend-react
-pnpm install            # postinstall 会自动 tsdown 构建 internal/*
+pnpm install            # 单包安装，无 postinstall 预构建
 pnpm check              # lint → typecheck → unit → production build
-pnpm test:unit          # vitest，424 个用例
-pnpm typecheck          # tsc --noEmit
+pnpm test:unit          # vitest，36 个文件 / 425 个用例
+pnpm typecheck          # tsc --noEmit（src/build 与 e2e/visual 各一遍）
 pnpm dev                # http://localhost:8020
 pnpm build
+pnpm e2e                # Playwright 验收（首次先跑 pnpm e2e:install）
 ```
 
 开发端口为 **8020**（`VITE_PORT`），避开 Vue 版容器的 8010。
 API 经 Vite 代理 `/api` → `http://localhost:8011`（三后端任选其一）。
 
-> ⚠️ `dev` 脚本必须带 `--mode development`。`internal/vite-config` 的 `getConfFiles()`
+> ⚠️ `dev` 脚本必须带 `--mode development`。`build/vite/utils/env.ts` 的 `getConfFiles()`
 > 是靠正则匹配 `npm_lifecycle_script` 里的 `--mode xxx` 来判断环境的，
 > 漏写就会静默加载 `.env.production`（表现为端口掉回 5173）。
 
@@ -116,7 +124,7 @@ if (ret === false || ret === null) throw new Error('RsaEncryption decrypt error'
 - `VITE_GLOB_RSA_PRIVATE_KEY` → 后端**加密响应**，前端用这把私钥解密
 
 响应方向后端会**另生成一次性 AES 密钥**、用响应公钥加密后放进响应的
-`encrypt-key` 头，并不是把请求头原样回传。`packages/utils/src/encryption/__tests__/encryption.test.ts`
+`encrypt-key` 头，并不是把请求头原样回传。`src/core/utils/encryption/__tests__/encryption.test.ts`
 里的信封测试把这套双向流程固定下来了。
 
 ### 3. Go demo 容器当前**关闭**了服务端解密
@@ -174,7 +182,7 @@ return decrypted.toString(CryptoJS.enc.Utf8);  // ← 乱码不是合法 UTF-8 �
 排查加密链路问题时先怀疑密钥配置。阶段 ③ 搬 `utils/http` 时建议在解密处包一层，
 把它转成可定位的错误信息。
 
-### 7. `sideEffects` 字段会让整条 CSS 链被摇掉（阶段 ① 埋的雷）
+### 7. `sideEffects` 字段会让整条 CSS 链被摇掉（阶段 ① 埋的雷；单包化后已无子包声明，留作教训）
 
 给 `@walnut-core/design` 加上 `"sideEffects": ["**/*.css"]` 后，因为入口是
 `src/index.ts`（一个只做 `import './xxx.css'` 的 TS 文件），打包器认为它无副作用而整体丢弃，
@@ -183,14 +191,14 @@ return decrypted.toString(CryptoJS.enc.Utf8);  // ← 乱码不是合法 UTF-8 �
 **dev 模式看不出来**（Vite 按模块注入样式），只有 `vite build` 才暴露。
 Vue 侧该包**没有** `sideEffects` 字段。教训：入口是 TS、内容全是 CSS 导入的包，不要声明 sideEffects。
 
-### 8. tsdown 会把 `devDependencies` 打进产物
+### 8. tsdown 会把 `devDependencies` 打进产物（历史：单包化后不再预构建）
 
 `skipNodeModulesBundle: true` 挡不住——tsdown 只把 `dependencies`/`peerDependencies` 视为外部。
 `vite`、`@vitejs/plugin-react`、`sass-embedded` 等原先放在 devDependencies，
 结果 `internal/vite-config/dist` 膨胀到 **3.2 MB**（把整个 vite 打进去了）。
 移到 dependencies + vite 改 peerDependencies 后降到 **36 KB**。
 
-### 9. tsdown 的 dts 生成在这两个包上不可用
+### 9. tsdown 的 dts 生成在这两个包上不可用（历史：同上）
 
 - `vite-config`：postcss 类型报一片 `MISSING_EXPORT`
 - `node-utils`：生成的 `dist/index.d.ts` 本身语法有误（`TS1005: ',' expected`）
@@ -241,23 +249,20 @@ React 版 `getPreferences()` 返回不可变快照，这三条立刻暴露，已
 
 | 项 | 说明 |
 | --- | --- |
-| 包名统一为 `@walnut/*` / `@walnut-core/*` | 2026-11-22 完成标识符级改名（包 scope、API 名、CSS 类、运行时配置键）；跨仓引用统一称「Vue 基线」 |
-| 业务包 `exports` 直指 `src/*.ts` | 不跑 tsdown 预构建，Vite/vitest 直接消费 TS 源码 |
-| `internal/*` 例外，仍用 tsdown 构建 | Vite 加载配置文件时会 externalize 裸导入，Node ESM 无法解析无扩展名的目录导入，必须产出 `dist/index.mjs`。类型走 `src`、运行时走 `dist` |
-| `@walnut/locales` 用 i18next 重写 | 词典 JSON 与 Vue 侧共用；`{0}` → `{{0}}` 在加载时转换 |
+| 单包，无 workspace 包名 | 2026-11-22 完成标识符级改名（API 名、CSS 类、运行时配置键）；2026-11-23 收敛为单包，原 `@walnut/*` / `@walnut-core/*` 包边界改为 `src/core/*` 相对路径导入。跨仓引用统一称「Vue 基线」 |
+| 源码直出，无预构建 | Vite/vitest 直接消费 TS 源码；`build/vite` 也由 Vite 以 TS 直接加载，不再需要 tsdown 产出 `dist/index.mjs` |
+| `src/core/locales` 用 i18next 重写 | 词典 JSON 与 Vue 侧共用；`{0}` → `{{0}}` 在加载时转换 |
 | `usePreferences()` 返回普通值而非 `ComputedRef` | 键名与 Vue 版逐一对应，搬调用点时去掉 `.value` 即可 |
 | `getPreferences()` 返回不可变快照 | 命令式代码（请求拦截器等）每次调用取最新值；**组件里必须用 `usePreferences()`**，快照不会触发重渲染。`preferences` 那个导出做成了实时 Proxy 以兼容旧写法，但同样不触发重渲染 |
 | `useAntdDesignTokens` 用 `convertToRgb` 归一化 | 修掉 Vue 侧直传 `hsl(H S% L%)` 导致的色差，见发现 11 |
-| vite-config 裁掉 `importmap` / `nitro-mock` / `vxe-table` / library 构建 | 分别对应：CDN externals（未用）、mock 服务（有真后端）、vxe-table（换 ProTable）、包构建（源码直出） |
-| 暂未搬运 | `generate-routes-*` / `generate-menus` / `reset-routes`（依赖 vue-router 类型，属阶段 ③④）、`typings/tabs.ts`（依赖 `RouteLocationNormalized`，属阶段 ⑥）、`@walnut/hooks` 其余 8 个 hook |
+| `build/vite` 裁掉 `importmap` / `nitro-mock` / `vxe-table` / library 构建 | 分别对应：CDN externals（未用）、mock 服务（有真后端）、vxe-table（换 ProTable）、包构建（源码直出） |
 
-## 下一步（阶段 ③）
+## 迁移收尾
 
-1. `@walnut/stores`：Pinia → Zustand（access / user / tabbar / timezone），沿用 `secure-ls` 生产加密存储
-2. `utils/http`：alova → axios，把 RSA+AES 装配、`*WithMsg` 变体、401 登出接到 `@walnut/request`
-3. SSE/WebSocket 通知提到组件外的 service 单例（为阶段 ⑥ 的 `<Activity>` 页签缓存铺路）
-4. lint 体系：eslint/oxlint 的 `react.ts` 替代 `vue.ts`，接入 turbo
-5. 补齐阶段 ①/② 跳过的 `generate-routes-*`、`generate-menus`（改为输出 React Router `RouteObject`）
+原「下一步（阶段 ③）」列出的计划项均已落地：stores → Zustand、`utils/http` → axios、
+SSE/WebSocket service 单例（`src/services`）、`generate-routes-*` / `generate-menus`
+（输出 React Router `RouteObject`）、lint 体系（单包化后不再需要 turbo）。
+验收与部署说明见 [迁移验收记录](../docs/frontend/07-React迁移-验收记录.md)。
 
 > 阶段 ② 的实施记录与踩坑清单见
 > [`../docs/frontend/05-React迁移-逐文件清单.md` §14](../docs/frontend/05-React迁移-逐文件清单.md)。

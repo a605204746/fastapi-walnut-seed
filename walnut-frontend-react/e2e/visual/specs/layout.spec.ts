@@ -11,7 +11,7 @@ const BASE = process.env.REACT_BASE ?? 'http://localhost:8020';
 // These checks run against Vite, just like capture.spec.ts. Resolve from this file
 // so Windows and POSIX checkouts use the same preferences module as the app.
 const preferencesUrl = '/@fs/' + path.resolve(path.dirname(fileURLToPath(import.meta.url)),
-  '../../../packages/preferences/src/index.ts').replaceAll('\\', '/');
+  '../../../src/core/preferences/index.ts').replaceAll('\\', '/');
 
 async function preferences(page: Page, value: Record<string, unknown>) {
   await page.evaluate(async ({ url, value }) => {
